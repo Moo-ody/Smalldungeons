@@ -1,0 +1,27 @@
+use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
+use crate::build_packet;
+use crate::net::packets::packet::ClientBoundPacket;
+
+#[derive(Debug)]
+pub struct ServerInfo {
+    pub status: String,
+}
+
+#[async_trait::async_trait]
+impl ClientBoundPacket for ServerInfo {
+    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
+        let buf = build_packet!(
+            0x00,
+            self.status
+        );
+
+        let hex_string: String = buf.iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        println!("Raw bytes [{}]: {}", buf.len(), hex_string);
+        
+        writer.write_all(&buf).await
+    }
+}
