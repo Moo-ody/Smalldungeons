@@ -1,0 +1,11 @@
+[package]
+name = "RustClear"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.10.1"
+tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+anyhow = "1.0.98"
+async-trait = "0.1.88"
+rand = "0.9.1"
