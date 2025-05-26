@@ -23,7 +23,7 @@ impl ClientBoundPacket for LoginSuccess {
             .join(" ");
 
         println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-        
+
         writer.write_all(&buf).await
     }
 }

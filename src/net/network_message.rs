@@ -17,5 +17,5 @@ pub enum NetworkMessage {
     GetConnectionState {
         client_id: u32,
         response: Sender<ConnectionState>
-    }
+    },
 }

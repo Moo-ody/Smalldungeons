@@ -17,7 +17,7 @@ pub struct JoinGame {
 impl JoinGame {
     pub fn from_player(player: &PlayerEntity) -> JoinGame {
         JoinGame {
-            entity_id: player.entity_id as i32,
+            entity_id: player.entity.entity_id as i32,
             gamemode: 1,
             dimension: 0,
             difficulty: 0,
@@ -48,7 +48,7 @@ impl ClientBoundPacket for JoinGame {
             .join(" ");
 
         println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-        
+
         writer.write_all(&buf).await
     }
 }

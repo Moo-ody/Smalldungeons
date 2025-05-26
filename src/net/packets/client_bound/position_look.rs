@@ -17,11 +17,11 @@ pub struct PositionLook {
 impl PositionLook {
     pub(crate) fn from_player(player: &PlayerEntity) -> PositionLook {
         PositionLook {
-            x: player.pos_x,
-            y: player.pos_y,
-            z: player.pos_z,
-            yaw: player.yaw,
-            pitch: player.pitch,
+            x: player.entity.pos.x,
+            y: player.entity.pos.y,
+            z: player.entity.pos.z,
+            yaw: player.entity.yaw,
+            pitch: player.entity.pitch,
             flags: 0,
         }
     }

@@ -13,7 +13,7 @@ impl ClientBoundPacket for Disconnect {
             0x00,
             self.reason,
         );
-        
+
         writer.write_all(&buf).await
     }
 }

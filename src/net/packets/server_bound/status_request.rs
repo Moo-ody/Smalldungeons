@@ -5,6 +5,7 @@ use crate::net::packets::packet_context::PacketContext;
 use crate::STATUS_RESPONSE_JSON;
 use anyhow::Result;
 use bytes::BytesMut;
+use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct StatusRequest<> {}
@@ -24,6 +25,10 @@ impl ServerBoundPacket for StatusRequest {
         ClientBoundPackets::ServerInfo(ServerInfo {
             status: STATUS_RESPONSE_JSON.parse()?,
         }).send_packet(context.client_id, &context.network_tx)?;
+        Ok(())
+    }
+
+    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
         Ok(())
     }
 }

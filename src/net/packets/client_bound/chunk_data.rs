@@ -1,6 +1,8 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacket;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use crate::net::varint::VarInt;
+use crate::server::chunk::Chunk;
 
 #[derive(Debug)]
 pub struct ChunkData {
@@ -11,6 +13,15 @@ pub struct ChunkData {
 }
 
 impl ChunkData {
+    pub fn from_chunk(chunk: Chunk) -> ChunkData {
+        ChunkData {
+            chunk_x: chunk.pos_x,
+            chunk_z: chunk.pos_z,
+            full_chunk: todo!(),
+            data: todo!()
+        }
+    }
+    
     pub fn new() -> ChunkData {
         ChunkData {
             chunk_x: 0,
@@ -20,7 +31,7 @@ impl ChunkData {
                 data: Vec::new(),
                 size: 0,
             }
-        }   
+        }
     }
 }
 
@@ -38,9 +49,9 @@ impl ClientBoundPacket for ChunkData {
             self.chunk_x,
             self.chunk_z,
             self.full_chunk,
-            self.data.size,
-            self.data.data.as_slice()
-            //self.data
+            (self.data.size as i32 & 65535) as i16,
+            self.data.data.as_slice(),
+            0u8 // force another bit of data? i dont know whats wrong here.
         );
 
         let hex_string: String = buf.iter()
@@ -49,7 +60,7 @@ impl ClientBoundPacket for ChunkData {
             .join(" ");
 
         println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-        
+
         writer.write_all(&buf).await
     }
 }

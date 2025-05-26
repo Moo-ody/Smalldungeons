@@ -4,6 +4,7 @@ use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
+use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct Ping {
@@ -34,6 +35,10 @@ impl ServerBoundPacket for Ping {
             client_time: self.client_time,
         }).send_packet(context.client_id, &context.network_tx)?;
 
+        Ok(())
+    }
+
+    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
         Ok(())
     }
 }

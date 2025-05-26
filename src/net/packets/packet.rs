@@ -103,6 +103,16 @@ macro_rules! register_serverbound_packets {
                     )*
                 }
             }
+            
+            fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> anyhow::Result<()> {
+                match self {
+                    $(
+                        $(
+                            ServerBoundPackets::$packet_ty(pkt) => pkt.main_process(world, client_id),
+                        )*
+                    )*
+                }
+            }
         }
 
         pub async fn parse_packet(buf: &mut BytesMut, client: &Client) -> anyhow::Result<ServerBoundPackets> {
@@ -138,6 +148,8 @@ pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
     async fn process(&self, context: PacketContext) -> Result<()>;
+    
+    fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> Result<()>;
 }
 
 #[macro_export]

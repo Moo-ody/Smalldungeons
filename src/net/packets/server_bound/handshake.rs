@@ -5,6 +5,7 @@ use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
+use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct Handshake {
@@ -34,7 +35,7 @@ impl ServerBoundPacket for Handshake {
             .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in server address: {}", e))?;
 
         let server_port = buf.get_i16();
-        
+
         let next_state = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read next state"))?;
 
         Ok(Handshake {
@@ -46,15 +47,18 @@ impl ServerBoundPacket for Handshake {
     }
     async fn process(&self, context: PacketContext) -> Result<()> {
         println!("Received handshake packet");
-        
+
         let new_state = ConnectionState::from_id(self.next_state)?;
-        
+
         context.network_tx.send(NetworkMessage::UpdateConnectionState {
             client_id: context.client_id,
-            new_state: new_state.clone(),
+            new_state,
         })?;
 
         Ok(())
     }
 
+    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
+        Ok(())
+    }
 }

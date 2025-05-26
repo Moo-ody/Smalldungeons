@@ -12,7 +12,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 #[derive(Debug, Clone)]
 pub struct Client {
     pub client_id: u32,
-    pub connection_state: ConnectionState
+    pub connection_state: ConnectionState,
 }
 
 pub async fn handle_client(
@@ -39,14 +39,14 @@ pub async fn handle_client(
             Ok(0) => break,
             Ok(n) => {
                 let mut bytes = BytesMut::from(&buf[..n]);
-                
+
                 let (connection_state, event_tx_clone) = {
                     let (sender, receiver) = tokio::sync::oneshot::channel();
                     network_tx.send(NetworkMessage::GetConnectionState {
                         client_id,
                         response: sender,
                     }).unwrap();
-                    
+
                     (receiver.await.unwrap(), event_tx.clone())
                 };
 
@@ -64,9 +64,9 @@ pub async fn handle_client(
                         }).await
                         {
                             eprintln!("Failed to process packet: {}", e);
-                            break;
+                            continue;
                         }
-                        
+
                         event_tx_clone
                             .send(ClientEvent::PacketReceived {
                                 client_id,
@@ -79,17 +79,17 @@ pub async fn handle_client(
                             "Failed to parse packet from client {}: {}",
                             client_id, e
                         );
-                        break;
+                        continue;
                     }
                 }
             }
             Err(e) => {
                 eprintln!("Client {} read error: {}", client_id, e);
-                break;
+                continue;
             }
         }
     }
-    
+
     event_tx
         .send(ClientEvent::ClientDisconnected { client_id })
         .unwrap();

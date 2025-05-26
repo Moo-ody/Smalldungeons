@@ -3,3 +3,6 @@ pub mod status_request;
 pub mod ping;
 pub mod keep_alive;
 pub mod login_start;
+pub mod player_position;
+pub mod player_look;
+pub mod player_pos_look;

@@ -21,7 +21,7 @@ impl ClientBoundPacket for ServerInfo {
             .join(" ");
 
         println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-        
+
         writer.write_all(&buf).await
     }
 }

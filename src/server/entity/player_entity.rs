@@ -1,27 +1,43 @@
-use rand::Rng;
 
-///
-/// there needs to be some entity trait or something with all this default stuff
-/// 
+use crate::server::entity::entity::Entity;
+use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
+use crate::server::utils::vec3f::Vec3f;
+use crate::server::world::World;
+
 pub struct PlayerEntity {
-    pub entity_id: i32,
-
-    pub pos_x: f64,
-    pub pos_y: f64,
-    pub pos_z: f64,
-    pub yaw: f32,
-    pub pitch: f32,
+    pub client_id: u32,
+    pub entity: Entity,
 }
 
 impl PlayerEntity {
-    pub fn new() -> PlayerEntity {
+    pub fn spawn_at(pos: Vec3f, id: u32, world: &mut World) -> PlayerEntity {
         PlayerEntity {
-            entity_id: rand::rng().random_range(1..=i32::MAX),
-            pos_x: 0.0,
-            pos_y: 64.0,
-            pos_z: 0.0,
-            yaw: 0.0,
-            pitch: 0.0,
+            client_id: id,
+            entity: Entity::spawn_at(pos, world.new_entity_id())
         }
+    }
+}
+
+impl EntityTrait for PlayerEntity {
+    
+    fn get_entity(&mut self) -> &mut Entity {
+        &mut self.entity
+    }
+
+    fn tick(&mut self, world: &mut World) -> anyhow::Result<()> {
+        // confirm transaction packet for mods goes here
+        
+        if self.client_id != 0 {
+            // keep alive logic probably goes here in some way. world has current tick for timing.
+        }
+        Ok(())
+    }
+
+    fn spawn(&mut self)  {
+        // todo
+    }
+
+    fn despawn(&mut self, world: &mut World) {
+        // todo
     }
 }

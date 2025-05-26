@@ -17,7 +17,7 @@ pub async fn run_network_thread(
     println!("Network thread listening on 127.0.0.1:4972");
 
     let mut clients: HashMap<u32, (Client, UnboundedSender<Vec<u8>>)> = HashMap::new();
-    let mut client_id_counter = 0;
+    let mut client_id_counter = 1;
 
     loop {
         tokio::select! {
@@ -27,7 +27,7 @@ pub async fn run_network_thread(
 
                 let client = Client {
                     client_id,
-                    connection_state: ConnectionState::Handshaking
+                    connection_state: ConnectionState::Handshaking,
                 };
 
                 let (client_tx, client_rx) = mpsc::unbounded_channel::<Vec<u8>>();
