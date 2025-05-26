@@ -1,15 +1,15 @@
-use std::any::Any;
-use bytes::BytesMut;
-use anyhow::Result;
-use tokio::io::{AsyncWrite, WriteHalf};
-use crate::net::client::Client;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::write_varint;
+use anyhow::Result;
+use bytes::BytesMut;
+use tokio::io::AsyncWrite;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
     { $($packet_ty:ident),* $(,)? } => {
+        use crate::net::network_message::NetworkMessage;
         use crate::net::packets::packet::ClientBoundPacket;
+        use tokio::sync::mpsc::UnboundedSender;
         use tokio::io::AsyncWrite;
         use anyhow::Result;
 
@@ -36,6 +36,16 @@ macro_rules! register_clientbound_packets {
                         ClientBoundPackets::$packet_ty(pkt) => pkt.encode().await,
                     )*
                 }
+            }
+        }
+        
+        impl ClientBoundPackets {
+            pub fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> Result<()> {
+                network_tx.send(NetworkMessage::SendPacket {
+                    client_id,
+                    packet: self
+                })?;
+                Ok(())
             }
         }
     }
@@ -69,7 +79,6 @@ macro_rules! register_serverbound_packets {
         use crate::net::varint::read_varint;
         use anyhow::{Result, bail};
         use bytes::BytesMut;
-        use std::any::Any;
 
         #[derive(Debug)]
         pub enum ServerBoundPackets {
@@ -84,16 +93,6 @@ macro_rules! register_serverbound_packets {
         impl ServerBoundPacket for ServerBoundPackets {
             async fn read_from(_buf: &mut BytesMut) -> Result<Self> where Self: Sized {
                 unimplemented!("Use parse_packet instead");
-            }
-
-            fn as_any(&self) -> &dyn Any {
-                match self {
-                    $(
-                        $(
-                            ServerBoundPackets::$packet_ty(pkt) => pkt.as_any(),
-                        )*
-                    )*
-                }
             }
 
             async fn process(&self, context: PacketContext) -> Result<()> {
@@ -130,7 +129,6 @@ macro_rules! register_serverbound_packets {
                         _ => bail!("Unknown packet id {} for state {:?}", packet_id, stringify!($state)),
                     },
                 )*
-                _ => bail!("Unknown connection state: {:?}", client.connection_state),
             }
         }
     };
@@ -140,8 +138,6 @@ macro_rules! register_serverbound_packets {
 pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
-    fn as_any(&self) -> &dyn Any;
-
     async fn process(&self, context: PacketContext) -> Result<()>;
 }
 
@@ -150,15 +146,13 @@ macro_rules! build_packet {
     ($packet_id:expr $(, $value:expr )* $(,)?) => {{
         let mut buf = Vec::new();
         let mut payload = Vec::new();
-
-        // Write packet ID
+        
         $crate::net::varint::write_varint(&mut payload, $packet_id);
 
         $(
             $crate::net::packets::packet::PacketWrite::write(&$value, &mut payload);
         )*
-
-        // Prepend length
+        
         $crate::net::varint::write_varint(&mut buf, payload.len() as i32);
         buf.extend_from_slice(&payload);
 
@@ -166,7 +160,6 @@ macro_rules! build_packet {
     }};
 }
 
-// Trait to write values to the buffer
 pub trait PacketWrite {
     fn write(&self, buf: &mut Vec<u8>);
 }
@@ -177,7 +170,6 @@ impl PacketWrite for bool {
     }
 }
 
-// Basic numeric types
 impl PacketWrite for u8 {
     fn write(&self, buf: &mut Vec<u8>) {
         buf.push(*self);
@@ -232,7 +224,6 @@ impl PacketWrite for f64 {
     }
 }
 
-// Byte slices
 impl PacketWrite for &[u8] {
     fn write(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(self);
@@ -245,7 +236,6 @@ impl<const N: usize> PacketWrite for &[u8; N] {
     }
 }
 
-// Strings
 impl PacketWrite for &str {
     fn write(&self, buf: &mut Vec<u8>) {
         write_varint(buf, self.len() as i32);

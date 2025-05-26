@@ -16,7 +16,7 @@ register_serverbound_packets! {
     ConnectionState::Status {
         0x00 => StatusRequest,
         0x01 => Ping,
-    }, 
+    },
     ConnectionState::Login {
         0x00 => LoginStart,
     },

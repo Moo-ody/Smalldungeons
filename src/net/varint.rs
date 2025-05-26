@@ -1,5 +1,5 @@
-use bytes::{Buf, BytesMut};
 use crate::net::packets::packet::PacketWrite;
+use bytes::{Buf, BytesMut};
 
 pub struct VarInt(pub i32);
 impl PacketWrite for VarInt {

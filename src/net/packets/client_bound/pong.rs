@@ -1,6 +1,6 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
-use crate::net::packets::packet::{ClientBoundPacket, ServerBoundPacket};
+use crate::net::packets::packet::ClientBoundPacket;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug)]
 pub struct Pong {

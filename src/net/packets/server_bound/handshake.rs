@@ -1,22 +1,16 @@
-use std::any::Any;
-use tokio::io::{AsyncRead, WriteHalf};
-use bytes::{Buf, BytesMut};
-use anyhow::{Result, bail};
-use tokio::net::TcpStream;
-use crate::net::connection_state::get_state_from_id;
+use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
-use crate::net::packets::client_bound::packet_registry::ClientBoundPackets;
-use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::STATUS_RESPONSE_JSON;
+use anyhow::{bail, Result};
+use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
 pub struct Handshake {
-    pub protocol_version: i32,
-    pub server_address: String,
-    pub server_port: i16,
+    pub _protocol_version: i32,
+    pub _server_address: String,
+    pub _server_port: i16,
     pub next_state: i32
 }
 
@@ -40,40 +34,25 @@ impl ServerBoundPacket for Handshake {
             .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in server address: {}", e))?;
 
         let server_port = buf.get_i16();
-
-        // Next state (VarInt)
+        
         let next_state = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read next state"))?;
 
         Ok(Handshake {
-            protocol_version,
-            server_address,
-            server_port,
+            _protocol_version: protocol_version,
+            _server_address: server_address,
+            _server_port: server_port,
             next_state,
         })
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     async fn process(&self, context: PacketContext) -> Result<()> {
         println!("Received handshake packet");
         
-        let new_state = get_state_from_id(self.next_state);
+        let new_state = ConnectionState::from_id(self.next_state)?;
         
         context.network_tx.send(NetworkMessage::UpdateConnectionState {
             client_id: context.client_id,
             new_state: new_state.clone(),
         })?;
-        
-        // if self.next_state == 1 {
-        //     context.network_tx.send(NetworkMessage::SendPacket {
-        //         client_id: context.client_id,
-        //         packet: ClientBoundPackets::ServerInfo(ServerInfo {
-        //             status: STATUS_RESPONSE_JSON.parse()?,
-        //         }),
-        //     })?;
-        // }
 
         Ok(())
     }

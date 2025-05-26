@@ -1,14 +1,9 @@
-use std::any::Any;
-use anyhow::{Result, bail};
-use bytes::{Buf, BytesMut};
-use tokio::io::WriteHalf;
-use tokio::net::TcpStream;
-use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::packet_registry::ClientBoundPackets;
 use crate::net::packets::client_bound::pong::Pong;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
-use crate::net::varint::read_varint;
+use anyhow::{bail, Result};
+use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
 pub struct Ping {
@@ -32,19 +27,13 @@ impl ServerBoundPacket for Ping {
 
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     async fn process(&self, context: PacketContext) -> Result<()> {
         println!("Received ping: {}", self.client_time);
-        
-        context.network_tx.send(NetworkMessage::SendPacket {
-            client_id: context.client_id,
-            packet: ClientBoundPackets::Pong(Pong {
-                client_time: self.client_time,
-            }),
-        })?;
+
+        ClientBoundPackets::Pong(Pong {
+            client_time: self.client_time,
+        }).send_packet(context.client_id, &context.network_tx)?;
+
         Ok(())
     }
 }

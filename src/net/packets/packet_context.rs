@@ -1,6 +1,6 @@
-use tokio::sync::mpsc::UnboundedSender;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Clone)]
 pub struct PacketContext {

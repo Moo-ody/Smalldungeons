@@ -1,7 +1,7 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacket;
 use crate::server::entity::player_entity::PlayerEntity;
+use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
 pub struct JoinGame {

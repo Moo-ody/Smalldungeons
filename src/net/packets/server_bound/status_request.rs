@@ -1,14 +1,10 @@
-use std::any::Any;
-use bytes::{Buf, BytesMut};
-use anyhow::{Result, bail};
-use tokio::io::WriteHalf;
-use tokio::net::TcpStream;
-use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::packet_registry::ClientBoundPackets;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::STATUS_RESPONSE_JSON;
+use anyhow::Result;
+use bytes::BytesMut;
 
 #[derive(Debug)]
 pub struct StatusRequest<> {}
@@ -24,17 +20,10 @@ impl ServerBoundPacket for StatusRequest {
         Ok(StatusRequest {})
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     async fn process(&self, context: PacketContext) -> Result<()> {
-        context.network_tx.send(NetworkMessage::SendPacket {
-            client_id: context.client_id,
-            packet: ClientBoundPackets::ServerInfo(ServerInfo {
-                status: STATUS_RESPONSE_JSON.parse()?,
-            }),
-        })?;
+        ClientBoundPackets::ServerInfo(ServerInfo {
+            status: STATUS_RESPONSE_JSON.parse()?,
+        }).send_packet(context.client_id, &context.network_tx)?;
         Ok(())
     }
 }

@@ -1,6 +1,6 @@
 use crate::net::client::{handle_client, Client};
 use std::collections::HashMap;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::net::client_event::ClientEvent;
@@ -32,7 +32,7 @@ pub async fn run_network_thread(
 
                 let (client_tx, client_rx) = mpsc::unbounded_channel::<Vec<u8>>();
                 let event_tx_clone = event_tx.clone();
-                let client_clone = client.clone();
+                //let client_clone = client.clone();
 
                 clients.insert(client_id, (client.clone(), client_tx.clone()));
                 //event_tx_clone.send(ClientEvent::NewClient { client_id }).unwrap();

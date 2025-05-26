@@ -1,13 +1,13 @@
-use bytes::BytesMut;
-use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::server_bound::packet_registry::parse_packet;
+use bytes::BytesMut;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -39,16 +39,14 @@ pub async fn handle_client(
             Ok(0) => break,
             Ok(n) => {
                 let mut bytes = BytesMut::from(&buf[..n]);
-
-                // Before parsing, fetch the most recent connection state
+                
                 let (connection_state, event_tx_clone) = {
                     let (sender, receiver) = tokio::sync::oneshot::channel();
                     network_tx.send(NetworkMessage::GetConnectionState {
                         client_id,
                         response: sender,
                     }).unwrap();
-
-                    // Wait for the response containing the current connection state
+                    
                     (receiver.await.unwrap(), event_tx.clone())
                 };
 
@@ -59,7 +57,6 @@ pub async fn handle_client(
 
                 match parse_packet(&mut bytes, &client_stub).await {
                     Ok(packet) => {
-                        // Process packet immediately
                         if let Err(e) = packet.process(PacketContext {
                             client_id,
                             network_tx: network_tx.clone(),
@@ -69,8 +66,7 @@ pub async fn handle_client(
                             eprintln!("Failed to process packet: {}", e);
                             break;
                         }
-
-                        // Send event for logging purposes
+                        
                         event_tx_clone
                             .send(ClientEvent::PacketReceived {
                                 client_id,
@@ -93,8 +89,7 @@ pub async fn handle_client(
             }
         }
     }
-
-    // Notify disconnect
+    
     event_tx
         .send(ClientEvent::ClientDisconnected { client_id })
         .unwrap();

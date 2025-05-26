@@ -1,18 +1,15 @@
 mod net;
 mod server;
 
-use anyhow::Result;
 use crate::net::client_event::ClientEvent;
-use crate::net::connection_state::ConnectionState::Play;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::packet_registry::ClientBoundPackets::{ChunkData, JoinGame, PositionLook};
 use crate::net::packets::client_bound::{chunk_data, join_game, position_look};
 use crate::net::run_network::run_network_thread;
-use crate::server::entity::entity_enum::Entity;
 use crate::server::entity::entity_enum::Entity::PlayerEntity;
 use crate::server::entity::player_entity;
-use crate::server::world;
 use crate::server::world::World;
+use anyhow::Result;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
@@ -44,23 +41,12 @@ async fn main() -> Result<()> {
                         _ => {}
                     }
                 }
-                ClientEvent::NewClient { client_id } => {
+                ClientEvent::NewPlayer { client_id } => {
                     let player = player_entity::PlayerEntity::new();
 
-                    network_tx.send(NetworkMessage::SendPacket {
-                        client_id,
-                        packet: JoinGame(join_game::JoinGame::from_player(&player))
-                    })?;
-                    
-                    network_tx.send(NetworkMessage::SendPacket {
-                        client_id,
-                        packet: PositionLook(position_look::PositionLook::from_player(&player))
-                    })?;
-                    
-                    network_tx.send(NetworkMessage::SendPacket {
-                        client_id,
-                        packet: ChunkData(chunk_data::ChunkData::new())
-                    })?;
+                    JoinGame(join_game::JoinGame::from_player(&player)).send_packet(client_id, &network_tx)?;
+                    PositionLook(position_look::PositionLook::from_player(&player)).send_packet(client_id, &network_tx)?;
+                    ChunkData(chunk_data::ChunkData::new()).send_packet(client_id, &network_tx)?;
 
                     world.add_entity(PlayerEntity(player));
                 }

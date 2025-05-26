@@ -1,13 +1,13 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacket;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug)]
 pub struct ChunkData {
     pub chunk_x: i32,
     pub chunk_z: i32,
     pub full_chunk: bool,
-    pub data: ExtractedChunkData,// Compressed chunk data
+    pub data: ExtractedChunkData,
 }
 
 impl ChunkData {
