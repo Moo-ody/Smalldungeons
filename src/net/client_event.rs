@@ -1,4 +1,4 @@
-use crate::net::packets::server_bound::packet_registry::ServerBoundPackets;
+use crate::net::packets::packet_registry::ServerBoundPackets;
 
 pub enum ClientEvent {
     PacketReceived {

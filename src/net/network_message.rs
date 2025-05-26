@@ -1,5 +1,5 @@
 use crate::net::connection_state::ConnectionState;
-use crate::net::packets::client_bound::packet_registry::ClientBoundPackets;
+use crate::net::packets::packet_registry::ClientBoundPackets;
 use tokio::sync::oneshot::Sender;
 
 pub enum NetworkMessage {

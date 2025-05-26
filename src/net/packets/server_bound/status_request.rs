@@ -1,4 +1,4 @@
-use crate::net::packets::client_bound::packet_registry::ClientBoundPackets;
+use crate::net::packets::packet_registry::ClientBoundPackets;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;

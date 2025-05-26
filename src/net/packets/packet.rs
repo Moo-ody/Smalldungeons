@@ -11,7 +11,6 @@ macro_rules! register_clientbound_packets {
         use crate::net::packets::packet::ClientBoundPacket;
         use tokio::sync::mpsc::UnboundedSender;
         use tokio::io::AsyncWrite;
-        use anyhow::Result;
 
         #[derive(Debug)]
         pub enum ClientBoundPackets {
@@ -30,7 +29,7 @@ macro_rules! register_clientbound_packets {
                 }
             }
 
-            async fn encode(&self) -> Result<Vec<u8>> {
+            async fn encode(&self) -> anyhow::Result<Vec<u8>> {
                 match self {
                     $(
                         ClientBoundPackets::$packet_ty(pkt) => pkt.encode().await,
@@ -38,9 +37,9 @@ macro_rules! register_clientbound_packets {
                 }
             }
         }
-        
+
         impl ClientBoundPackets {
-            pub fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> Result<()> {
+            pub fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()> {
                 network_tx.send(NetworkMessage::SendPacket {
                     client_id,
                     packet: self
@@ -54,8 +53,8 @@ macro_rules! register_clientbound_packets {
 #[async_trait::async_trait]
 pub trait ClientBoundPacket: Send + Sync {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()>;
-    
-    async fn encode(&self) -> Result<Vec<u8>> {
+
+    async fn encode(&self) -> anyhow::Result<Vec<u8>> {
         let mut buf = Vec::new();
         self.write_to(&mut buf).await?;
         Ok(buf)
@@ -77,7 +76,7 @@ macro_rules! register_serverbound_packets {
         use crate::net::client::Client;
         use crate::net::packets::packet::ServerBoundPacket;
         use crate::net::varint::read_varint;
-        use anyhow::{Result, bail};
+        use anyhow::{bail};
         use bytes::BytesMut;
 
         #[derive(Debug)]
@@ -91,11 +90,11 @@ macro_rules! register_serverbound_packets {
 
         #[async_trait::async_trait]
         impl ServerBoundPacket for ServerBoundPackets {
-            async fn read_from(_buf: &mut BytesMut) -> Result<Self> where Self: Sized {
+            async fn read_from(_buf: &mut BytesMut) -> anyhow::Result<Self> {
                 unimplemented!("Use parse_packet instead");
             }
 
-            async fn process(&self, context: PacketContext) -> Result<()> {
+            async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
                 match self {
                     $(
                         $(
@@ -106,7 +105,7 @@ macro_rules! register_serverbound_packets {
             }
         }
 
-        pub async fn parse_packet(buf: &mut BytesMut, client: &Client) -> Result<ServerBoundPackets> {
+        pub async fn parse_packet(buf: &mut BytesMut, client: &Client) -> anyhow::Result<ServerBoundPackets> {
             let hex_string: String = buf.iter()
                 .map(|b| format!("{:02X}", b))
                 .collect::<Vec<String>>()
@@ -146,13 +145,13 @@ macro_rules! build_packet {
     ($packet_id:expr $(, $value:expr )* $(,)?) => {{
         let mut buf = Vec::new();
         let mut payload = Vec::new();
-        
+
         $crate::net::varint::write_varint(&mut payload, $packet_id);
 
         $(
             $crate::net::packets::packet::PacketWrite::write(&$value, &mut payload);
         )*
-        
+
         $crate::net::varint::write_varint(&mut buf, payload.len() as i32);
         buf.extend_from_slice(&payload);
 

@@ -3,7 +3,7 @@ use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
-use crate::net::packets::server_bound::packet_registry::parse_packet;
+use crate::net::packets::packet_registry::parse_packet;
 use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;

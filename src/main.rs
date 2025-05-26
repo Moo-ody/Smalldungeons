@@ -3,13 +3,13 @@ mod server;
 
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
-use crate::net::packets::client_bound::packet_registry::ClientBoundPackets::{ChunkData, JoinGame, PositionLook};
 use crate::net::packets::client_bound::{chunk_data, join_game, position_look};
 use crate::net::run_network::run_network_thread;
 use crate::server::entity::entity_enum::Entity::PlayerEntity;
 use crate::server::entity::player_entity;
 use crate::server::world::World;
 use anyhow::Result;
+use crate::net::packets::packet_registry::ClientBoundPackets::{ChunkData, JoinGame, PositionLook};
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
@@ -57,8 +57,5 @@ async fn main() -> Result<()> {
         }
 
         // Game logic here...
-
-        // Send packet to a client (example)
-        // network_tx.send(NetworkMessage::SendPacket { client_id: 1, packet: vec![...] })?;
     }
 }

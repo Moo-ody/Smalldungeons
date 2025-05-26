@@ -1,10 +1,25 @@
+use crate::net::packets::client_bound::chunk_data::ChunkData;
+use crate::net::packets::client_bound::join_game::JoinGame;
+use crate::net::packets::client_bound::login_success::LoginSuccess;
+use crate::net::packets::client_bound::pong::Pong;
+use crate::net::packets::client_bound::position_look::PositionLook;
+use crate::net::packets::client_bound::server_info::ServerInfo;
+use crate::{register_clientbound_packets, register_serverbound_packets};
 use crate::net::connection_state::ConnectionState;
 use crate::net::packets::server_bound::handshake::Handshake;
 use crate::net::packets::server_bound::keep_alive::KeepAlive;
 use crate::net::packets::server_bound::login_start::LoginStart;
 use crate::net::packets::server_bound::ping::Ping;
 use crate::net::packets::server_bound::status_request::StatusRequest;
-use crate::register_serverbound_packets;
+
+register_clientbound_packets! {
+    JoinGame,
+    LoginSuccess,
+    Pong,
+    PositionLook,
+    ServerInfo,
+    ChunkData,
+}
 
 register_serverbound_packets! {
     ConnectionState::Handshaking {
