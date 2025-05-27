@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 use std::mem::take;
+use tokio::sync::mpsc::UnboundedSender;
+use crate::net::network_message::NetworkMessage;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
 
 pub struct World {
+    pub network_tx: UnboundedSender<NetworkMessage>,
+    
     next_entity_id: u32,
     pub entities: HashMap<u32, EntityEnum>,
     pub client_to_entities: HashMap<u32, u32>,
@@ -13,12 +17,13 @@ pub struct World {
 }
 
 impl World {
-    pub fn new() -> World {
+    pub fn with_net_tx(network_tx: UnboundedSender<NetworkMessage>) -> World {
         World {
+            network_tx,
             next_entity_id: 0,
             entities: HashMap::new(),
             client_to_entities: HashMap::new(),
-            chunks: Vec::new(), 
+            chunks: Vec::new(),
             current_server_tick: 0
         }
     }
@@ -27,6 +32,7 @@ impl World {
         let mut entities = take(&mut self.entities);
         
         for (entity_id, entity) in entities.iter_mut() {
+            entity.get_entity().ticks_existed += 1;
             entity.tick(self).unwrap_or_else(|e|
                 eprintln!("Failed to tick {}: {}", entity_id, e.to_string())
             );
@@ -62,6 +68,7 @@ impl World {
     
     pub fn remove_player_from_client_id(&mut self, client_id: &u32) {
         if let Some(id) = self.client_to_entities.remove(client_id) {
+            println!("Removing player with id {}", id);
             self.entities.remove(&id);
         }
     }

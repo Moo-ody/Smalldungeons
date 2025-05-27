@@ -53,13 +53,7 @@ impl ClientBoundPacket for ChunkData {
             self.data.data.as_slice(),
             0u8 // force another bit of data? i dont know whats wrong here.
         );
-
-        let hex_string: String = buf.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        println!("Raw bytes [{}]: {}", buf.len(), hex_string);
+        
 
         writer.write_all(&buf).await
     }

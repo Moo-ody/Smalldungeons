@@ -23,12 +23,12 @@ pub async fn handle_client(
     network_tx: UnboundedSender<NetworkMessage>,
 ) {
     let (mut reader, mut writer) = tokio::io::split(socket);
-
+    
     let write_task = tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
             if let Err(e) = writer.write_all(&data).await {
                 eprintln!("write error: {}", e);
-                break;
+                break
             }
         }
     });
@@ -90,8 +90,7 @@ pub async fn handle_client(
         }
     }
 
-    event_tx
-        .send(ClientEvent::ClientDisconnected { client_id })
-        .unwrap();
+    println!("handle client for {} closed.", client_id);
+    event_tx.send(ClientEvent::ClientDisconnected { client_id }).unwrap();
     write_task.abort();
 }

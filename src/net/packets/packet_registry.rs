@@ -6,7 +6,11 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::{register_clientbound_packets, register_serverbound_packets};
 use crate::net::connection_state::ConnectionState;
+use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
+use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
+use crate::net::packets::server_bound::client_settings::ClientSettings;
+use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
 use crate::net::packets::server_bound::handshake::Handshake;
 use crate::net::packets::server_bound::keep_alive::KeepAlive as SBKeepAlive;
 use crate::net::packets::server_bound::login_start::LoginStart;
@@ -14,6 +18,7 @@ use crate::net::packets::server_bound::ping::Ping;
 use crate::net::packets::server_bound::player_look::PlayerLook;
 use crate::net::packets::server_bound::player_pos_look::PlayerPosLook;
 use crate::net::packets::server_bound::player_position::PlayerPosition;
+use crate::net::packets::server_bound::player_update::PlayerUpdate;
 use crate::net::packets::server_bound::status_request::StatusRequest;
 
 register_clientbound_packets! {
@@ -24,6 +29,8 @@ register_clientbound_packets! {
     ServerInfo,
     ChunkData,
     CBKeepAlive,
+    CBConfirmTransaction,
+    Disconnect,
 }
 
 register_serverbound_packets! {
@@ -32,9 +39,12 @@ register_serverbound_packets! {
     },
     ConnectionState::Play {
         0x00 => SBKeepAlive,
+        0x03 => PlayerUpdate,
         0x04 => PlayerPosition,
         0x05 => PlayerLook,
         0x06 => PlayerPosLook,
+        0x15 => ClientSettings,
+        0x0F => SBConfirmTransaction,
     },
     ConnectionState::Status {
         0x00 => StatusRequest,

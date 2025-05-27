@@ -16,14 +16,6 @@ impl ClientBoundPacket for LoginSuccess {
             self.uuid,
             self.name,
         );
-
-        let hex_string: String = buf.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-
         writer.write_all(&buf).await
     }
 }

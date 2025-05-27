@@ -6,4 +6,5 @@ pub mod pong;
 pub mod disconnect;
 pub mod chunk_data;
 pub mod keep_alive;
-mod map_chunk_bulk;
+pub mod map_chunk_bulk;
+pub mod confirm_transaction;

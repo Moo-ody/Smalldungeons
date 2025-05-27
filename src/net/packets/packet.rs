@@ -131,8 +131,10 @@ macro_rules! register_serverbound_packets {
                     $state => match packet_id {
                         $(
                             $id => {
+                                println!("Received packet id {} for state {:?}", packet_id, stringify!($state));
                                 let pkt = $packet_ty::read_from(buf).await?;
-                                Ok(ServerBoundPackets::$packet_ty(pkt))
+                                let packet = ServerBoundPackets::$packet_ty(pkt);
+                                Ok(packet)
                             }
                         )*
                         _ => bail!("Unknown packet id {} for state {:?}", packet_id, stringify!($state)),

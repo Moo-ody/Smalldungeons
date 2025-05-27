@@ -6,3 +6,7 @@ pub mod login_start;
 pub mod player_position;
 pub mod player_look;
 pub mod player_pos_look;
+pub mod player_update;
+pub mod client_settings;
+pub mod confirm_transaction;
+mod custom_payload;
