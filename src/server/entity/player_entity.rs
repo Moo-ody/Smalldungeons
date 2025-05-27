@@ -1,13 +1,13 @@
-use std::time::{SystemTime, UNIX_EPOCH};
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::confirm_transaction;
 use crate::net::packets::client_bound::disconnect;
 use crate::net::packets::client_bound::keep_alive::KeepAlive;
-use crate::net::packets::packet_registry::ClientBoundPackets::{CBKeepAlive, CBConfirmTransaction, Disconnect};
+use crate::net::packets::packet_registry::ClientBoundPackets::{CBConfirmTransaction, CBKeepAlive, Disconnect};
 use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
+use crate::server::entity::entity_enum::EntityTrait;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct PlayerEntity {
     pub client_id: u32,
@@ -32,7 +32,7 @@ impl PlayerEntity {
         world.network_tx.send(NetworkMessage::SendPacket {
             client_id: self.client_id,
             packet: Disconnect(disconnect::Disconnect {
-                reason: reason.to_string(),
+                reason: format!("{{\"text\":\"{}\"}}", reason),
             }),
         }).unwrap_or_else(|e| eprintln!("Error sending disconnect packet: {:?}", e));
         
@@ -58,9 +58,9 @@ impl EntityTrait for PlayerEntity {
                 CBKeepAlive(KeepAlive::from_time(time)).send_packet(self.client_id, &world.network_tx)?;
             } // this hsould be entirely handled by network thread instead i think maybe.
             
-            if self.entity.ticks_existed >= 100 {
-                self.disconnect(world, "goawaynothingshereyet");
-            }
+            // if self.entity.ticks_existed >= 100 {
+            //     self.disconnect(world, "go away nothing shere yet");
+            // }
             // 
             
         }
