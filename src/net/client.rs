@@ -23,7 +23,7 @@ pub async fn handle_client(
     network_tx: UnboundedSender<NetworkMessage>,
 ) {
     let (mut reader, mut writer) = tokio::io::split(socket);
-    
+
     let write_task = tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
             if let Err(e) = writer.write_all(&data).await {

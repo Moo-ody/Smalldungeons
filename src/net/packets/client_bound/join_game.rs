@@ -1,5 +1,5 @@
 use crate::build_packet;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::entity::player_entity::PlayerEntity;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
@@ -29,7 +29,7 @@ impl JoinGame {
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacket for JoinGame {
+impl ClientBoundPacketImpl for JoinGame {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
         let buf = build_packet!(
             0x01,

@@ -9,4 +9,4 @@ pub mod player_pos_look;
 pub mod player_update;
 pub mod client_settings;
 pub mod confirm_transaction;
-mod custom_payload;
+pub mod custom_payload;

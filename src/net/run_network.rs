@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 
 pub async fn run_network_thread(
     mut network_rx: UnboundedReceiver<NetworkMessage>,

@@ -1,11 +1,10 @@
-use std::any::Any;
 use bytes::BytesMut;
 use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::login_success;
-use crate::net::packets::packet_registry::ClientBoundPackets::LoginSuccess;
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::client_bound::login_success::LoginSuccess;
+use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
 use crate::server::world::World;
@@ -29,10 +28,10 @@ impl ServerBoundPacket for LoginStart {
     async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
         println!("Player {} is attempting to log in.", self.username);
 
-        LoginSuccess(login_success::LoginSuccess {
+        LoginSuccess {
             uuid: "d74cb748-b23b-4a99-b41e-b85f73d41999".to_string(), // dummy uuid because we dont need auth for local
             name: self.username.clone(),
-        }).send_packet(context.client_id, &context.network_tx)?;
+        }.send_packet(context.client_id, &context.network_tx)?;
 
         context.network_tx.send(NetworkMessage::UpdateConnectionState {
             client_id: context.client_id,

@@ -1,5 +1,5 @@
 use crate::build_packet;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::net::varint::VarInt;
 use crate::server::chunk::Chunk;
@@ -85,7 +85,7 @@ impl ChunkData {
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacket for ChunkData {
+impl ClientBoundPacketImpl for ChunkData {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
         let buf = build_packet!(
             0x21,

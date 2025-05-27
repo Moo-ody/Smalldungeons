@@ -1,6 +1,6 @@
-use crate::net::packets::packet_registry::ClientBoundPackets;
+use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::net::packets::client_bound::server_info::ServerInfo;
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use crate::STATUS_RESPONSE_JSON;
 use anyhow::Result;
@@ -22,9 +22,9 @@ impl ServerBoundPacket for StatusRequest {
     }
 
     async fn process(&self, context: PacketContext) -> Result<()> {
-        ClientBoundPackets::ServerInfo(ServerInfo {
+        ServerInfo {
             status: STATUS_RESPONSE_JSON.parse()?,
-        }).send_packet(context.client_id, &context.network_tx)?;
+        }.send_packet(context.client_id, &context.network_tx)?;
         Ok(())
     }
 

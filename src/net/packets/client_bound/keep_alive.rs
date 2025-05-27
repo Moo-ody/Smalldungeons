@@ -1,6 +1,6 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ impl KeepAlive {
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacket for KeepAlive {
+impl ClientBoundPacketImpl for KeepAlive {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
         let buf = build_packet!(
             0x00,

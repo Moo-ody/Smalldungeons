@@ -1,5 +1,5 @@
 use crate::build_packet;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
@@ -8,7 +8,7 @@ pub struct ServerInfo {
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacket for ServerInfo {
+impl ClientBoundPacketImpl for ServerInfo {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
         let buf = build_packet!(
             0x00,

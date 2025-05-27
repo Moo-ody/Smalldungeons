@@ -1,5 +1,6 @@
 use crate::server::utils::vec3f::Vec3f;
 
+#[derive(Debug, Clone)]
 pub struct AxisAlignedBoundingBox {
     pub bottom_corner: Vec3f,
     pub top_corner: Vec3f,

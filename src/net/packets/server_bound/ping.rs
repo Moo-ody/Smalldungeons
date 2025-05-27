@@ -1,6 +1,6 @@
-use crate::net::packets::packet_registry::ClientBoundPackets;
+use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::net::packets::client_bound::pong::Pong;
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
@@ -31,9 +31,9 @@ impl ServerBoundPacket for Ping {
     async fn process(&self, context: PacketContext) -> Result<()> {
         println!("Received ping: {}", self.client_time);
 
-        ClientBoundPackets::Pong(Pong {
+        Pong {
             client_time: self.client_time,
-        }).send_packet(context.client_id, &context.network_tx)?;
+        }.send_packet(context.client_id, &context.network_tx)?;
 
         Ok(())
     }

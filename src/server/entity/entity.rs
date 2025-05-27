@@ -2,6 +2,7 @@
 use crate::server::utils::axis_aligned_bounding_box::AxisAlignedBoundingBox;
 use crate::server::utils::vec3f::Vec3f;
 
+#[derive(Debug, Clone)]
 pub struct Entity {
     pub entity_id: u32,
     pub pos: Vec3f,
@@ -9,6 +10,7 @@ pub struct Entity {
     pub prev_pos: Vec3f,
     pub yaw: f32,
     pub pitch: f32,
+    pub head_yaw: f32,
     pub axis_aligned_bb: AxisAlignedBoundingBox,
     pub is_dead: bool,
     pub height: f32,
@@ -25,6 +27,7 @@ impl Entity {
             prev_pos: pos.clone(),
             yaw: 0f32,
             pitch: 0f32,
+            head_yaw: 0f32,
             axis_aligned_bb: AxisAlignedBoundingBox::new_empty(),
             is_dead: false,
             height: 0f32,

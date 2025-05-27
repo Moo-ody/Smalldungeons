@@ -1,3 +1,4 @@
+use crate::NetworkMessage;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
@@ -9,6 +10,7 @@ use crate::net::connection_state::ConnectionState;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
+use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
 use crate::net::packets::server_bound::handshake::Handshake;
@@ -31,6 +33,7 @@ register_clientbound_packets! {
     CBKeepAlive,
     CBConfirmTransaction,
     Disconnect,
+    SpawnMob,
 }
 
 register_serverbound_packets! {

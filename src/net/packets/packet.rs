@@ -1,30 +1,44 @@
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::write_varint;
 use anyhow::Result;
+use async_trait::async_trait;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
+use tokio::sync::mpsc::UnboundedSender;
+use crate::net::network_message::NetworkMessage;
+use crate::server::entity::metadata::Metadata;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
     { $($packet_ty:ident),* $(,)? } => {
-        use crate::net::network_message::NetworkMessage;
-        use crate::net::packets::packet::ClientBoundPacket;
-        use tokio::sync::mpsc::UnboundedSender;
-        use tokio::io::AsyncWrite;
 
         #[derive(Debug)]
-        pub enum ClientBoundPackets {
+        pub enum ClientBoundPacket {
             $(
                 $packet_ty($packet_ty),
             )*
         }
+        
+        $(
+            impl From<$packet_ty> for ClientBoundPacket {
+                fn from(pkt: $packet_ty) -> Self {
+                    ClientBoundPacket::$packet_ty(pkt)
+                }
+            }
+        
+            impl crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
+                fn send_packet(self, client_id: u32, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+                    ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
+                }
+            }
+        )*
 
         #[async_trait::async_trait]
-        impl ClientBoundPacket for ClientBoundPackets {
-            async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
+        impl crate::net::packets::packet::ClientBoundPacketImpl for ClientBoundPacket {
+            async fn write_to<W: tokio::io::AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
                 match self {
                     $(
-                        ClientBoundPackets::$packet_ty(pkt) => pkt.write_to(writer).await,
+                        ClientBoundPacket::$packet_ty(pkt) => pkt.write_to(writer).await,
                     )*
                 }
             }
@@ -32,15 +46,15 @@ macro_rules! register_clientbound_packets {
             async fn encode(&self) -> anyhow::Result<Vec<u8>> {
                 match self {
                     $(
-                        ClientBoundPackets::$packet_ty(pkt) => pkt.encode().await,
+                        ClientBoundPacket::$packet_ty(pkt) => pkt.encode().await,
                     )*
                 }
             }
         }
 
-        impl ClientBoundPackets {
-            pub fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()> {
-                network_tx.send(NetworkMessage::SendPacket {
+        impl ClientBoundPacket {
+            pub fn send_packet(self, client_id: u32, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+                network_tx.send(crate::net::network_message::NetworkMessage::SendPacket {
                     client_id,
                     packet: self
                 })?;
@@ -50,8 +64,12 @@ macro_rules! register_clientbound_packets {
     }
 }
 
+pub trait SendPacket<T> where T: Sized {
+    fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()>;
+}
+
 #[async_trait::async_trait]
-pub trait ClientBoundPacket: Send + Sync {
+pub trait ClientBoundPacketImpl: Send + Sync {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()>;
 
     async fn encode(&self) -> anyhow::Result<Vec<u8>> {
@@ -103,7 +121,7 @@ macro_rules! register_serverbound_packets {
                     )*
                 }
             }
-            
+
             fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> anyhow::Result<()> {
                 match self {
                     $(
@@ -150,7 +168,7 @@ pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
     async fn process(&self, context: PacketContext) -> Result<()>;
-    
+
     fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> Result<()>;
 }
 
@@ -175,6 +193,15 @@ macro_rules! build_packet {
 
 pub trait PacketWrite {
     fn write(&self, buf: &mut Vec<u8>);
+}
+
+impl PacketWrite for Metadata {
+    fn write(&self, buf: &mut Vec<u8>) {
+        for data in self {
+            data.write_to_buffer(buf)
+        }
+        buf.push(127);
+    }
 }
 
 impl PacketWrite for bool {

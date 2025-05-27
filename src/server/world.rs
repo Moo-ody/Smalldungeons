@@ -4,7 +4,14 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::net::network_message::NetworkMessage;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
+use crate::server::utils::vec3f::Vec3f;
 
+/// this is used to store all data including server right now, but a server can have multiple worlds. 
+/// it doesnt matter right now (or potentially ever given the project) since we only need one world,
+/// itd be best to support multiple worlds probably.
+/// 
+/// world data (chunks, world spawn, entities, etc.) should be moved to a new struct and this renamed to server.
+/// Entities should include a reference to the world id, or at least some way to quickly get the world theyre a part of.
 pub struct World {
     pub network_tx: UnboundedSender<NetworkMessage>,
     
@@ -14,6 +21,7 @@ pub struct World {
     
     pub chunks: Vec<Chunk>,
     pub current_server_tick: u64,
+    pub world_spawn: Vec3f,
 }
 
 impl World {
@@ -24,7 +32,8 @@ impl World {
             entities: HashMap::new(),
             client_to_entities: HashMap::new(),
             chunks: Vec::new(),
-            current_server_tick: 0
+            current_server_tick: 0,
+            world_spawn: Vec3f::new_empty()
         }
     }
     

@@ -1,6 +1,6 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
-use crate::net::packets::packet::ClientBoundPacket;
+use crate::net::packets::packet::ClientBoundPacketImpl;
 
 #[derive(Debug)]
 pub struct ConfirmTransaction {
@@ -20,7 +20,7 @@ impl ConfirmTransaction {
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacket for ConfirmTransaction {
+impl ClientBoundPacketImpl for ConfirmTransaction {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
         let buf = build_packet!(
             0x32,
