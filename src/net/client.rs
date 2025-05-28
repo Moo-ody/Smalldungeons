@@ -85,7 +85,7 @@ pub async fn handle_client(
             }
             Err(e) => {
                 eprintln!("Client {} read error: {}", client_id, e);
-                continue;
+                break;
             }
         }
     }

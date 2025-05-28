@@ -9,3 +9,4 @@ pub mod keep_alive;
 pub mod map_chunk_bulk;
 pub mod confirm_transaction;
 pub mod spawn_mob;
+pub mod entity;

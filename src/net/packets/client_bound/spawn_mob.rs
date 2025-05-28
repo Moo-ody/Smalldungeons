@@ -1,11 +1,10 @@
-use async_trait::async_trait;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
-use crate::server::entity::metadata::{Metadata, MetadataEntry, MetadataImpl};
-use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::entity::entity_enum::EntityTrait;
+use crate::server::entity::metadata::{Metadata, MetadataImpl};
+use async_trait::async_trait;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 ///
 ///
@@ -40,9 +39,9 @@ impl SpawnMob {
             yaw: (entity_base.yaw * 256.0 / 360.0) as i8,
             pitch: (entity_base.pitch * 256.0 / 360.0) as i8,
             head_pitch: (entity_base.head_yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
-            velocity_x: entity_base.motion.x.clamp(-motion_clamp, motion_clamp) as i16,
-            velocity_y: entity_base.motion.y.clamp(-motion_clamp, motion_clamp) as i16,
-            velocity_z: entity_base.motion.z.clamp(-motion_clamp, motion_clamp) as i16,
+            velocity_x: (entity_base.motion.x.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
+            velocity_y: (entity_base.motion.y.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
+            velocity_z: (entity_base.motion.z.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
             metadata: entity.create_meta_data()
         }
     }

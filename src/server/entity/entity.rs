@@ -1,4 +1,3 @@
-
 use crate::server::utils::axis_aligned_bounding_box::AxisAlignedBoundingBox;
 use crate::server::utils::vec3f::Vec3f;
 

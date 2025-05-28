@@ -1,31 +1,28 @@
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
+use crate::net::packets::client_bound::chunk_data::ChunkData;
+use crate::net::packets::client_bound::join_game::JoinGame;
+use crate::net::packets::client_bound::position_look::PositionLook;
+use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
+use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::server::block::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
 use crate::server::entity::player_entity::PlayerEntity;
+use crate::server::entity::zombie::Zombie;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use crate::net::packets::client_bound::chunk_data::ChunkData;
-use crate::net::packets::client_bound::join_game::JoinGame;
-use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::client_bound::spawn_mob::SpawnMob;
-use crate::net::packets::packet_registry::ClientBoundPacket;
-use crate::server::entity::zombie::Zombie;
 
 pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: UnboundedSender<NetworkMessage>) -> anyhow::Result<()> {
     let mut tick_interval = tokio::time::interval(std::time::Duration::from_millis(50));
     
     let mut world = World::with_net_tx(network_tx);
-    let mut current_tick: u64 = 0;
 
     loop {
         tick_interval.tick().await;
-        current_tick += 1;
-        world.current_server_tick = current_tick;
 
         // Handle incoming events from network
         while let Ok(event) = event_rx.try_recv() {
@@ -45,7 +42,7 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                     let player = PlayerEntity::spawn_at(world.world_spawn.clone() + Vec3f::from_y(10.0), client_id, &mut world);
 
                     // this stuff should be moved into the player entity and handled there.
-                    
+
                     ClientBoundPacket::from(JoinGame::from_player(&player)).send_packet(client_id, &world.network_tx)?;
 
                     // spawn in sky for now
@@ -69,31 +66,29 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                     
                     let mut chunk = Chunk::new(0, 0);
                     chunk.add_section(chunk_section, 0);
-                    
+
                     ChunkData::from_chunk(&chunk, true).send_packet(client_id, &world.network_tx)?;
 
                     world.spawn_entity(EntityEnum::from(player));
-                    
+
                     let spawn_vec = world.world_spawn.clone() + Vec3f { x: 5.0, y: 1.0, z: 5.0 };
-                    
-                    let mut zombie = Zombie::spawn_at(spawn_vec, &mut world);
+
+                    let mut zombie = Zombie::create_at(spawn_vec, &mut world);
 
                     SpawnMob::from_entity(&mut zombie).send_packet(client_id, &world.network_tx)?;
-                    
+
                     world.spawn_entity(EntityEnum::from(zombie));
-                    
+
                     //world.add_entity(PlayerEntity(player));
                 }
                 ClientEvent::ClientDisconnected { client_id } => {
-                    world.remove_player_from_client_id(&client_id);
+                    let _ = world.remove_player_from_client_id(&client_id);
                     println!("Client {} disconnected", client_id);
                 }
             }
         }
 
-        world.tick();
-        
-        if current_tick % 20 == 0 {
+        if world.current_server_tick % 20 == 0 {
             // world time update packet probably
         }
 

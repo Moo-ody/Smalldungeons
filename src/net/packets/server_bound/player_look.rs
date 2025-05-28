@@ -1,8 +1,8 @@
-use bytes::{Buf, BytesMut};
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::server::entity::entity_enum::EntityTrait;
 use crate::server::world::World;
+use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
 pub struct PlayerLook {
@@ -28,11 +28,9 @@ impl ServerBoundPacket for PlayerLook {
     }
 
     fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
-        if let Some(player) = world.get_player_from_client_id(client_id) {
-            let entity = player.get_entity();
-            entity.yaw = self.yaw;
-            entity.pitch = self.pitch;
-        }
+        let entity = world.get_player_from_client_id(client_id)?.get_entity();
+        entity.yaw = self.yaw;
+        entity.pitch = self.pitch;
         Ok(())
     }
 }
