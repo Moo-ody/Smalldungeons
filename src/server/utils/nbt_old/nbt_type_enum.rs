@@ -1,22 +1,20 @@
-use crate::server::utils::nbt::nbt_base::NBTBase;
-use crate::server::utils::nbt::nbt_size_tracker::NBTSizeTracker;
+use crate::server::utils::nbt_old::nbt_tag_compound::NBTTagCompound;
+use crate::server::utils::nbt_old::nbt_tag_double::NBTTagf64;
+use crate::server::utils::nbt_old::nbt_tag_end::NBTTagEnd;
+use crate::server::utils::nbt_old::nbt_tag_f32::NBTTagf32;
+use crate::server::utils::nbt_old::nbt_tag_i16::NBTTagi16;
+use crate::server::utils::nbt_old::nbt_tag_i32::NBTTagi32;
+use crate::server::utils::nbt_old::nbt_tag_i32_array::NBTTagi32Array;
+use crate::server::utils::nbt_old::nbt_tag_i64::NBTTagi64;
+use crate::server::utils::nbt_old::nbt_tag_i8::NBTTagi8;
+use crate::server::utils::nbt_old::nbt_tag_i8_array::NBTTagi8Array;
+use crate::server::utils::nbt_old::nbt_tag_list::NBTTagVec;
+use crate::server::utils::nbt_old::nbt_tag_string::NBTTagString;
 use anyhow::bail;
 use enum_dispatch::enum_dispatch;
-use crate::server::utils::nbt::nbt_tag_i8::NBTTagi8;
-use crate::server::utils::nbt::nbt_tag_i8_array::NBTTagi8Array;
-use crate::server::utils::nbt::nbt_tag_compound::NBTTagCompound;
-use crate::server::utils::nbt::nbt_tag_double::NBTTagf64;
-use crate::server::utils::nbt::nbt_tag_end::NBTTagEnd;
-use crate::server::utils::nbt::nbt_tag_f32::NBTTagf32;
-use crate::server::utils::nbt::nbt_tag_i16::NBTTagi16;
-use crate::server::utils::nbt::nbt_tag_i32::NBTTagi32;
-use crate::server::utils::nbt::nbt_tag_i32_array::NBTTagi32Array;
-use crate::server::utils::nbt::nbt_tag_i64::NBTTagi64;
-use crate::server::utils::nbt::nbt_tag_list::NBTTagVec;
-use crate::server::utils::nbt::nbt_tag_string::NBTTagString;
 
 #[enum_dispatch(NBTBase)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NBTTypeEnum {
     NBTTagi8,
     NBTTagi8Array,

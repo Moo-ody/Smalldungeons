@@ -1,5 +1,5 @@
+use crate::server::utils::nbt_old::nbt_size_tracker::NBTSizeTracker;
 use enum_dispatch::enum_dispatch;
-use crate::server::utils::nbt::nbt_size_tracker::NBTSizeTracker;
 
 #[enum_dispatch]
 pub trait NBTBase {

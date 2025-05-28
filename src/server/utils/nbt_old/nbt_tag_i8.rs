@@ -1,6 +1,6 @@
+use crate::server::utils::nbt_old::nbt_base::NBTBase;
+use crate::server::utils::nbt_old::nbt_size_tracker::NBTSizeTracker;
 use bytes::Buf;
-use crate::server::utils::nbt::nbt_base::NBTBase;
-use crate::server::utils::nbt::nbt_size_tracker::NBTSizeTracker;
 
 #[derive(Debug, Clone)]
 pub struct NBTTagi8 {

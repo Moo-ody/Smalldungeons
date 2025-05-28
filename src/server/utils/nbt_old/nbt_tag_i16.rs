@@ -1,9 +1,10 @@
-use bytes::Buf;
 use crate::net::packets::packet::PacketWrite;
-use crate::server::utils::nbt::nbt_base::NBTBase;
-use crate::server::utils::nbt::nbt_size_tracker::NBTSizeTracker;
+use crate::server::utils::nbt_old::nbt_base::NBTBase;
+use crate::server::utils::nbt_old::nbt_size_tracker::NBTSizeTracker;
+use bytes::Buf;
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct NBTTagi16 {
     value: i16
 }

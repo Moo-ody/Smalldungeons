@@ -10,3 +10,4 @@ pub mod player_update;
 pub mod client_settings;
 pub mod confirm_transaction;
 pub mod custom_payload;
+pub mod player_block_placement;

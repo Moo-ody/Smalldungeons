@@ -10,6 +10,7 @@ use crate::net::packets::client_bound::login_success::LoginSuccess;
 use crate::net::packets::client_bound::pong::Pong;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::server_info::ServerInfo;
+use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
@@ -17,6 +18,7 @@ use crate::net::packets::server_bound::handshake::Handshake;
 use crate::net::packets::server_bound::keep_alive::KeepAlive as SBKeepAlive;
 use crate::net::packets::server_bound::login_start::LoginStart;
 use crate::net::packets::server_bound::ping::Ping;
+use crate::net::packets::server_bound::player_block_placement::PlayerBlockPlacement;
 use crate::net::packets::server_bound::player_look::PlayerLook;
 use crate::net::packets::server_bound::player_pos_look::PlayerPosLook;
 use crate::net::packets::server_bound::player_position::PlayerPosition;
@@ -37,6 +39,7 @@ register_clientbound_packets! {
     SpawnMob,
     DestroyEntities,
     EntityVelocity,
+    SetSlot,
 }
 
 register_serverbound_packets! {
@@ -49,6 +52,7 @@ register_serverbound_packets! {
         0x04 => PlayerPosition,
         0x05 => PlayerLook,
         0x06 => PlayerPosLook,
+        0x08 => PlayerBlockPlacement,
         0x15 => ClientSettings,
         0x0F => SBConfirmTransaction,
     },

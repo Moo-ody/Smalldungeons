@@ -4,3 +4,4 @@ pub mod chunk;
 pub mod server;
 pub mod utils;
 pub mod block;
+pub mod items;

@@ -1,9 +1,9 @@
-use bytes::Buf;
 use crate::net::packets::packet::PacketWrite;
-use crate::server::utils::nbt::nbt_base::NBTBase;
-use crate::server::utils::nbt::nbt_size_tracker::NBTSizeTracker;
+use crate::server::utils::nbt_old::nbt_base::NBTBase;
+use crate::server::utils::nbt_old::nbt_size_tracker::NBTSizeTracker;
+use bytes::Buf;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NBTTagString {
     value: String,
 }

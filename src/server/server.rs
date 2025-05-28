@@ -3,15 +3,18 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::position_look::PositionLook;
+use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_registry::ServerBoundPackets;
 use crate::server::block::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
 use crate::server::entity::player_entity::PlayerEntity;
 use crate::server::entity::zombie::Zombie;
+use crate::server::items::item_stack::ItemStack;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -20,6 +23,17 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
     let mut tick_interval = tokio::time::interval(std::time::Duration::from_millis(50));
     
     let mut world = World::with_net_tx(network_tx);
+
+    // let example_nbt_compound = NBTNode::Compound(vec![
+    //     ("byte_test".to_string(), NBTNode::Byte(8)),
+    //     ("int_test".to_string(), NBTNode::Int(16)),
+    //     ("float_test".to_string(), NBTNode::Float(0.5)),
+    //     ("string_test".to_string(), NBTNode::String("Hello nbt!".to_string())),
+    // ]);
+    // 
+    // let mut payload: Vec<u8> = Vec::new();
+    // serialize_to_payload(&mut payload, &example_nbt_compound);
+    // println!("Payload:\n{:?}", payload);
 
     loop {
         tick_interval.tick().await;
@@ -35,6 +49,9 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                     });
                     
                     match packet {
+                        ServerBoundPackets::PlayerBlockPlacement( p) => {
+                            println!("!!! PlayerBlockPlacement: {:?}", p);
+                        }
                         _ => {}
                     }
                 }
@@ -78,6 +95,20 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                     SpawnMob::from_entity(&mut zombie).send_packet(client_id, &world.network_tx)?;
 
                     world.spawn_entity(EntityEnum::from(zombie));
+
+                    // doesnt end up appearing in clients inventory?
+                    let packet = SetSlot {
+                        window_id: 0,
+                        slot: 1,
+                        item_stack: ItemStack {
+                            item: 276,
+                            stack_size: 1,
+                            metadata: 1561,
+                            tag_compound: None,
+                        },
+                    };
+
+                    ClientBoundPacket::from(packet).send_packet(client_id, &world.network_tx)?;
 
                     //world.add_entity(PlayerEntity(player));
                 }
