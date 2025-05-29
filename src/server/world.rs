@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// this is used to store all data including server right now, but a server can have multiple worlds.
-/// it doesnt matter right now (or potentially ever given the project) since we only need one world,
+/// This is used to store all data including server right now, but a server can have multiple worlds.
+/// It doesnt matter right now (or potentially ever given the project) since we only need one world,
 /// itd be best to support multiple worlds probably.
 ///
-/// world data (chunks, world spawn, entities, etc.) should be moved to a new struct and this renamed to server.
+/// World data (chunks, world spawn, entities, etc.) should be moved to a new struct and this renamed to server.
 /// Entities should include a reference to the world id, or at least some way to quickly get the world theyre a part of.
 pub struct World {
     pub network_tx: UnboundedSender<NetworkMessage>,
@@ -44,10 +44,12 @@ impl World {
         self.current_server_tick += 1;
 
         // this weirdness is done so we can manipulate other entities in any given entity's tick.
+        // it should be refactored if we end up not needing to.
         // keys can be cloned since if the entity is removed by another before its tick, it will return None and get skipped.
         // this will not tick a spawned entity on its first tick if its spawned by another entity though so well see
         for entity_id in self.entities.keys().cloned().collect::<Vec<_>>() {
-            if let Some(entity) = self.entities.remove(&entity_id) {
+            if let Some(mut entity) = self.entities.remove(&entity_id) {
+                entity.get_entity().ticks_existed += 1;
                 let returned = entity.tick(self);
                 self.entities.insert(entity_id, returned);
             }

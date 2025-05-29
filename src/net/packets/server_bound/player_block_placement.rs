@@ -43,8 +43,8 @@ fn get_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
     if id >= 0 {
         let item_stack = ItemStack {
             item: id,
-            stack_size: buf.get_u8(),
-            metadata: buf.get_u16(),
+            stack_size: buf.get_i8(),
+            metadata: buf.get_i16(),
             tag_compound: None,
         };
         return Some(item_stack);

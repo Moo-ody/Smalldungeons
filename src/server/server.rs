@@ -8,7 +8,7 @@ use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::net::packets::packet_registry::ServerBoundPackets;
-use crate::server::block::Blocks;
+use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
@@ -30,7 +30,7 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
     //     ("float_test".to_string(), NBTNode::Float(0.5)),
     //     ("string_test".to_string(), NBTNode::String("Hello nbt!".to_string())),
     // ]);
-    // 
+    //
     // let mut payload: Vec<u8> = Vec::new();
     // serialize_to_payload(&mut payload, &example_nbt_compound);
     // println!("Payload:\n{:?}", payload);
@@ -44,6 +44,7 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                 ClientEvent::PacketReceived { client_id, packet } => {
                     //println!("Client {} sent {:?}", client_id, packet);
 
+                    // this being here is mostly confirmed to be accurate to vanilla for any packets which are qued.
                     packet.main_process(&mut world, client_id).unwrap_or_else(|e| {
                         println!("Error processing packet: {:?}", e);
                     });

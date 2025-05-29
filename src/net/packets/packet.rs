@@ -1,12 +1,11 @@
+use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::write_varint;
+use crate::server::entity::metadata::Metadata;
 use anyhow::Result;
-use async_trait::async_trait;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::net::network_message::NetworkMessage;
-use crate::server::entity::metadata::Metadata;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
@@ -161,6 +160,15 @@ macro_rules! register_serverbound_packets {
             }
         }
     };
+}
+
+#[macro_export]
+macro_rules! print_bytes_hex {
+    ($ident:tt, $buf:expr) => {
+        println!("Raw bytes for {} [{}]: {}", $ident, $buf.len(), $buf.iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<String>>()
+            .join(" "));};
 }
 
 #[async_trait::async_trait]

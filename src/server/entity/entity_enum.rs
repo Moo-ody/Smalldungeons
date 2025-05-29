@@ -4,6 +4,8 @@ use crate::server::entity::zombie::Zombie;
 use crate::server::world::World;
 use enum_dispatch::enum_dispatch;
 
+/// enum dispatch should probably be replaced with our own implementation
+/// this would make the enum impl itself include the entity's id among other things.
 #[enum_dispatch(EntityTrait)]
 #[derive(Debug)]
 pub enum EntityEnum {

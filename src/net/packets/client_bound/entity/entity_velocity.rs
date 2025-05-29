@@ -1,7 +1,7 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
 pub struct EntityVelocity {
@@ -17,7 +17,7 @@ pub struct EntityVelocity {
 
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for EntityVelocity {
-    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
+    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
         let motion_clamp = 3.9;
         let buf = build_packet!(
             0x12,

@@ -44,8 +44,7 @@ impl NBTBase for NBTTagCompound {
                 value.write(output);
             }
         }
-        output.push(0);
-        todo!()
+        output.push(0)
     }
 
     fn read(&mut self, input: &mut &[u8], depth: i32, size_tracker: &mut NBTSizeTracker) -> anyhow::Result<()> {

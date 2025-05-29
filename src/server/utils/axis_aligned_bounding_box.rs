@@ -1,16 +1,22 @@
-use crate::server::utils::vec3f::Vec3f;
-
 #[derive(Debug, Clone)]
 pub struct AxisAlignedBoundingBox {
-    pub bottom_corner: Vec3f,
-    pub top_corner: Vec3f,
+    pub min_x: f64,
+    pub min_y: f64,
+    pub min_z: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+    pub max_z: f64,
 }
 
 impl AxisAlignedBoundingBox {
     pub fn new_empty() -> AxisAlignedBoundingBox {
         AxisAlignedBoundingBox {
-            bottom_corner: Vec3f::new_empty(),
-            top_corner: Vec3f::new_empty(),
+            min_x: 0.0,
+            min_y: 0.0,
+            min_z: 0.0,
+            max_x: 0.0,
+            max_y: 0.0,
+            max_z: 0.0,
         }
     }
 }

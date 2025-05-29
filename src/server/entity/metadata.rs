@@ -1,5 +1,5 @@
-use std::fmt::Debug;
 use enum_dispatch::enum_dispatch;
+use std::fmt::Debug;
 
 /// Type representing Minecraft's [Data Watcher](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/entity/DataWatcher.java). 
 /// Renamed to Metadata because thats pretty much exactly what it is and its more clear.
@@ -43,6 +43,8 @@ macro_rules! meta_data {
     };
 }
 
+/// macro handling meta data types. 
+/// This is missing a few types still.
 #[macro_export]
 macro_rules! type_to_id {
     (bool) => { u8::from(0) }; // this needs the from stuff otherwise it cries 
@@ -50,6 +52,9 @@ macro_rules! type_to_id {
     (i32) => { u8::from(2) };
     (f32) => { u8::from(3) };
     (String) => { u8::from(4) };
+    (ItemStack) => { u8::from(5) };
+    // currently missing blockpos and rotation (both are vec3fs internally though so maybe just put that here?)
+
     // Catch-all for unsupported types
     ($other:ty) => {
         compile_error!(concat!("Unsupported type: ", stringify!($other)))
