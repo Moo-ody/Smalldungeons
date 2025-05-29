@@ -1,17 +1,18 @@
-use crate::net::packets::packet::{ClientBoundPacketImpl, PacketWrite};
+use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::net::packets::packet_write::PacketWrite;
 use crate::net::varint::VarInt;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
 pub struct DestroyEntities {
-    pub(crate) entity_ids: Vec<i32>,
+    pub entity_ids: Vec<i32>,
 }
 
 impl DestroyEntities {}
 
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for DestroyEntities {
-    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
+    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
         let mut payload = Vec::new();
         VarInt(0x13).write(&mut payload);
 

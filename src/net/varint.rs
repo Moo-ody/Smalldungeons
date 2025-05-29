@@ -1,4 +1,4 @@
-use crate::net::packets::packet::PacketWrite;
+use crate::net::packets::packet_write::PacketWrite;
 use bytes::{Buf, BytesMut};
 
 pub struct VarInt(pub i32);
@@ -37,9 +37,8 @@ pub fn write_varint(buf: &mut Vec<u8>, mut value: i32) {
         if (value & !0x7F) == 0 {
             buf.push(value as u8);
             return;
-        } else {
-            buf.push(((value & 0x7F) | 0x80) as u8);
-            value >>= 7;
         }
+        buf.push(((value & 0x7F) | 0x80) as u8);
+        value >>= 7;
     }
 }

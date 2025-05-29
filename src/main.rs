@@ -11,18 +11,19 @@ use crate::server::server::Server;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
+use crate::server::server::tick;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
     "players": { "max": 1, "online": 0 },
-    "description": { "text": "broooo" }
+    "description": { "text": "RustClear", "color": "gold", "extra": [{ "text": " version ", "color": "gray" }, { "text": "0.1.0", "color": "green"}] }
 }"#;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let (network_tx, network_rx) = unbounded_channel::<NetworkMessage>();
     let (event_tx, mut event_rx) = unbounded_channel::<ClientEvent>();
-    
+
     let mut server = Server::initialize(network_tx);
 
     // example stone grid
@@ -41,7 +42,7 @@ async fn main() -> Result<()> {
             server.world.chunks.push(chunk);
         }
     }
-    
+
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
         run_network_thread(
@@ -50,18 +51,18 @@ async fn main() -> Result<()> {
             event_tx.clone()
         )
     );
-    
+
     loop {
         tick_interval.tick().await;
-        
+
         while let Ok(message) = event_rx.try_recv() {
             let result = server.process_event(message);
-            if result.is_err() { 
+            if result.is_err() {
                 return result;
             }
         }
-        
+
         // rest of functionality here
-        
+
     }
 }

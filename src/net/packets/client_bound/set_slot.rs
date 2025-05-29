@@ -1,6 +1,6 @@
-use crate::build_packet;
-use crate::net::packets::packet::{ClientBoundPacketImpl, PacketWrite};
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::items::item_stack::ItemStack;
+use crate::{build_packet, print_bytes_hex};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug)]
@@ -19,7 +19,8 @@ impl ClientBoundPacketImpl for SetSlot {
             self.slot,
             self.item_stack,
         );
-        println!("{:?}", buf);
+
+        print_bytes_hex!("Set Slot Packet", buf);
         writer.write_all(&buf).await
     }
 }

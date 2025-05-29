@@ -10,3 +10,5 @@ pub mod entity_velocity;
 pub mod destroy_entities;
 pub mod remove_entity_effect;
 pub mod entity_properties;
+pub mod entity_equipment;
+pub mod entity_metadata;

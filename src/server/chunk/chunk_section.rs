@@ -1,4 +1,4 @@
-use crate::server::block::Blocks;
+use crate::server::block::blocks::Blocks;
 
 /// ChunkSection represents a 16x16x16 cube of blocks.
 ///
@@ -20,12 +20,7 @@ impl ChunkSection {
     }
 
     pub fn get_block(&self, index: usize) -> Blocks {
-        let block_state_id = self.data[index];
-        match block_state_id {
-            // todo better way maybe? for now its here ig
-            16 => Blocks::Stone,
-            _ => Blocks::Air
-        }
+        Blocks::from_block_state_id(self.data[index])
     }
 
     pub fn set_block(&mut self, block: Blocks, index: usize) {

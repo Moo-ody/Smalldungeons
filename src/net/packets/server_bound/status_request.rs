@@ -7,12 +7,12 @@ use anyhow::Result;
 use bytes::BytesMut;
 
 #[derive(Debug)]
-pub struct StatusRequest<> {}
+pub struct StatusRequest;
 
 #[async_trait::async_trait]
 impl ServerBoundPacket for StatusRequest {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> {
-        Ok(StatusRequest {})
+        Ok(StatusRequest)
     }
 
     async fn process(&self, context: PacketContext) -> Result<()> {

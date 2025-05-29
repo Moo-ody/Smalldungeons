@@ -4,6 +4,7 @@ pub mod chunk;
 pub mod old_server;
 pub mod utils;
 pub mod block;
+pub mod item;
 pub mod items;
 pub mod world;
 pub mod server;

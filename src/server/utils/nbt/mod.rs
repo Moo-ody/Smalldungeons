@@ -67,7 +67,7 @@ pub fn serialize_to_payload(payload: &mut Vec<u8>, nbt: &NBTNode) {
 
         NBTNode::ByteArray(value) => {
             payload.extend_from_slice(&(value.len() as i32).to_be_bytes());
-            payload.extend_from_slice(&value);
+            payload.extend_from_slice(value);
         }
         NBTNode::String(value) => {
             let str_bytes = value.as_bytes();

@@ -8,7 +8,7 @@ use enum_dispatch::enum_dispatch;
 // like enum that leads into a struct,
 // i think we have a struct with common
 // with an enum to just represent like mob type, like zombie, stuff
-// or even instead just represent custom mobs 
+// or even instead just represent custom mobs
 // and then handle type with packets inside a function or something,
 // since we shouldnt need to much "vanilla interface"
 

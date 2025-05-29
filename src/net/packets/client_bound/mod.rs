@@ -11,3 +11,5 @@ pub mod confirm_transaction;
 pub mod spawn_mob;
 pub mod entity;
 pub mod set_slot;
+pub mod chat;
+pub mod time_update;
