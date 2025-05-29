@@ -27,7 +27,7 @@ pub async fn handle_client(
     let write_task = tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
             if let Err(e) = writer.write_all(&data).await {
-                eprintln!("write error: {}", e);
+                eprintln!("write error: {e}");
                 break
             }
         }
@@ -63,34 +63,27 @@ pub async fn handle_client(
                             event_tx: event_tx_clone.clone(),
                         }).await
                         {
-                            eprintln!("Failed to process packet: {}", e);
+                            eprintln!("Failed to process packet for {client_id}: {e}");
                             continue;
                         }
 
-                        event_tx_clone
-                            .send(ClientEvent::PacketReceived {
-                                client_id,
-                                packet,
-                            })
-                            .unwrap();
+                        event_tx_clone.send(ClientEvent::PacketReceived { client_id, packet })
+                            .unwrap_or_else(|e| eprintln!("Failed to send packet to {client_id}: {e}"));
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Failed to parse packet from client {}: {}",
-                            client_id, e
-                        );
+                        eprintln!("Failed to parse packet from client {client_id}: {e}");
                         continue;
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Client {} read error: {}", client_id, e);
+                eprintln!("Client {client_id} read error: {e}");
                 break;
             }
         }
     }
 
-    println!("handle client for {} closed.", client_id);
+    println!("handle client for {client_id} closed.");
     event_tx.send(ClientEvent::ClientDisconnected { client_id }).unwrap();
     write_task.abort();
 }

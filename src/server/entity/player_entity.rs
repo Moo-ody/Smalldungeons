@@ -5,6 +5,7 @@ use crate::net::packets::client_bound::keep_alive::KeepAlive;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_enum::EntityTrait;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -28,15 +29,13 @@ impl PlayerEntity {
             entity: Entity::spawn_at(pos, entity_id),
         }
     }
-    
-    pub fn disconnect(&mut self, world: &mut World, reason: &str) {
-        Disconnect {
-            reason: format!("{{\"text\":\"{}\"}}", reason),
-        }.send_packet(self.client_id, &world.network_tx).unwrap_or_else(|e| eprintln!("Error sending disconnect packet: {:?}", e));
+
+    pub fn disconnect(&mut self, world: &mut World, reason: ChatComponentText) {
+        Disconnect { reason }.send_packet(self.client_id, &world.network_tx).unwrap_or_else(|e| eprintln!("Error sending disconnect packet: {e:?}"));
         
         world.network_tx.send(NetworkMessage::DisconnectClient {
             client_id: self.client_id,
-        }).unwrap_or_else(|e| eprintln!("Error disconnecting client: {:?}", e))
+        }).unwrap_or_else(|e| eprintln!("Error disconnecting client: {e:?}"));
     }
 }
 
@@ -52,7 +51,7 @@ impl EntityTrait for PlayerEntity {
     fn tick(mut self, world: &mut World) -> Self {
         if self.client_id != 0 {
             ConfirmTransaction::new().send_packet(self.client_id, &world.network_tx).unwrap_or_else(|e| {
-                eprintln!("Failed to send confirm transaction packet at {:?}'s tick: {}", self, e)
+                eprintln!("Failed to send confirm transaction packet at {:?}'s tick: {}", self, e);
             });
             
             if world.current_server_tick % 50 == 0 {
@@ -62,7 +61,7 @@ impl EntityTrait for PlayerEntity {
                 }).as_millis() as i32;
                 self.last_keep_alive = time;
                 KeepAlive::from_time(time).send_packet(self.client_id, &world.network_tx).unwrap_or_else(|e| {
-                    eprintln!("Failed to send keep alive packet at {:?}'s tick: {}", self, e)
+                    eprintln!("Failed to send keep alive packet at {self:?}'s tick: {e}")
                 });
             } // this hsould be entirely handled by network thread instead i think maybe.
             

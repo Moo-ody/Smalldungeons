@@ -1,10 +1,11 @@
-use crate::net::packets::packet::{ClientBoundPacketImpl, PacketWrite};
+use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::net::packets::packet_write::PacketWrite;
 use crate::net::varint::VarInt;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
 pub struct DestroyEntities {
-    pub(crate) entity_ids: Vec<i32>,
+    pub entity_ids: Vec<i32>,
 }
 
 impl DestroyEntities {}

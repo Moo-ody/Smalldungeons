@@ -1,4 +1,4 @@
-use crate::net::packets::packet::PacketWrite;
+use crate::net::packets::packet_write::PacketWrite;
 use crate::server::utils::nbt::{serialize, NBTNode};
 use flate2::write::GzEncoder;
 use flate2::Compression;

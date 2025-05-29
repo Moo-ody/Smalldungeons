@@ -1,4 +1,5 @@
 use crate::net::connection_state::ConnectionState;
+use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
 use crate::net::packets::client_bound::disconnect::Disconnect;
@@ -40,6 +41,7 @@ register_clientbound_packets! {
     DestroyEntities,
     EntityVelocity,
     SetSlot,
+    Chat,
 }
 
 register_serverbound_packets! {

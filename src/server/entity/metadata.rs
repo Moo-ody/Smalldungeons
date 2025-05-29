@@ -17,6 +17,9 @@ use std::fmt::Debug;
 /// meta_data!(Health, f32, 14);
 /// meta_data_impl!(WatchedStruct, watched_boolean,  watched_int, watched_float;
 /// ```
+///
+/// this should be replaced with an enum requiring registering metadata types at some point
+/// since the boxed trait stuff is slow and unnecessary.
 pub type Metadata = Vec<Box<dyn MetadataEntry + Send + Sync>>;
 
 pub trait MetadataEntry: Debug + Send + Sync {
@@ -37,7 +40,7 @@ macro_rules! meta_data {
         impl MetadataEntry for $name {
             fn write_to_buffer(&self, buf: &mut Vec<u8>) {
                 buf.push(((crate::type_to_id!($typ) << 5 | $id & 31) & 255) as u8);
-                crate::net::packets::packet::PacketWrite::write(&self.0, buf);
+                crate::net::packets::packet_write::PacketWrite::write(&self.0, buf);
             }
         }
     };

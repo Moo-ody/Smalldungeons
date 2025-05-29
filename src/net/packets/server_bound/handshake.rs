@@ -3,9 +3,9 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
+use crate::server::world::World;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
-use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct Handshake {
@@ -18,11 +18,6 @@ pub struct Handshake {
 #[async_trait::async_trait]
 impl ServerBoundPacket for Handshake {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> {
-        // let packet_id = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
-        // if packet_id != 0x00 {
-        //     bail!("Expected handshake, received {}", packet_id)
-        // }
-
         let protocol_version = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read protocol version"))?;
         let addr_len = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read addr length"))?  as usize;
 

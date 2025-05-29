@@ -1,4 +1,4 @@
-use crate::net::packets::packet::{ClientBoundPacketImpl, PacketWrite};
+use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::items::item_stack::ItemStack;
 use crate::{build_packet, print_bytes_hex};
 use tokio::io::{AsyncWrite, AsyncWriteExt};

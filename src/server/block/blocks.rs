@@ -79,9 +79,9 @@ crate::register_blocks! {
     },
 }
 
-/// write implementation for the [Blocks] enum.
-impl FromBlockStateIdImpl for Blocks {
-    fn from_block_state_id(id: u16) -> Blocks {
+impl Blocks {
+    /// write implementation for the [Blocks] enum.
+    pub fn from_block_state_id(id: u16) -> Blocks {
         let block_id = id >> 4;
         let meta = (id & 0xF) as u8;
         match block_id {
@@ -136,7 +136,7 @@ impl FromBlockStateIdImpl for Blocks {
 /// nextid etc.
 /// ```
 ///
-/// the write must be manually written in the FromBlockStateIdImpl for the [Blocks] enum.
+/// the write must be manually written in the [Blocks] enum.
 #[macro_export]
 macro_rules! register_blocks {
     {
@@ -168,10 +168,6 @@ macro_rules! register_blocks {
             }
         }
     };
-}
-
-pub trait FromBlockStateIdImpl {
-    fn from_block_state_id(id: u16) -> Self;
 }
 
 #[macro_export]

@@ -1,8 +1,8 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::net::varint::VarInt;
 use crate::server::chunk::Chunk;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 /// Represents Minecraft's [S21PacketChunkData](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/network/play/server/S21PacketChunkData.java).
 /// 
@@ -50,15 +50,13 @@ impl ChunkData {
         
         let mut data = vec![0u8; data_size];
         let mut offset = 0;
-        
-        for section in &chunk.chunk_sections {
-            if let Some(section) = section {
-                if section.is_empty() { continue }
-                for block in section.data {
-                    data[offset] = (block & 0xFF) as u8;
-                    data[offset + 1] = ((block >> 8) & 0xFF) as u8;
-                    offset += 2;
-                }
+
+        for section in chunk.chunk_sections.iter().flatten() {
+            if section.is_empty() { continue }
+            for block in section.data {
+                data[offset] = (block & 0xFF) as u8;
+                data[offset + 1] = ((block >> 8) & 0xFF) as u8;
+                offset += 2;
             }
         };
 

@@ -1,4 +1,4 @@
-use crate::server::block::blocks::{Blocks, FromBlockStateIdImpl};
+use crate::server::block::blocks::Blocks;
 
 // extended block storage
 pub struct ChunkSection {

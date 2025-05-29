@@ -1,5 +1,6 @@
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
+use crate::net::packets::client_bound::chat::{Chat, CHAT};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::position_look::PositionLook;
@@ -15,6 +16,8 @@ use crate::server::entity::entity_enum::{EntityEnum, EntityTrait};
 use crate::server::entity::player_entity::PlayerEntity;
 use crate::server::entity::zombie::Zombie;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::utils::chat_component::chat_component_text::{ChatComponentTextBuilder, HoverAction};
+use crate::server::utils::color::Color;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -51,7 +54,7 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                     
                     match packet {
                         ServerBoundPackets::PlayerBlockPlacement( p) => {
-                            println!("!!! PlayerBlockPlacement: {:?}", p);
+                            println!("!!! PlayerBlockPlacement: {p:?}");
                         }
                         _ => {}
                     }
@@ -107,6 +110,29 @@ pub async fn tick(mut event_rx: UnboundedReceiver<ClientEvent>, network_tx: Unbo
                             metadata: 1561,
                             tag_compound: None,
                         },
+                    };
+
+                    ClientBoundPacket::from(packet).send_packet(client_id, &world.network_tx)?;
+
+                    let chat = ChatComponentTextBuilder::new("RC")
+                        .color(Color::Gold)
+                        .bold()
+                        .append(ChatComponentTextBuilder::new(" >> ").color(Color::Gray).build())
+                        .append(
+                            ChatComponentTextBuilder::new("Hello World!")
+                                .color(Color::White)
+                                .on_hover(HoverAction::ShowText,
+                                          ChatComponentTextBuilder::new("Hello World!")
+                                              .color(Color::Blue)
+                                              .build(),
+                                )
+                                .build()
+                        )
+                        .build();
+
+                    let packet = Chat {
+                        component: chat,
+                        typ: CHAT,
                     };
 
                     ClientBoundPacket::from(packet).send_packet(client_id, &world.network_tx)?;
