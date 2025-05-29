@@ -1,8 +1,8 @@
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_enum::EntityTrait;
 use crate::server::entity::metadata::{Metadata, MetadataEntry, MetadataImpl};
+use crate::server::old_world::World;
 use crate::server::utils::vec3f::Vec3f;
-use crate::server::world::World;
 use crate::{meta_data, meta_data_impl};
 
 #[derive(Debug)]

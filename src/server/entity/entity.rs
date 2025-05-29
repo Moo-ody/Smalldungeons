@@ -1,4 +1,4 @@
-use crate::server::utils::axis_aligned_bounding_box::AxisAlignedBoundingBox;
+use crate::server::utils::aabb::AABB;
 use crate::server::utils::vec3f::Vec3f;
 
 #[derive(Debug, Clone)]
@@ -10,7 +10,7 @@ pub struct Entity {
     pub yaw: f32,
     pub pitch: f32,
     pub head_yaw: f32,
-    pub axis_aligned_bb: AxisAlignedBoundingBox,
+    pub aabb: AABB,
     pub is_dead: bool,
     pub height: f32,
     pub width: f32,
@@ -24,14 +24,14 @@ impl Entity {
             pos: pos.clone(),
             motion: Vec3f::new_empty(),
             prev_pos: pos.clone(),
-            yaw: 0f32,
-            pitch: 0f32,
-            head_yaw: 0f32,
-            axis_aligned_bb: AxisAlignedBoundingBox::new_empty(),
+            yaw: 0.0,
+            pitch: 0.0,
+            head_yaw: 0.0,
+            aabb: AABB::new_empty(),
             is_dead: false,
-            height: 0f32,
-            width: 0f32,
-            ticks_existed: 0u32,       
+            height: 0.0,
+            width: 0.0,
+            ticks_existed: 0,       
         }
     }
     

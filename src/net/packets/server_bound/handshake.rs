@@ -3,9 +3,9 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
+use crate::server::old_world::World;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
-use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct Handshake {

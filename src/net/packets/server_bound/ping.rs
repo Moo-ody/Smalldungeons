@@ -1,10 +1,9 @@
-use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::net::packets::client_bound::pong::Pong;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
+use crate::server::old_world::World;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
-use crate::server::world::World;
 
 #[derive(Debug)]
 pub struct Ping {

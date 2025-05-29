@@ -1,7 +1,7 @@
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::server::world::World;
+use crate::server::old_world::World;
 use bytes::BytesMut;
 use std::time::{SystemTime, UNIX_EPOCH};
 

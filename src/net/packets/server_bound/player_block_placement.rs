@@ -1,7 +1,7 @@
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::world::World;
+use crate::server::old_world::World;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
@@ -21,11 +21,12 @@ impl ServerBoundPacket for PlayerBlockPlacement {
         let packet = PlayerBlockPlacement {
             position: buf.get_u64(),
             placed_direction: buf.get_u8(),
-            item_stack: get_item_stack(buf),
+            item_stack: read_item_stack(buf),
             facing_x: buf.get_u8() as f32 / 16.0,
             facing_y: buf.get_u8() as f32 / 16.0,
             facing_z: buf.get_u8() as f32 / 16.0,
         };
+        println!("!!! item stack = {:?}", &packet.item_stack);
         Ok(packet)
     }
 
@@ -38,7 +39,8 @@ impl ServerBoundPacket for PlayerBlockPlacement {
     }
 }
 
-fn get_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
+// todo, have this in its own file
+fn read_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
     let id = buf.get_i16();
     if id >= 0 {
         let item_stack = ItemStack {
@@ -51,38 +53,3 @@ fn get_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
     }
     None
 }
-
-// fn read_nbt_tag_compound(buf: &mut BytesMut) -> Option<NBTTagCompound> {
-//     if buf.is_empty() {
-//         return None;
-//     }
-//
-//     // Peek the first byte
-//     let first_byte = buf[0];
-//     if first_byte == 0 {
-//         buf.advance(1);
-//         return None;
-//     }
-//
-//     // Decompress the buffer using GZIP
-//     let cursor = Cursor::new(buf.as_ref());
-//     let mut decoder = ZlibDecoder::new(cursor);
-//
-//     let mut decompressed = Vec::new();
-//     if decoder.read_to_end(&mut decompressed).is_err() {
-//         return None;
-//     }
-//
-//     // Create an input slice for the NBT reader
-//     let mut input: &[u8] = &decompressed;
-//
-//     let mut compound = NBTTagCompound::new();
-//     let mut tracker = NBTSizeTracker::new(2_097_152); // same as Java
-//
-//     if compound.read(&mut input, 0, &mut tracker).is_ok() {
-//         println!("hello");
-//         Some(compound)
-//     } else {
-//         None
-//     }
-// }

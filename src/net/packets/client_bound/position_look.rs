@@ -1,6 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::entity::player_entity::PlayerEntity;
+use crate::server::player::Player;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ pub struct PositionLook {
 }
 
 impl PositionLook {
-    pub(crate) fn from_player(player: &PlayerEntity) -> PositionLook {
+    pub(crate) fn from_player(player: &Player) -> PositionLook {
         PositionLook {
             x: player.entity.pos.x,
             y: player.entity.pos.y,

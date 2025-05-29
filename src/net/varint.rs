@@ -2,6 +2,7 @@ use crate::net::packets::packet::PacketWrite;
 use bytes::{Buf, BytesMut};
 
 pub struct VarInt(pub i32);
+
 impl PacketWrite for VarInt {
     fn write(&self, buf: &mut Vec<u8>) {
         write_varint(buf, self.0);

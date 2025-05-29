@@ -1,7 +1,7 @@
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
-use crate::server::world::World;
+use crate::server::old_world::World;
 use crate::STATUS_RESPONSE_JSON;
 use anyhow::Result;
 use bytes::BytesMut;

@@ -1,8 +1,16 @@
 use crate::server::entity::entity::Entity;
 use crate::server::entity::player_entity::PlayerEntity;
 use crate::server::entity::zombie::Zombie;
-use crate::server::world::World;
+use crate::server::old_world::World;
 use enum_dispatch::enum_dispatch;
+
+// idk how I feel about this,
+// like enum that leads into a struct,
+// i think we have a struct with common
+// with an enum to just represent like mob type, like zombie, stuff
+// or even instead just represent custom mobs 
+// and then handle type with packets inside a function or something,
+// since we shouldnt need to much "vanilla interface"
 
 #[enum_dispatch(EntityTrait)]
 #[derive(Debug)]

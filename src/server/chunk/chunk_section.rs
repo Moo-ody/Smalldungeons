@@ -1,6 +1,8 @@
 use crate::server::block::Blocks;
 
-// extended block storage
+/// ChunkSection represents a 16x16x16 cube of blocks.
+///
+/// (This is based on ExtendedBlockStorage in 1.8.9, only difference being there is no lighting).
 pub struct ChunkSection {
     pub data: [u16; 4096],
     pub solid_block_amount: u16,
@@ -8,6 +10,8 @@ pub struct ChunkSection {
 
 impl ChunkSection {
 
+    /// Creates a new empty ChunkSection.
+    /// Blocks must be added later.
     pub fn new() -> ChunkSection {
         Self {
             data: [0; 4096],

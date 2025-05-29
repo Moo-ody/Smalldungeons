@@ -1,12 +1,11 @@
+use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::write_varint;
+use crate::server::entity::metadata::Metadata;
 use anyhow::Result;
-use async_trait::async_trait;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::net::network_message::NetworkMessage;
-use crate::server::entity::metadata::Metadata;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
@@ -122,7 +121,7 @@ macro_rules! register_serverbound_packets {
                 }
             }
 
-            fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> anyhow::Result<()> {
+            fn main_process(&self, world: &mut crate::server::old_world::World, client_id: u32) -> anyhow::Result<()> {
                 match self {
                     $(
                         $(
@@ -169,7 +168,7 @@ pub trait ServerBoundPacket: Send + Sync {
 
     async fn process(&self, context: PacketContext) -> Result<()>;
 
-    fn main_process(&self, world: &mut crate::server::world::World, client_id: u32) -> Result<()>;
+    fn main_process(&self, world: &mut crate::server::old_world::World, client_id: u32) -> Result<()>;
 }
 
 #[macro_export]

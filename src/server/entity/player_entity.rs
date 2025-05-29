@@ -5,8 +5,8 @@ use crate::net::packets::client_bound::keep_alive::KeepAlive;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_enum::EntityTrait;
+use crate::server::old_world::World;
 use crate::server::utils::vec3f::Vec3f;
-use crate::server::world::World;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
