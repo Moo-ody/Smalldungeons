@@ -1,7 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::server::old_world::World;
 use anyhow::bail;
 use bytes::{Buf, BytesMut};
 
@@ -24,13 +22,6 @@ impl ServerBoundPacket for ClientSettings {
             chat_colors: buf.get_u8() != 0,
             skin_parts: buf.get_u8(),
         })
-    }
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

@@ -6,9 +6,9 @@ pub trait PacketWrite {
     fn write(&self, buf: &mut Vec<u8>);
 }
 
-impl PacketWrite for Metadata {
+impl PacketWrite for Vec<Metadata> {
     fn write(&self, buf: &mut Vec<u8>) {
-        for data in self {
+        for data in self.iter() {
             data.write_to_buffer(buf);
         }
         buf.push(127);

@@ -1,7 +1,6 @@
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
-use crate::server::old_world::World;
 use crate::STATUS_RESPONSE_JSON;
 use anyhow::Result;
 use bytes::BytesMut;
@@ -19,10 +18,6 @@ impl ServerBoundPacket for StatusRequest {
         ServerInfo {
             status: STATUS_RESPONSE_JSON.parse()?,
         }.send_packet(context.client_id, &context.network_tx)?;
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
         Ok(())
     }
 }

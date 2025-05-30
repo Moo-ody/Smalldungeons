@@ -1,6 +1,6 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::packets::packet_context::PacketContext;
-use crate::server::old_world::World;
+use crate::server::player::Player;
+use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
@@ -16,11 +16,7 @@ impl ServerBoundPacket for PlayerUpdate {
         })
     }
 
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
+    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
         Ok(())
     }
 }

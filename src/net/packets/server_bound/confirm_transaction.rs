@@ -1,6 +1,4 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::packets::packet_context::PacketContext;
-use crate::server::old_world::World;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
@@ -18,13 +16,5 @@ impl ServerBoundPacket for ConfirmTransaction {
             action_number: buf.get_i16(),
             accepted: buf.get_i8() != 0,
         })
-    }
-
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
-        Ok(())
     }
 }

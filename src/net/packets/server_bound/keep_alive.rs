@@ -1,7 +1,7 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::server::old_world::World;
+use crate::server::player::Player;
+use crate::server::world::World;
 use bytes::BytesMut;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,16 +19,11 @@ impl ServerBoundPacket for KeepAlive {
         })
     }
 
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
-        let entity = world.get_player_from_client_id(client_id)?;
-        if entity.last_keep_alive == self.id {
-            let since = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as i32 - entity.last_keep_alive;
-            entity.ping = (entity.ping * 3 + since) / 4;
-            println!("Ping: {}", entity.ping);
+    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
+        if player.last_keep_alive == self.id {
+            let since = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as i32 - player.last_keep_alive;
+            player.ping = (player.ping * 3 + since) / 4;
+            println!("Ping: {}", player.ping);
         }
         Ok(())
     }

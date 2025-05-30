@@ -1,7 +1,6 @@
 use crate::net::packets::client_bound::pong::Pong;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
-use crate::server::old_world::World;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
 
@@ -29,10 +28,6 @@ impl ServerBoundPacket for Ping {
             client_time: self.client_time,
         }.send_packet(context.client_id, &context.network_tx)?;
 
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
         Ok(())
     }
 }

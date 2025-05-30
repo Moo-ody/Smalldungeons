@@ -5,7 +5,6 @@ use crate::net::packets::client_bound::login_success::LoginSuccess;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::server::old_world::World;
 use bytes::BytesMut;
 
 #[derive(Debug)]
@@ -41,10 +40,6 @@ impl ServerBoundPacket for LoginStart {
             client_id: context.client_id,
         })?;
 
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
         Ok(())
     }
 }

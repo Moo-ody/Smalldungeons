@@ -3,7 +3,6 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::varint::read_varint;
-use crate::server::old_world::World;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
 
@@ -50,10 +49,6 @@ impl ServerBoundPacket for Handshake {
             new_state,
         })?;
 
-        Ok(())
-    }
-
-    fn main_process(&self, world: &mut World, client_id: u32) -> Result<()> {
         Ok(())
     }
 }

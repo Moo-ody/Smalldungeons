@@ -1,13 +1,13 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
-use crate::server::entity::entity_enum::EntityTrait;
-use crate::server::entity::metadata::{Metadata, MetadataImpl};
+use crate::server::entity::entity::Entity;
+use crate::server::entity::metadata::Metadata;
 use async_trait::async_trait;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-///
-///
+const MOTION_CLAMP: f64 = 3.9;
+
 #[derive(Debug)]
 pub struct SpawnMob {
     entity_id: i32,
@@ -21,28 +21,24 @@ pub struct SpawnMob {
     velocity_x: i16,
     velocity_y: i16,
     velocity_z: i16,
-    metadata: Metadata
+    metadata: Vec<Metadata>
 }
 
 impl SpawnMob {
-    pub fn from_entity<E: EntityTrait + MetadataImpl>(entity: &mut E) -> SpawnMob {
-        let id = entity.get_id();
-        let entity_base = entity.get_entity();
-        let motion_clamp = 3.9;
-        
-        SpawnMob {
-            entity_id: entity_base.entity_id as i32,
-            entity_type: id,
-            x: (entity_base.pos.x * 32.0).floor() as i32,
-            y: (entity_base.pos.y * 32.0).floor() as i32,
-            z: (entity_base.pos.z * 32.0).floor() as i32,
-            yaw: (entity_base.yaw * 256.0 / 360.0) as i8,
-            pitch: (entity_base.pitch * 256.0 / 360.0) as i8,
-            head_pitch: (entity_base.head_yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
-            velocity_x: (entity_base.motion.x.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
-            velocity_y: (entity_base.motion.y.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
-            velocity_z: (entity_base.motion.z.clamp(-motion_clamp, motion_clamp) * 8000.0) as i16,
-            metadata: entity.create_meta_data()
+    pub fn from_entity(entity: &Entity) -> Self {
+        Self {
+            entity_id: entity.entity_id,
+            entity_type: entity.entity_type.get_id(),
+            x: (entity.pos.x * 32.0).floor() as i32,
+            y: (entity.pos.y * 32.0).floor() as i32,
+            z: (entity.pos.z * 32.0).floor() as i32,
+            yaw: (entity.yaw * 256.0 / 360.0) as i8,
+            pitch: (entity.pitch * 256.0 / 360.0) as i8,
+            head_pitch: (entity.head_yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
+            velocity_x: (entity.motion.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            velocity_y: (entity.motion.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            velocity_z: (entity.motion.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            metadata: entity.metadata.clone()
         }
     }
 }

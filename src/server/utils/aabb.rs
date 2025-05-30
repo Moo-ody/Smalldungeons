@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub struct AxisAlignedBoundingBox {
+pub struct AABB {
     pub min_x: f64,
     pub min_y: f64,
     pub min_z: f64,
@@ -8,9 +8,9 @@ pub struct AxisAlignedBoundingBox {
     pub max_z: f64,
 }
 
-impl AxisAlignedBoundingBox {
-    pub fn new_empty() -> AxisAlignedBoundingBox {
-        AxisAlignedBoundingBox {
+impl AABB {
+    pub fn new_empty() -> AABB {
+        AABB {
             min_x: 0.0,
             min_y: 0.0,
             min_z: 0.0,

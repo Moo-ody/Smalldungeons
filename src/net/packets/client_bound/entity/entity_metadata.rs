@@ -1,12 +1,22 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
+use crate::server::entity::entity::Entity;
 use crate::server::entity::metadata::Metadata;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 pub struct EntityMetadata {
     entity_id: i32,
-    metadata: Metadata,
+    metadata: Vec<Metadata>,
+}
+
+impl EntityMetadata {
+    pub fn from_entity(entity: &Entity) -> Self {
+        Self {
+            entity_id: entity.entity_id,
+            metadata: entity.metadata.clone(),
+        }
+    }
 }
 
 #[async_trait::async_trait]

@@ -4,14 +4,13 @@ mod server;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::run_network::run_network_thread;
-use crate::server::block::Blocks;
+use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
 use crate::server::server::Server;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
-use crate::server::server::tick;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
@@ -56,13 +55,10 @@ async fn main() -> Result<()> {
         tick_interval.tick().await;
 
         while let Ok(message) = event_rx.try_recv() {
-            let result = server.process_event(message);
-            if result.is_err() {
-                return result;
-            }
+            server.process_event(message).unwrap_or_else(|err| println!("Error processing event: {err}"));
         }
 
         // rest of functionality here
-
+        // why? server ticks should be pushed to the server struct impl.
     }
 }

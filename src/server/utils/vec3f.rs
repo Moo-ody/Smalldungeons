@@ -39,6 +39,17 @@ impl Vec3f {
             z,
         }
     }
+
+    pub fn distance_to(&self, other: &Vec3f) -> f64 {
+        self.distance_squared(other).sqrt()
+    }
+
+    pub fn distance_squared(&self, other: &Vec3f) -> f64 {
+        let x = self.x - other.x;
+        let y = self.y - other.y;
+        let z = self.z - other.z;
+        z.mul_add(z, x.mul_add(x, y * y))
+    }
 }
 
 impl Add for Vec3f {

@@ -1,12 +1,9 @@
+use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet_context::PacketContext;
-use crate::net::varint::write_varint;
 use anyhow::Result;
-use async_trait::async_trait;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::net::network_message::NetworkMessage;
-use crate::server::entity::metadata::Metadata;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
@@ -122,11 +119,11 @@ macro_rules! register_serverbound_packets {
                 }
             }
 
-            fn main_process(&self, world: &mut crate::server::old_world::World, client_id: u32) -> anyhow::Result<()> {
+            fn main_process(&self, world: &mut crate::server::world::World, player: &mut crate::server::player::Player) -> anyhow::Result<()> {
                 match self {
                     $(
                         $(
-                            ServerBoundPackets::$packet_ty(pkt) => pkt.main_process(world, client_id),
+                            ServerBoundPackets::$packet_ty(pkt) => pkt.main_process(world, player),
                         )*
                     )*
                 }
@@ -176,9 +173,13 @@ macro_rules! print_bytes_hex {
 pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
-    async fn process(&self, context: PacketContext) -> Result<()>;
+    async fn process(&self, context: PacketContext) -> Result<()> {
+        Ok(())
+    }
 
-    fn main_process(&self, world: &mut crate::server::old_world::World, client_id: u32) -> Result<()>;
+    fn main_process(&self, world: &mut crate::server::world::World, player: &mut crate::server::player::Player) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[macro_export]

@@ -8,8 +8,6 @@ pub struct DestroyEntities {
     pub entity_ids: Vec<i32>,
 }
 
-impl DestroyEntities {}
-
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for DestroyEntities {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {

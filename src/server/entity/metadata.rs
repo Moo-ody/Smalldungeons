@@ -1,49 +1,54 @@
-use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
-/// Type representing Minecraft's [Data Watcher](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/entity/DataWatcher.java). 
+
+crate::meta_data! {
+    zombie {
+        IsChild, bool, 12,
+        IsVillager, bool, 13,
+        IsConverting, bool, 14,
+    },
+}
+
+/// macro to create a representation of  Minecraft's [Data Watcher](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/entity/DataWatcher.java) structure.
 /// Renamed to Metadata because thats pretty much exactly what it is and its more clear.
-/// 
-/// # Example:
-/// ```
-/// pub struct WatchedStruct {
-///     watched_boolean: IsChild,
-///     watched_int: Ticks,
-///     watched_float: Health
-/// }
-/// 
-/// meta_data!(IsChild, bool, 12);
-/// meta_data!(Ticks, i32, 13);
-/// meta_data!(Health, f32, 14);
-/// meta_data_impl!(WatchedStruct, watched_boolean,  watched_int, watched_float;
-/// ```
 ///
-/// this should be replaced with an enum requiring registering metadata types at some point
-/// since the boxed trait stuff is slow and unnecessary.
-pub type Metadata = Vec<Box<dyn MetadataEntry + Send + Sync>>;
-
-pub trait MetadataEntry: Debug + Send + Sync {
-    fn write_to_buffer(&self, buf: &mut Vec<u8>) {}
-}
-
-#[enum_dispatch]
-pub trait MetadataImpl {
-    fn create_meta_data(&self) -> Metadata;
-}
-
+/// entity ident isnt used rn but i think it might be used later.
 #[macro_export]
 macro_rules! meta_data {
-    ($name:ident, $typ:tt, $id:expr) => {
+    {$($entity:ident {$($name:ident, $typ:tt, $id:expr),* $(,)?}),* $(,)?} => {
         #[derive(Debug, Clone)]
-        pub struct $name($typ);
-        
-        impl MetadataEntry for $name {
-            fn write_to_buffer(&self, buf: &mut Vec<u8>) {
-                buf.push(((crate::type_to_id!($typ) << 5 | $id & 31) & 255) as u8);
-                crate::net::packets::packet_write::PacketWrite::write(&self.0, buf);
+        pub enum Metadata {
+            $(
+                $(
+                    $name($typ)
+                ),*
+            )*
+        }
+        impl Metadata {
+            pub fn get_id(&self) -> u8 {
+                match self {
+                    $(
+                        $(
+                            Self::$name(_) => $id
+                        ),*
+                    )*
+                }
+            }
+
+            pub fn write_to_buffer(&self, buf: &mut Vec<u8>) {
+                match self {
+                    $(
+                        $(
+                            Self::$name(val) => {
+                                buf.push(((crate::type_to_id!($typ) << 5 | $id & 31) & 255) as u8);
+                                crate::net::packets::packet_write::PacketWrite::write(val, buf)
+                            }
+                        ),*
+                    )*
+                }
             }
         }
-    };
+    }
 }
 
 /// macro handling meta data types. 

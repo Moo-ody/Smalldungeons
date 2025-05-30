@@ -1,7 +1,7 @@
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
-use crate::server::entity::entity_enum::EntityTrait;
-use crate::server::old_world::World;
+use crate::server::player::Player;
+use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
@@ -35,8 +35,8 @@ impl ServerBoundPacket for PlayerPosLook {
         Ok(())
     }
 
-    fn main_process(&self, world: &mut World, client_id: u32) -> anyhow::Result<()> {
-        let entity = world.get_player_from_client_id(client_id)?.get_entity();
+    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
+        let entity = world.entities.get_mut(&player.entity_id).ok_or_else(|| anyhow::anyhow!("Player {player:?}'s entity not found"))?;
         entity.update_position(self.x, self.y, self.z);
         entity.yaw = self.yaw;
         entity.pitch = self.pitch;
