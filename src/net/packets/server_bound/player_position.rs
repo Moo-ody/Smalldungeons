@@ -15,7 +15,7 @@ pub struct PlayerPosition {
 #[async_trait::async_trait]
 impl ServerBoundPacket for PlayerPosition {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        Ok(PlayerPosition {
+        Ok(Self {
             x: buf.get_f64(),
             y: buf.get_f64(),
             z: buf.get_f64(),
@@ -25,8 +25,7 @@ impl ServerBoundPacket for PlayerPosition {
     }
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        let entity = world.entities.get_mut(&player.entity_id).ok_or_else(|| anyhow::anyhow!("Player {player:?}'s entity not found"))?;
-        entity.update_position(self.x, self.y, self.z);
+        player.get_entity(world)?.update_position(self.x, self.y, self.z);
         Ok(())
     }
 }

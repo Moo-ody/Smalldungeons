@@ -4,6 +4,8 @@ use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
+use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
+use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
 use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
@@ -42,6 +44,9 @@ register_clientbound_packets! {
     EntityVelocity,
     SetSlot,
     Chat,
+
+    EntityLookMove,
+    EntityHeadLook,
 }
 
 register_serverbound_packets! {

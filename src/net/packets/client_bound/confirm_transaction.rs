@@ -1,6 +1,6 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug)]
 pub struct ConfirmTransaction {
@@ -10,7 +10,7 @@ pub struct ConfirmTransaction {
 }
 
 impl ConfirmTransaction {
-    pub fn new() -> ConfirmTransaction {
+    pub fn new() -> ConfirmTransaction { // maybe this has actual logic but idk what hypixel does so well see
         ConfirmTransaction {
             window_id: 0i8,
             action_number: 0i16,

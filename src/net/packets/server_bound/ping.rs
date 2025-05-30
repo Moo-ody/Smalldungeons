@@ -17,8 +17,7 @@ impl ServerBoundPacket for Ping {
         }
 
         let client_time = buf.get_i64();
-        Ok(Ping { client_time })
-
+        Ok(Self { client_time })
     }
 
     async fn process(&self, context: PacketContext) -> Result<()> {

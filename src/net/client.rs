@@ -67,8 +67,10 @@ pub async fn handle_client(
                             continue;
                         }
 
-                        event_tx_clone.send(ClientEvent::PacketReceived { client_id, packet })
-                            .unwrap_or_else(|e| eprintln!("Failed to send packet to {client_id}: {e}"));
+                        if client_stub.connection_state == ConnectionState::Play {
+                            event_tx_clone.send(ClientEvent::PacketReceived { client_id, packet })
+                                .unwrap_or_else(|e| eprintln!("Failed to send packet to main thread from {client_id}: {e}"));
+                        }
                     }
                     Err(e) => {
                         eprintln!("Failed to parse packet from client {client_id}: {e}");

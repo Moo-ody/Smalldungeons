@@ -1,5 +1,7 @@
 use crate::server::entity::ai::ai_enum::TaskType;
+use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
+use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use rand::random_range;
 
@@ -28,9 +30,9 @@ impl TaskData {
         }
     }
 
-    pub fn should_run(&mut self, executing_entity: &i32, world: &mut World) -> bool {
+    pub fn should_run(&mut self, executing: &mut Entity, world: &mut World) -> bool {
         match self {
-            TaskData::WatchClosest {
+            Self::WatchClosest {
                 closest,
                 max_distance,
                 look_time: _,
@@ -41,36 +43,34 @@ impl TaskData {
                     return false;
                 };
 
-                if let Some(target) = world.entities[executing_entity].ai_target {
+                if let Some(target) = executing.ai_target {
                     *closest = Some(target);
                 }
 
                 *closest = if *watched_entity_type == EntityType::Player {
-                    todo!() // get closest player
-                } else { todo!() /* get closest entity within aabb using entity's bounding box epanded by max dist*/ };
+                    world.get_closest_player(&executing.pos, *max_distance).map(|e| e.entity_id)
+                } else { None /* todo: get closest entity within aabb using entity's bounding box epanded by max dist*/ };
+
                 closest.is_some()
             }
         }
     }
 
-    pub fn keep_executing(&mut self, executing_entity: &i32, world: &mut World) -> bool {
+    pub fn keep_executing(&mut self, executing: &mut Entity, world: &mut World) -> bool {
         match self {
-            TaskData::WatchClosest {
+            Self::WatchClosest {
                 closest: _,
                 max_distance,
                 look_time,
-                chance: _,
-                watched_entity_type: _,
+                ..
             } => {
-                if let Some(executing) = world.entities.get(executing_entity) {
-                    if let Some(target) = executing.ai_target.and_then(|target_id| { world.entities.get(&target_id) }) {
-                        if !target.is_alive() {
-                            return false;
-                        }
+                if let Some(target) = executing.ai_target.and_then(|target_id| { world.entities.get(&target_id) }) {
+                    if !target.is_alive() {
+                        return false;
+                    }
 
-                        if executing.pos.distance_squared(&target.pos) > f64::from(*max_distance * *max_distance) {
-                            return false;
-                        }
+                    if executing.pos.distance_squared(&target.pos) > f64::from(*max_distance * *max_distance) {
+                        return false;
                     }
                 }
 
@@ -79,40 +79,41 @@ impl TaskData {
         }
     }
 
-    pub fn start_executing(&mut self, executing_entity: &i32, world: &mut World) {
+    pub fn start_executing(&mut self, executing: &mut Entity, world: &mut World) {
         match self {
-            TaskData::WatchClosest { closest: _, max_distance: _, look_time, chance: _, watched_entity_type: _, } => { *look_time = 40 + rand::random_range(0..40) }
+            Self::WatchClosest { closest: _, max_distance: _, look_time, .. } => { *look_time = 40 + random_range(0..40) }
         }
     }
 
-    pub fn update(&mut self, executing_entity: &i32, world: &mut World) {
+    pub fn update(&mut self, executing: &mut Entity, world: &mut World) {
         match self {
-            TaskData::WatchClosest {
-                closest: _,
+            Self::WatchClosest {
+                closest,
                 max_distance: _,
                 look_time,
                 chance: _,
                 watched_entity_type: _,
             } => {
-                // set look position
+                if let Some(target) = closest.and_then(|target_id| { world.entities.get(&target_id) }) {
+                    executing.look_helper.set_pos(target.pos + Vec3f::from_y(1.64), 10.0, 10.0)
+                }
                 *look_time -= 1;
             }
         }
     }
 
-    pub fn should_continue(&mut self, executing_entity: &i32, world: &mut World) -> bool {
+    pub fn should_continue(&mut self, executing: &mut Entity, world: &mut World) -> bool {
         match self {
-            TaskData::WatchClosest {
-                closest: _,
-                max_distance: _,
-                look_time: _,
-                chance: _,
-                watched_entity_type: _,
-            } => { self.keep_executing(executing_entity, world) }
+            Self::WatchClosest { .. } => { self.keep_executing(executing, world) }
         }
     }
 
     pub fn reset(&mut self) {
-        todo!()
+        match self {
+            Self::WatchClosest {
+                closest, ..
+            } => { *closest = None }
+            _ => todo!()
+        }
     }
 }

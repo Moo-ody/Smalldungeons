@@ -24,7 +24,7 @@ impl Player {
     }
 
     pub fn get_entity<'a>(&self, world: &'a mut World) -> Result<&'a mut Entity> {
-        world.entities.get_mut(&self.entity_id).ok_or(anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
+        world.entities.get_mut(&self.entity_id).ok_or_else(|| anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
     }
 
     // pub fn set_position(

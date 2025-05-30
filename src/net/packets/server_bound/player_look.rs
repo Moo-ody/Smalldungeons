@@ -14,7 +14,7 @@ pub struct PlayerLook {
 #[async_trait::async_trait]
 impl ServerBoundPacket for PlayerLook {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        Ok(PlayerLook {
+        Ok(Self {
             yaw: buf.get_f32(),
             pitch: buf.get_f32(),
             on_ground: buf.get_u8() != 0,
@@ -23,7 +23,7 @@ impl ServerBoundPacket for PlayerLook {
     }
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        let entity = world.entities.get_mut(&player.entity_id).ok_or_else(|| anyhow::anyhow!("Player {player:?}'s entity not found"))?;
+        let entity = player.get_entity(world)?;
         entity.yaw = self.yaw;
         entity.pitch = self.pitch;
         Ok(())

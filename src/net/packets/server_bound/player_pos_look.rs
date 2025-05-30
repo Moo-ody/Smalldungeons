@@ -1,5 +1,4 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::packets::packet_context::PacketContext;
 use crate::server::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
@@ -19,7 +18,7 @@ pub struct PlayerPosLook {
 #[async_trait::async_trait]
 impl ServerBoundPacket for PlayerPosLook {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        Ok(PlayerPosLook {
+        Ok(Self {
             x: buf.get_f64(),
             y: buf.get_f64(),
             z: buf.get_f64(),
@@ -31,12 +30,8 @@ impl ServerBoundPacket for PlayerPosLook {
         })
     }
 
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        let entity = world.entities.get_mut(&player.entity_id).ok_or_else(|| anyhow::anyhow!("Player {player:?}'s entity not found"))?;
+        let entity = player.get_entity(world)?;
         entity.update_position(self.x, self.y, self.z);
         entity.yaw = self.yaw;
         entity.pitch = self.pitch;

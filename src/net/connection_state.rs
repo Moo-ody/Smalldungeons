@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConnectionState {
     Handshaking,
     Play,

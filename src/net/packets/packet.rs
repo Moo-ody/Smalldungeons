@@ -25,7 +25,9 @@ macro_rules! register_clientbound_packets {
         
             impl crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
                 fn send_packet(self, client_id: u32, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+                    println!("Sending packet {:?} to client {}", self, client_id);
                     ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
+                    
                 }
             }
         )*
@@ -146,7 +148,7 @@ macro_rules! register_serverbound_packets {
                     $state => match packet_id {
                         $(
                             $id => {
-                                println!("Received packet id {} for state {:?}", packet_id, stringify!($state));
+                                println!("Received from {} packet id {} for state {:?}", client.client_id, packet_id, stringify!($state));
                                 let pkt = $packet_ty::read_from(buf).await?;
                                 let packet = ServerBoundPackets::$packet_ty(pkt);
                                 Ok(packet)

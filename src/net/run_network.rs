@@ -44,7 +44,7 @@ pub async fn run_network_thread(
                 match msg {
                     NetworkMessage::SendPacket { client_id, packet } => {
                         if let Some((_, client_tx)) = clients.get(&client_id) {
-                            println!("sending packet to client {}: {:?}", client_id, packet);
+                            //println!("sending packet to client {}: {:?}", client_id, packet);
                             match packet.encode().await {
                                 Ok(bytes) => {
                                     let _ = client_tx.send(bytes);

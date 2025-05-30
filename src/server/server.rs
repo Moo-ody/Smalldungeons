@@ -36,30 +36,34 @@ impl Server {
     pub fn process_event(&mut self, event: ClientEvent) -> Result<()> {
         match event {
             ClientEvent::NewPlayer { client_id } => {
+                println!("added player with id {client_id}");
+
                 let player_entity = Entity::create_at(EntityType::Player, Vec3f::new_empty(), self.world.new_entity_id());
                 let player = Player::new(client_id, player_entity.entity_id);
 
                 JoinGame::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
                 PositionLook::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
 
+                self.world.entities.insert(player_entity.entity_id, player_entity);
+                self.players.insert(client_id, player);
+
                 for chunk in self.world.chunks.iter() {
                     ChunkData::from_chunk(chunk, true).send_packet(client_id, &self.network_tx)?;
                 }
 
-                self.world.entities.insert(player_entity.entity_id, player_entity);
-                self.players.insert(client_id, player);
-
-                let zombie = Entity::create_at(EntityType::Zombie, Vec3f::new_empty(), self.world.new_entity_id());
-
-                SpawnMob::from_entity(&zombie).send_packet(client_id, &self.network_tx)?;
-                self.world.entities.insert(zombie.entity_id, zombie);
+                for entity in self.world.entities.values() {
+                    SpawnMob::from_entity(entity).send_packet(client_id, &self.network_tx)?;
+                }
 
             },
             ClientEvent::ClientDisconnected { client_id } => {
-                self.players.remove(&client_id);
+                if let Some(player) = self.players.remove(&client_id) {
+                    self.world.entities.remove(&player.entity_id);
+                }
                 println!("Client {} disconnected", client_id);
             },
             ClientEvent::PacketReceived { client_id, packet  }  => {
+                println!("Packet received from client {}: {:?}", client_id, packet);
                 packet.main_process(&mut self.world, self.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?)?;
                 // update to match if/when its needed
 

@@ -3,11 +3,18 @@ mod server;
 
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
+use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
+use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
+use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
+use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
+use crate::server::entity::entity::Entity;
+use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
+use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
@@ -42,6 +49,15 @@ async fn main() -> Result<()> {
         }
     }
 
+    let spawn_pos = Vec3f {
+        x: 6.0,
+        y: 1.0,
+        z: 6.0,
+    };
+
+    let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+    server.world.entities.insert(zombie.entity_id, zombie);
+
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
         run_network_thread(
@@ -55,10 +71,28 @@ async fn main() -> Result<()> {
         tick_interval.tick().await;
 
         while let Ok(message) = event_rx.try_recv() {
-            server.process_event(message).unwrap_or_else(|err| println!("Error processing event: {err}"));
+            server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
+        }
+
+        for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
+            if let Some(entity) = server.world.entities.remove(&entity_id) {
+                let returned = entity.update(&mut server.world);
+                server.world.entities.insert(entity_id, returned);
+            }
+        }
+
+        // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
+        // also needs to add a method to only send the right entity packet given movement data based on last sent.
+        for player in server.players.values() {
+            ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
+
+            for entity in server.world.entities.values_mut() {
+                if entity.entity_id == player.entity_id { continue }
+                EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
+                EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
+            }
         }
 
         // rest of functionality here
-        // why? server ticks should be pushed to the server struct impl.
     }
 }

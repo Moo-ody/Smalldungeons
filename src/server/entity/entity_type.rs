@@ -11,7 +11,7 @@ crate::entity_type_registry! {
 #[macro_export]
 macro_rules! entity_type_registry {
     {$($name:ident: $path:ident),* $(,)?} => {
-        #[derive(Clone, Debug, PartialEq)]
+        #[derive(Clone, Debug, PartialEq, Eq, Copy)]
         pub enum EntityType {
             $(
                 $name,
