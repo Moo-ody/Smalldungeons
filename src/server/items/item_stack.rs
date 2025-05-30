@@ -1,15 +1,13 @@
 use crate::net::packets::packet_write::PacketWrite;
-use crate::server::utils::nbt::{serialize, NBTNode};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::io::Write;
+use crate::server::utils::nbt::encode::serialize_nbt;
+use crate::server::utils::nbt::NBT;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ItemStack {
     pub item: i16,
     pub stack_size: i8,
     pub metadata: i16,
-    pub tag_compound: Option<NBTNode>,
+    pub tag_compound: Option<NBT>,
 }
 
 impl PacketWrite for ItemStack {
@@ -20,11 +18,8 @@ impl PacketWrite for ItemStack {
 
         match &self.tag_compound {
             None => { 0u8.write(buf) }
-            Some(tag) => {
-                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(&serialize(tag)).unwrap();
-                let compressed_data = encoder.finish().unwrap();
-                buf.extend(&compressed_data);
+            Some(nbt) => {
+                buf.extend(serialize_nbt(&nbt));
             }
         }
     }
