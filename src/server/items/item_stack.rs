@@ -19,7 +19,7 @@ impl PacketWrite for ItemStack {
         match &self.tag_compound {
             None => { 0u8.write(buf) }
             Some(nbt) => {
-                buf.extend(serialize_nbt(&nbt));
+                buf.extend(serialize_nbt(nbt));
             }
         }
     }

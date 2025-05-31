@@ -4,8 +4,6 @@ mod server;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
-use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::blocks::Blocks;
@@ -56,6 +54,7 @@ async fn main() -> Result<()> {
     };
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+    //zombie.set_name("Dinnerbone");
     server.world.entities.insert(zombie.entity_id, zombie);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
@@ -76,21 +75,25 @@ async fn main() -> Result<()> {
 
         for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
             if let Some(entity) = server.world.entities.remove(&entity_id) {
-                let returned = entity.update(&mut server.world);
+                // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
+                let returned = entity.update(&mut server.world, &server.network_tx);
                 server.world.entities.insert(entity_id, returned);
             }
         }
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to add a method to only send the right entity packet given movement data based on last sent.
+        // also needs to actually be in a vanilla adjacent way.
         for player in server.players.values() {
+            println!("player ticked: {player:?}");
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
 
-            for entity in server.world.entities.values_mut() {
-                if entity.entity_id == player.entity_id { continue }
-                EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
-                EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
-            }
+            // for entity in player.tracked_entities.iter() {
+            //     if let Some(entity) = server.world.entities.get_mut(entity) {
+            //         EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
+            //         EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
+            //     }
+            // }
         }
 
         // rest of functionality here

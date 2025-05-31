@@ -7,6 +7,7 @@ use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::server::player::ClientId;
 
 pub async fn run_network_thread(
     mut network_rx: UnboundedReceiver<NetworkMessage>,
@@ -16,13 +17,13 @@ pub async fn run_network_thread(
     let listener = TcpListener::bind("127.0.0.1:4972").await.unwrap();
     println!("Network thread listening on 127.0.0.1:4972");
 
-    let mut clients: HashMap<u32, (Client, UnboundedSender<Vec<u8>>)> = HashMap::new();
+    let mut clients: HashMap<ClientId, (Client, UnboundedSender<Vec<u8>>)> = HashMap::new();
     let mut client_id_counter = 1;
 
     loop {
         tokio::select! {
             Ok((socket, _)) = listener.accept() => {
-                let client_id = client_id_counter;
+                let client_id: ClientId = client_id_counter;
                 client_id_counter += 1;
 
                 let client = Client {

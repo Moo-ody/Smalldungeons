@@ -2,7 +2,7 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ServerInfo {
     pub status: String,
 }

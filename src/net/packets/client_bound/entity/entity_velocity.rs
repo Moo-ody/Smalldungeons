@@ -3,7 +3,7 @@ use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct EntityVelocity {
     pub entity_id: i32,
     pub motion_x: f64,

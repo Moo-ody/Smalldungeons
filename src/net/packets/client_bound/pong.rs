@@ -2,7 +2,7 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Pong {
     pub client_time: i64
 }

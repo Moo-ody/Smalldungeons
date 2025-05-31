@@ -1,5 +1,4 @@
-use crate::server::entity::ai::ai_enum::TaskType;
-use crate::server::entity::ai::task_data::TaskData;
+use crate::server::entity::ai::{TaskData, TaskType};
 use crate::server::entity::entity::Entity;
 use crate::server::world::World;
 use indexmap::IndexSet;

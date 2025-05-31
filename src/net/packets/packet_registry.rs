@@ -5,7 +5,11 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction a
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
+use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
+use crate::net::packets::client_bound::entity::entity_metadata::EntityMetadata;
+use crate::net::packets::client_bound::entity::entity_rel_move::EntityRelMove;
+use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
@@ -15,6 +19,7 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
+use crate::net::packets::server_bound::chat_message::ChatMessage;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
 use crate::net::packets::server_bound::handshake::Handshake;
@@ -47,6 +52,10 @@ register_clientbound_packets! {
 
     EntityLookMove,
     EntityHeadLook,
+    EntityMetadata,
+    EntityRelMove,
+    EntityLook,
+    EntityTeleport,
 }
 
 register_serverbound_packets! {
@@ -55,6 +64,7 @@ register_serverbound_packets! {
     },
     ConnectionState::Play {
         0x00 => SBKeepAlive,
+        0x01 => ChatMessage,
         0x03 => PlayerUpdate,
         0x04 => PlayerPosition,
         0x05 => PlayerLook,

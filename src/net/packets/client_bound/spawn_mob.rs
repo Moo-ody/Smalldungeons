@@ -2,13 +2,16 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
 use crate::server::entity::entity::Entity;
+use crate::server::entity::entity_type::EntityType;
 use crate::server::entity::metadata::Metadata;
+use anyhow::bail;
 use async_trait::async_trait;
+use std::collections::HashMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 const MOTION_CLAMP: f64 = 3.9;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpawnMob {
     entity_id: i32,
     entity_type: i8,
@@ -21,12 +24,15 @@ pub struct SpawnMob {
     velocity_x: i16,
     velocity_y: i16,
     velocity_z: i16,
-    metadata: Vec<Metadata>
+    metadata: HashMap<i8, Metadata>
 }
 
 impl SpawnMob {
-    pub fn from_entity(entity: &Entity) -> Self {
-        Self {
+    pub fn from_entity(entity: &Entity) -> anyhow::Result<Self> {
+        if entity.entity_type == EntityType::Player {
+            bail!("Player cannot be spawned as a mob.");
+        }
+        Ok(Self {
             entity_id: entity.entity_id,
             entity_type: entity.entity_type.get_id(),
             x: (entity.pos.x * 32.0).floor() as i32,
@@ -39,7 +45,7 @@ impl SpawnMob {
             velocity_y: (entity.motion.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
             velocity_z: (entity.motion.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
             metadata: entity.metadata.clone()
-        }
+        })
     }
 }
 

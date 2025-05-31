@@ -1,9 +1,9 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct KeepAlive {
     pub current_time: i32
 }

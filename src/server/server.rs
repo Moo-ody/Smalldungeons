@@ -3,11 +3,10 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
-use crate::server::player::Player;
+use crate::server::player::{ClientId, Player};
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
@@ -21,14 +20,14 @@ pub struct Server {
     /// however we don't really need that, so for now only 1 main world will be supported
     pub world: World,
     // im not sure about having players in server directly.
-    pub players: HashMap<u32, Player>,
+    pub players: HashMap<ClientId, Player>,
 }
 
 impl Server {
     pub fn initialize(network_tx: UnboundedSender<NetworkMessage>) -> Server {
         Server {
-            network_tx,
             world: World::new(),
+            network_tx,
             players: HashMap::new()
         }
     }
@@ -38,26 +37,41 @@ impl Server {
             ClientEvent::NewPlayer { client_id } => {
                 println!("added player with id {client_id}");
 
-                let player_entity = Entity::create_at(EntityType::Player, Vec3f::new_empty(), self.world.new_entity_id());
-                let player = Player::new(client_id, player_entity.entity_id);
+                let spawn_point = Vec3f {
+                    x: 3.0,
+                    y: 1.0,
+                    z: 3.0,
+                };
+
+                let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
+                let mut player = Player::new(client_id, player_entity.entity_id);
 
                 JoinGame::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
                 PositionLook::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
 
                 self.world.entities.insert(player_entity.entity_id, player_entity);
-                self.players.insert(client_id, player);
 
                 for chunk in self.world.chunks.iter() {
                     ChunkData::from_chunk(chunk, true).send_packet(client_id, &self.network_tx)?;
                 }
 
-                for entity in self.world.entities.values() {
-                    SpawnMob::from_entity(entity).send_packet(client_id, &self.network_tx)?;
+                for entity in self.world.entities.values_mut() {
+                    if entity.entity_id == player.entity_id { continue }
+                    player.observe_entity(entity, &self.network_tx)?
                 }
 
+                self.players.insert(client_id, player);
             },
             ClientEvent::ClientDisconnected { client_id } => {
                 if let Some(player) = self.players.remove(&client_id) {
+                    for entity_id in player.observed_entities {
+                        if let Some(entity) = self.world.entities.get_mut(&entity_id) {
+                            /// doesnt call stop_observing_entity because player is borrowed to get its observed entities ids.
+                            /// and the player object itself should be destroyed sometime here.
+                            entity.observing_players.remove(&client_id);
+                        }
+                    }
+
                     self.world.entities.remove(&player.entity_id);
                 }
                 println!("Client {} disconnected", client_id);

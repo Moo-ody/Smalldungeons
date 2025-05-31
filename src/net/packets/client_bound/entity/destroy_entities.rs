@@ -3,7 +3,7 @@ use crate::net::packets::packet_write::PacketWrite;
 use crate::net::varint::VarInt;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DestroyEntities {
     pub entity_ids: Vec<i32>,
 }

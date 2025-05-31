@@ -1,9 +1,8 @@
 use crate::server::chunk::Chunk;
-use crate::server::entity::entity::Entity;
+use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::utils::vec3f::Vec3f;
 use std::collections::HashMap;
-
 pub struct World {
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)
@@ -13,7 +12,7 @@ pub struct World {
     pub chunks: Vec<Chunk>,
 
     // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
-    pub entities: HashMap<i32, Entity>,
+    pub entities: HashMap<EntityId, Entity>,
     next_entity_id: i32
 }
 
@@ -26,7 +25,7 @@ impl World {
         }
     }
 
-    pub fn new_entity_id(&mut self) -> i32 {
+    pub fn new_entity_id(&mut self) -> EntityId {
         let id = self.next_entity_id;
         self.next_entity_id += 1;
         id

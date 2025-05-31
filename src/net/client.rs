@@ -4,6 +4,7 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
+use crate::server::player::ClientId;
 use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -11,12 +12,12 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug, Clone)]
 pub struct Client {
-    pub client_id: u32,
+    pub client_id: ClientId,
     pub connection_state: ConnectionState,
 }
 
 pub async fn handle_client(
-    client_id: u32,
+    client_id: ClientId,
     socket: TcpStream,
     mut rx: UnboundedReceiver<Vec<u8>>,
     event_tx: UnboundedSender<ClientEvent>,

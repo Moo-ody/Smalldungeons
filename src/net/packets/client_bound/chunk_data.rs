@@ -20,7 +20,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 /// block lighting: u4 array with a size of 2048
 /// sky lighting: u4 array with a size of 2048
 /// 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChunkData {
     pub chunk_x: i32,
     pub chunk_z: i32,

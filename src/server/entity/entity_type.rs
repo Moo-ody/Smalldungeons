@@ -1,13 +1,17 @@
-use crate::server::entity::metadata::Metadata;
-
 crate::entity_type_registry! {
     Zombie: zombie,
     Player: player,
 }
 
 /// macro to register entity types. this should handle all the unique entity type functions and whatnot.
-/// only has 2 right now, and nothing which may need parameters, but it should be supported. you can have optional
-/// ones but clarifying that theyre optional in the macro itself is weird, so atm they should be implemented but returning none.
+/// only has 2 right now, and nothing which may need parameters, but it should be supported.
+/// you can have optional ones but clarifying that theyre optional in the macro itself is weird,
+/// so atm they should be implemented but returning none.
+///
+/// structure:
+/// ```
+/// Name: implpath
+/// ```
 #[macro_export]
 macro_rules! entity_type_registry {
     {$($name:ident: $path:ident),* $(,)?} => {
@@ -19,7 +23,8 @@ macro_rules! entity_type_registry {
         }
 
         impl EntityType {
-            pub fn get_id(&self) -> i8 {
+            #[inline]
+            pub const fn get_id(&self) -> i8 {
                 match self {
                     $(
                         Self::$name => crate::server::entity::r#impl::$path::ID
@@ -35,7 +40,7 @@ macro_rules! entity_type_registry {
                 }
             }
 
-            pub fn metadata(&self) -> Vec<Metadata> {
+            pub fn metadata(&self) -> std::collections::HashMap<i8, crate::server::entity::metadata::Metadata> {
                 match self {
                     $(
                         Self::$name => crate::server::entity::r#impl::$path::metadata()

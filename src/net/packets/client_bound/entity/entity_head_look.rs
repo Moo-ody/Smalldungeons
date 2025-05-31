@@ -1,19 +1,20 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
+use crate::server::entity::entity::Entity;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct EntityHeadLook {
     entity_id: i32,
     yaw: i8,
 }
 
 impl EntityHeadLook {
-    pub fn new(entity_id: i32, yaw: f32) -> Self {
+    pub fn from_entity(entity: &Entity) -> Self {
         Self {
-            entity_id,
-            yaw: (yaw * 256.0 / 360.0) as i8,
+            entity_id: entity.entity_id,
+            yaw: (entity.head_yaw * 256.0 / 360.0) as i8,
         }
     }
 }

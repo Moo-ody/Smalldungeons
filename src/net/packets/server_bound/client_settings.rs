@@ -1,6 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::varint::read_varint;
-use anyhow::bail;
+use crate::net::packets::read_string_from_buf;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
@@ -15,7 +14,7 @@ pub struct ClientSettings {
 #[async_trait::async_trait]
 impl ServerBoundPacket for ClientSettings {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        Ok(ClientSettings {
+        Ok(Self {
             lang: read_string_from_buf(buf, 7)?,
             view_distance: buf.get_u8(),
             chat_mode: buf.get_i8(),
@@ -23,21 +22,4 @@ impl ServerBoundPacket for ClientSettings {
             skin_parts: buf.get_u8(),
         })
     }
-}
-
-pub fn read_string_from_buf(buf: &mut BytesMut, max_length: i32) -> anyhow::Result<String> {
-    let len = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read string length"))?;
-    if len > max_length * 4 {
-        bail!("String too long. {:?} / {}", len, max_length * 4);
-    }
-    if len < 0 {
-        bail!("String length is less than 0???")
-    }
-    
-    let string = String::from_utf8(buf.split_to(len as usize).to_vec())?;
-    
-    if string.len() > max_length as usize {
-        bail!("String too long. {:?} > {}", len, max_length);   
-    }
-    Ok(string)
 }

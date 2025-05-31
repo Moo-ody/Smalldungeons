@@ -2,35 +2,55 @@ use std::fmt::Debug;
 
 
 crate::meta_data! {
+    all {
+        Name, String, 2, METANAMEID,
+    },
     zombie {
-        IsChild, bool, 12,
-        IsVillager, bool, 13,
-        IsConverting, bool, 14,
+        IsChild, bool, 12, METACHILDID,
+        IsVillager, bool, 13, METAVILLAGERID,
+        IsConverting, bool, 14, METACONVERTINGID,
     },
 }
 
 /// macro to create a representation of  Minecraft's [Data Watcher](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/entity/DataWatcher.java) structure.
 /// Renamed to Metadata because thats pretty much exactly what it is and its more clear.
 ///
+/// maybe should be changed to per entity enum struct thingy with values? idk.
+///
 /// entity ident isnt used rn but i think it might be used later.
+///
+/// structure:
+/// ```
+/// entitytype {
+///     Metadataentryname, type, id, idconstname,
+/// }
+/// ```
 #[macro_export]
 macro_rules! meta_data {
-    {$($entity:ident {$($name:ident, $typ:tt, $id:expr),* $(,)?}),* $(,)?} => {
-        #[derive(Debug, Clone)]
+    {$($entity:ident {$($name:ident, $typ:tt, $id:expr, $id_const:ident),* $(,)?}),* $(,)?} => {
+        #[derive(Debug, Clone, Eq, PartialEq, Hash)]
         pub enum Metadata {
             $(
                 $(
-                    $name($typ)
-                ),*
+                    $name($typ),
+                )*
             )*
         }
+
+        $(
+            $(
+               pub const $id_const: i8 = $id;
+            )*
+        )*
+
         impl Metadata {
-            pub fn get_id(&self) -> u8 {
+            #[inline]
+            pub const fn get_id(&self) -> i8 {
                 match self {
                     $(
                         $(
-                            Self::$name(_) => $id
-                        ),*
+                            Self::$name(_) => $id_const,
+                        )*
                     )*
                 }
             }
@@ -42,8 +62,8 @@ macro_rules! meta_data {
                             Self::$name(val) => {
                                 buf.push(((crate::type_to_id!($typ) << 5 | $id & 31) & 255) as u8);
                                 crate::net::packets::packet_write::PacketWrite::write(val, buf)
-                            }
-                        ),*
+                            },
+                        )*
                     )*
                 }
             }

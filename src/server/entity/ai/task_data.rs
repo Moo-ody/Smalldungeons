@@ -1,20 +1,9 @@
-use crate::server::entity::ai::ai_enum::TaskType;
+use crate::server::entity::ai::{TaskData, TaskType};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use rand::random_range;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum TaskData {
-    WatchClosest {
-        closest: Option<i32>,
-        max_distance: f32,
-        look_time: i32,
-        chance: f32,
-        watched_entity_type: EntityType, // if entity enum is changed to copy this structure, this would just be its type reference.
-    },
-}
 
 impl TaskData {
     pub fn default(task_type: TaskType) -> Self {
@@ -25,8 +14,7 @@ impl TaskData {
                 look_time: 0,
                 chance: 0.5,
                 watched_entity_type: EntityType::Player,
-            },
-            _ => todo!()
+            }
         }
     }
 
@@ -113,7 +101,6 @@ impl TaskData {
             Self::WatchClosest {
                 closest, ..
             } => { *closest = None }
-            _ => todo!()
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Disconnect {
     pub reason: ChatComponentText
 }

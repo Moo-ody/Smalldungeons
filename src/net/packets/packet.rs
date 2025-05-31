@@ -1,5 +1,6 @@
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet_context::PacketContext;
+use crate::server::player::ClientId;
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
@@ -9,7 +10,7 @@ use tokio::sync::mpsc::UnboundedSender;
 macro_rules! register_clientbound_packets {
     { $($packet_ty:ident),* $(,)? } => {
 
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         pub enum ClientBoundPacket {
             $(
                 $packet_ty($packet_ty),
@@ -24,7 +25,7 @@ macro_rules! register_clientbound_packets {
             }
         
             impl crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
-                fn send_packet(self, client_id: u32, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+                fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
                     println!("Sending packet {:?} to client {}", self, client_id);
                     ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
                     
@@ -52,7 +53,7 @@ macro_rules! register_clientbound_packets {
         }
 
         impl ClientBoundPacket {
-            pub fn send_packet(self, client_id: u32, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+            pub fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
                 network_tx.send(crate::net::network_message::NetworkMessage::SendPacket {
                     client_id,
                     packet: self
@@ -64,7 +65,7 @@ macro_rules! register_clientbound_packets {
 }
 
 pub trait SendPacket<T> where T: Sized {
-    fn send_packet(self, client_id: u32, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()>;
+    fn send_packet(self, client_id: ClientId, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]

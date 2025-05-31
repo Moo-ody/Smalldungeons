@@ -3,7 +3,7 @@ use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::entity::entity::Entity;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PositionLook {
     pub x: f64,
     pub y: f64,

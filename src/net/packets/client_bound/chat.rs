@@ -6,7 +6,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 pub const CHAT: i8 = 1;
 pub const ACTION_BAR: i8 = 2;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chat {
     pub component: ChatComponentText,
     pub typ: i8,
