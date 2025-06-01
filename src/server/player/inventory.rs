@@ -1,79 +1,82 @@
 use crate::net::network_message::NetworkMessage;
+use crate::net::packets::client_bound::window_items::WindowItems;
+use crate::net::packets::packet::SendPacket;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::items::Item;
 use crate::server::player::Player;
-use crate::server::world::World;
 use tokio::sync::mpsc::UnboundedSender;
-
-// todo: sync
 
 // this is currently a prototype/example idk
 // im not sure how i want to handle items
 #[derive(Debug)]
 pub struct Inventory {
-    pub items: [Option<CustomItem>; 36],
+    /// list of all slots
+    pub items: [ItemSlot; 45],
+}
+
+#[derive(Default, Debug, Clone)]
+pub enum ItemSlot {
+    #[default]
+    Empty,
+    Filled(&'static Item, ItemStack),
 }
 
 impl Inventory {
-    
+
+    /// creates an empty inventory
     pub fn empty() -> Inventory {
-        const NONE: Option<CustomItem> = None;
-        Inventory { items: [NONE; 36] }
+        const EMPTY: ItemSlot = ItemSlot::Empty;
+        Inventory { items: [EMPTY; 45] }
     }
-    
-    pub fn set_slot(&mut self, item: CustomItem, slot: usize) {
-        self.items[slot] = Some(item);
+
+    pub fn set_slot(&mut self, item_slot: ItemSlot, index: usize) {
+        if index >= 45 {
+            return;
+        }
+        self.items[index] = item_slot
     }
-    
-    pub fn get_slot(&self, index: usize) -> &Option<CustomItem> {
-        self.items.get(index).unwrap()
+
+    pub fn get_hotbar_slot(&self, index: usize) -> Option<ItemSlot> {
+        let index = index + 27;
+        if index >= 25 && index <= 36 {
+            return self.items.get(index).cloned();
+        }
+        None
     }
-}
 
-#[derive(Clone, Debug)]
-pub struct CustomItem {
-    pub item: Items, 
-    pub item_stack: ItemStack,
-}
-
-#[derive(Clone, Debug)]
-pub enum Items {
-    AspectOfTheVoid
-}
-
-impl Items {
-    pub fn handle_right_click(
-        &self, 
-        network: &UnboundedSender<NetworkMessage>,
-        world: &mut World,
-        player: &mut Player,
-    ) {
-        match self { 
-            Items::AspectOfTheVoid => {
-                let entity = world.entities.get(&player.entity_id).unwrap();
-                // let dist = if player.is_sneaking { 50.0 } else { 20.0 };
-                
-                let (block_x, block_y, block_z) = {
-                    (entity.pos.x.floor() as i32, entity.pos.y.floor() as i32, entity.pos.z.floor() as i32)
-                };
-                println!(
-                    "block {:?} at: x {}, y {}, z {}",
-                    world.get_block_at(block_x, block_y, block_z),
-                    block_x,
-                    block_y,
-                    block_z
-                );
-                
-                // player.set_position(
-                //     &network,
-                //     entity.pos.x,
-                //     entity.pos.y + dist,
-                //     entity.pos.z,
-                //     entity.yaw,
-                //     entity.pitch,
-                // ).unwrap();
+    pub fn sync(
+        &self,
+        player: &Player,
+        network_tx: &UnboundedSender<NetworkMessage>
+    ) -> anyhow::Result<()> {
+        let mut window_items: Vec<Option<ItemStack>> = Vec::with_capacity(45);
+        for _ in 0..9 {
+            window_items.push(None);
+            // window_items.push(Some(ItemStack {
+            //     item: 277,
+            //     stack_size: 1,
+            //     metadata: 0,
+            //     tag_compound: Some(NBT::with_nodes(vec![
+            //         NBT::compound("display", vec![
+            //             NBT::string("Name", "AOTV")
+            //         ])
+            //     ])),
+            // }));
+        }
+        for item in &self.items {
+            if let ItemSlot::Filled(_, item) = item {
+                window_items.push(Some(item.clone()));
+            } else {
+                window_items.push(None);
             }
         }
+
+        let packet = WindowItems {
+            window_id: 0,
+            items: window_items,
+        };
+        packet.send_packet(player.client_id, network_tx)?;
+        Ok(())
     }
 }
-
 

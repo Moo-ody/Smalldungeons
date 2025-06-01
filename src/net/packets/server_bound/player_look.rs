@@ -23,7 +23,7 @@ impl ServerBoundPacket for PlayerLook {
     }
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        let entity = player.get_entity(world)?;
+        let entity = player.get_entity_mut(world)?;
         entity.yaw = self.yaw;
         entity.pitch = self.pitch;
         Ok(())

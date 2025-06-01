@@ -1,5 +1,5 @@
 pub mod encode;
-mod decode;
+pub mod decode;
 
 /// NBT
 /// 

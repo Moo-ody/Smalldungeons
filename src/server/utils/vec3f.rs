@@ -40,6 +40,27 @@ impl Vec3f {
         }
     }
 
+    pub fn add_x(&mut self, amount: f64) {
+        self.x += amount
+    }
+
+    pub fn add_y(&mut self, amount: f64) {
+        self.y += amount
+    }
+
+    pub fn add_z(&mut self, amount: f64) {
+        self.z += amount
+    }
+
+    pub fn normalize(&self) -> Vec3f {
+        let len = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
+        if len < 1.0e-4 {
+            Vec3f { x: 0.0, y: 0.0, z: 0.0 }
+        } else {
+            Vec3f { x: self.x / len, y: self.y / len, z: self.z / len }
+        }
+    }
+
     pub fn distance_to(&self, other: &Vec3f) -> f64 {
         self.distance_squared(other).sqrt()
     }

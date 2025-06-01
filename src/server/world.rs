@@ -108,27 +108,25 @@ impl World {
     }
 
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
+        if y < 0 || y >= 256 {
+            return Blocks::Air;
+        }
+
         let chunk_x = x >> 4;
         let chunk_z = z >> 4;
-        let chunk = self.chunks.iter().find(|c|{
-            c.pos_x == chunk_x && c.pos_z == chunk_z
-        });
+        let chunk = self.chunks.iter().find(|c| c.pos_x == chunk_x && c.pos_z == chunk_z);
 
         if let Some(chunk) = chunk {
-            if y < 0 || y >= 256 {
-                return Blocks::Air;
-            }
-
             let section_index = (y / 16) as usize;
+
             if let Some(Some(section)) = chunk.chunk_sections.get(section_index) {
                 let local_x = x & 15;
-                let local_y = y / 4;
+                let local_y = y & 15;
                 let local_z = z & 15;
-                return {
-                    let test = section.get_block_at(local_x as usize, local_y as usize, local_z as usize);
-                    println!("{:?} x {}, y {}, z {}", test, local_x, local_y, local_z);
-                    test
-                };
+
+                let block = section.get_block_at(local_x as usize, local_y as usize, local_z as usize);
+                // println!("{:?} x {}, y {}, z {}", block, local_x, local_y, local_z);
+                return block;
             }
         }
 

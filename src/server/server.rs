@@ -6,7 +6,11 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
+use crate::server::items::item_stack::ItemStack;
+use crate::server::items::ASPECT_OF_THE_VOID;
+use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
+use crate::server::utils::nbt::NBT;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
@@ -44,7 +48,7 @@ impl Server {
                 };
 
                 let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
-                let mut player = Player::new(client_id, player_entity.entity_id);
+                let mut player = Player::new(self, client_id, player_entity.entity_id);
 
                 JoinGame::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
                 PositionLook::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
@@ -59,6 +63,19 @@ impl Server {
                     if entity.entity_id == player.entity_id { continue }
                     player.observe_entity(entity, &self.network_tx)?
                 }
+
+                player.inventory.set_slot(ItemSlot::Filled(&ASPECT_OF_THE_VOID, ItemStack {
+                    item: 277,
+                    stack_size: 1,
+                    metadata: 0,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", "AOTV")
+                        ])
+                    ])),
+                }), 27);
+
+                player.inventory.sync(&player, &self.network_tx)?;
 
                 self.players.insert(client_id, player);
             },
@@ -77,7 +94,7 @@ impl Server {
                 println!("Client {} disconnected", client_id);
             },
             ClientEvent::PacketReceived { client_id, packet  }  => {
-                println!("Packet received from client {}: {:?}", client_id, packet);
+                // println!("Packet received from client {}: {:?}", client_id, packet);
                 packet.main_process(&mut self.world, self.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?)?;
                 // update to match if/when its needed
 

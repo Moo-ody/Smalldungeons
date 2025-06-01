@@ -4,6 +4,8 @@ use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
+use crate::server::player::inventory::{Inventory, ItemSlot};
+use crate::server::server::Server;
 use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
@@ -18,27 +20,47 @@ pub type ClientId = u32;
 // that handles player interaction and all kinds of stuff
 #[derive(Debug)]
 pub struct Player {
+    pub server: *mut Server,
+
     pub client_id: ClientId,
     pub entity_id: EntityId,
 
     pub last_keep_alive: i32,
     pub ping: i32,
 
+    pub is_sneaking: bool,
+
+    pub inventory: Inventory,
+    pub held_slot: u8,
+
     pub observed_entities: HashSet<EntityId>,
 }
 
 impl Player {
-    pub fn new(client_id: ClientId, entity_id: EntityId) -> Self {
+    pub fn new(server: &mut Server, client_id: ClientId, entity_id: EntityId) -> Self {
         Self {
+            server,
             client_id,
             entity_id,
             last_keep_alive: -1,
             ping: -1,
+            is_sneaking: false,
+            inventory: Inventory::empty(),
+            held_slot: 0,
             observed_entities: HashSet::new(),
         }
     }
 
-    pub fn get_entity<'a>(&self, world: &'a mut World) -> Result<&'a mut Entity> {
+    // potentially unsafe
+    pub fn server_mut<'a>(&self) -> &'a mut Server {
+        unsafe { self.server.as_mut().unwrap() }
+    }
+
+    pub fn get_entity<'a>(&self, world: &'a World) -> Result<&'a Entity> {
+        world.entities.get(&self.entity_id).ok_or_else(|| anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
+    }
+
+    pub fn get_entity_mut<'a>(&self, world: &'a mut World) -> Result<&'a mut Entity> {
         world.entities.get_mut(&self.entity_id).ok_or_else(|| anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
     }
 
@@ -78,5 +100,15 @@ impl Player {
     //     PositionLook::from_player(&self).send_packet(self.client_id, network_tx)?;
     //     Ok(())
     // }
+
+    // todo: allow for changing slots of items,
+    // currently it isn't tracked
+    pub fn handle_right_click(&self) {
+        // println!("test {:?}", self.inventory.get_hotbar_slot(self.held_slot as usize));
+        if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
+            // println!("item {:?}", item);
+            item.handle_right_click(self).unwrap()
+        }
+    }
 
 }

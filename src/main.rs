@@ -67,7 +67,6 @@ async fn main() -> Result<()> {
         )
     );
 
-
     // THIS IS NOT ACTUAL IMPL. I JUST WANTED TO TEST HOW REASONABLE IT IS TO MAKE SOMETHING LIKE THIS
     struct Crusher {
         pub block_pos: (i32, i32, i32),
@@ -98,7 +97,7 @@ async fn main() -> Result<()> {
                 )?;
 
                 for (id, player) in &server.players {
-                    let entity = player.get_entity(world)?;
+                    let entity = player.get_entity_mut(world)?;
 
                     let px = entity.pos.x;
                     let py = entity.pos.y;
@@ -158,9 +157,8 @@ async fn main() -> Result<()> {
         // also needs to add a method to only send the right entity packet given movement data based on last sent.
         // also needs to actually be in a vanilla adjacent way.
         for player in server.players.values() {
-            println!("player ticked: {player:?}");
+            // println!("player ticked: {player:?}");
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
-
             // for entity in player.tracked_entities.iter() {
             //     if let Some(entity) = server.world.entities.get_mut(entity) {
             //         EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;

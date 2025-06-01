@@ -30,7 +30,7 @@ impl LookHelper {
     pub fn on_update_look(entity: &mut Entity) {
         // cant use self here because of borrow checker, but eventually this whole logic can probably be in the entity struct impl anyways.
         let helper = &mut entity.look_helper;
-        entity.pitch = 0.0;
+        // entity.pitch = 0.0;
         if helper.rotating {
             helper.rotating = false;
             let offset_x = helper.pos.x - entity.pos.x;

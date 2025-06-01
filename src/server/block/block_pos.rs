@@ -8,6 +8,12 @@ pub struct BlockPos {
     pub z: i32,
 }
 
+impl BlockPos {
+    pub fn is_invalid(&self) -> bool {
+        self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
+    }
+}
+
 impl PacketWrite for BlockPos {
     fn write(&self, buf: &mut Vec<u8>) {
         let long: i64 = (self.x as i64 & XZ_MASK) << X_SHIFT | (self.y as i64 & Y_MASK) << Y_SHIFT | (self.z as i64 & XZ_MASK);

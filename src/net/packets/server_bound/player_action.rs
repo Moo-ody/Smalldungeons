@@ -1,5 +1,7 @@
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::varint::read_varint;
+use crate::server::player::Player;
+use crate::server::world::World;
 use bytes::BytesMut;
 
 #[derive(Debug)]
@@ -39,5 +41,14 @@ impl ServerBoundPacket for PlayerAction {
             },
             aux_data: read_varint(buf).unwrap(),
         })
+    }
+
+    fn main_process(&self, _: &mut World, player: &mut Player) -> anyhow::Result<()> {
+        match self.action {
+            Action::StartSneaking => player.is_sneaking = true,
+            Action::StopSneaking => player.is_sneaking = false,
+            _ => {}
+        }
+        Ok(())
     }
 }

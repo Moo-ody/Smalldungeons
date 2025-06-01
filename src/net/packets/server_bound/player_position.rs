@@ -25,7 +25,7 @@ impl ServerBoundPacket for PlayerPosition {
     }
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        player.get_entity(world)?.update_position(self.x, self.y, self.z);
+        player.get_entity_mut(world)?.update_position(self.x, self.y, self.z);
         Ok(())
     }
 }

@@ -11,6 +11,6 @@ pub mod client_settings;
 pub mod confirm_transaction;
 pub mod custom_payload;
 pub mod player_block_placement;
-pub mod entity_action;
+pub mod player_action;
 pub mod held_item_change;
 pub mod chat_message;
