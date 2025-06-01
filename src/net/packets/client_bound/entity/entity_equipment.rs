@@ -7,7 +7,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 pub struct EntityEquipment {
     entity_id: i32,
     item_slot: i16,
-    item_stack: ItemStack,
+    item_stack: Option<ItemStack>,
 }
 
 #[async_trait::async_trait]

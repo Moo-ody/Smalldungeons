@@ -19,10 +19,13 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
+use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::server_bound::chat_message::ChatMessage;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
+use crate::net::packets::server_bound::entity_action::PlayerAction;
 use crate::net::packets::server_bound::handshake::Handshake;
+use crate::net::packets::server_bound::held_item_change::HeldItemChange;
 use crate::net::packets::server_bound::keep_alive::KeepAlive as SBKeepAlive;
 use crate::net::packets::server_bound::login_start::LoginStart;
 use crate::net::packets::server_bound::ping::Ping;
@@ -48,6 +51,7 @@ register_clientbound_packets! {
     DestroyEntities,
     EntityVelocity,
     SetSlot,
+    WindowItems,
     Chat,
 
     EntityLookMove,
@@ -69,7 +73,9 @@ register_serverbound_packets! {
         0x04 => PlayerPosition,
         0x05 => PlayerLook,
         0x06 => PlayerPosLook,
+        0x0B => PlayerAction,
         0x08 => PlayerBlockPlacement,
+        0x09 => HeldItemChange,
         0x15 => ClientSettings,
         0x0F => SBConfirmTransaction,
     },

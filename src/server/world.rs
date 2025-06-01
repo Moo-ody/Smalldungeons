@@ -1,8 +1,10 @@
+use crate::server::block::blocks::Blocks;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::utils::vec3f::Vec3f;
 use std::collections::HashMap;
+
 pub struct World {
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)
@@ -56,5 +58,32 @@ impl World {
 
     pub fn get_closest_in_aabb(&self, aabb: &Vec3f) -> Option<&Entity> {
         None
+    }
+
+    pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
+        let chunk_x = x.div_euclid(16);
+        let chunk_z = z.div_euclid(16);
+
+        let chunk = self.chunks.iter().find(|c| c.pos_x == chunk_x && c.pos_z == chunk_z);
+
+        if let Some(chunk) = chunk {
+            if y < 0 || y >= 256 {
+                return Blocks::Air;
+            }
+
+            let section_index = (y / 16) as usize;
+            if let Some(Some(section)) = chunk.chunk_sections.get(section_index) {
+                let local_x = x & 15;
+                let local_y = y / 4;
+                let local_z = z & 15;
+                return {
+                    let test = section.get_block_at(local_x as usize, local_y as usize, local_z as usize);
+                    println!("{:?} x {}, y {}, z {}", test, local_x, local_y, local_z);
+                    test
+                };
+            }
+        }
+
+        Blocks::Air
     }
 }

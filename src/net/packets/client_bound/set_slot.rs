@@ -7,7 +7,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 pub struct SetSlot {
     pub window_id: i8,
     pub slot: i16,
-    pub item_stack: ItemStack,
+    pub item_stack: Option<ItemStack>,
 }
 
 #[async_trait::async_trait]

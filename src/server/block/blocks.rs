@@ -12,6 +12,7 @@ crate::register_blocks! {
         PolishedDiorite => 4,
         Andesite => 5,
         PolishedAndesite => 6, // i assume the _ is just in case its a weird number? this shouldnt be possible in vanilla right? adding support for it would be tricky.
+                               // it was so it doesn't complain about match statement stuff iirc 
     },
     2 => {
         Grass => 0,
@@ -147,7 +148,7 @@ macro_rules! register_blocks {
         }),+ $(,)?
         //$($block:ident $({ $($field:ident: $ty:ty),+ $(,)?})? = ($id:expr, $meta:expr)),* $(,)?
     } => {
-        #[derive(PartialEq)]
+        #[derive(PartialEq, Debug)]
         pub enum Blocks {
             $(
                 $(

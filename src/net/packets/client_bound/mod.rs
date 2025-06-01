@@ -13,3 +13,4 @@ pub mod entity;
 pub mod set_slot;
 pub mod chat;
 pub mod time_update;
+pub mod window_items;
