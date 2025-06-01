@@ -40,7 +40,7 @@ macro_rules! entity_type_registry {
                 }
             }
 
-            pub fn metadata(&self) -> std::collections::HashMap<i8, crate::server::entity::metadata::Metadata> {
+            pub fn metadata(&self) -> crate::server::entity::metadata::EntityMetadata {
                 match self {
                     $(
                         Self::$name => crate::server::entity::r#impl::$path::metadata()

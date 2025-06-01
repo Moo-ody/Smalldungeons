@@ -11,13 +11,12 @@ use crate::server::entity::ai::ai_tasks::AiTasks;
 use crate::server::entity::attributes::Attributes;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::entity::look_helper::LookHelper;
-use crate::server::entity::metadata::Metadata;
-use crate::server::entity::metadata::Metadata::Name;
+use crate::server::entity::metadata::{BaseMetadata, Metadata};
 use crate::server::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -47,7 +46,7 @@ pub struct Entity {
     pub ticks_existed: u32,
     pub health: f32,
 
-    pub metadata: HashMap<i8, Metadata>,
+    pub metadata: Metadata,
 
     pub attributes: Attributes,
 
@@ -79,7 +78,12 @@ impl Entity {
             width: 0.0,
             ticks_existed: 0,
 
-            metadata: entity_type.metadata(),
+            metadata: Metadata {
+                base_metadata: BaseMetadata {
+                    name: stringify!(entity_type).to_owned()
+                },
+                entity_metadata: entity_type.metadata(),
+            },
 
             attributes: Attributes::new(),
 
@@ -91,21 +95,6 @@ impl Entity {
             observing_players: HashSet::new()
         }
     }
-
-    pub fn set_name<S>(&mut self, name: S) -> &Self
-    where
-        S: Into<String>,
-    {
-        self.metadata.insert(2, Name(name.into()));
-        self
-    }
-
-    // idrk how i like this metadata impl atm.
-    // i feel like an enum struct with data would be better
-    pub fn set_metadata(&mut self, id: i8, data: Metadata) -> anyhow::Result<()> {
-        self.metadata.get_mut(&data.get_id()).map(|meta| *meta = data).ok_or_else(|| anyhow::anyhow!("metadata id {id} does not exist for entity {self:?}"))
-    }
-    
     pub fn update_position(&mut self, x: f64, y: f64, z: f64) {
         self.prev_pos = self.pos;
         self.pos.x = x;

@@ -3,13 +3,12 @@ use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::varint::VarInt;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::metadata::Metadata;
-use std::collections::HashMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone)]
 pub struct EntityMetadata {
     entity_id: i32,
-    metadata: HashMap<i8, Metadata>,
+    metadata: Metadata,
 }
 
 impl EntityMetadata {

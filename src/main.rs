@@ -54,6 +54,7 @@ async fn main() -> Result<()> {
     };
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+
     //zombie.set_name("Dinnerbone");
     server.world.entities.insert(zombie.entity_id, zombie);
 

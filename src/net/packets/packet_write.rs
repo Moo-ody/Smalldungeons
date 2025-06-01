@@ -1,19 +1,8 @@
 use crate::net::varint::write_varint;
-use crate::server::entity::metadata::Metadata;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 pub trait PacketWrite {
     fn write(&self, buf: &mut Vec<u8>);
-}
-
-impl PacketWrite for HashMap<i8, Metadata> {
-    fn write(&self, buf: &mut Vec<u8>) {
-        for data in self.values() {
-            data.write_to_buffer(buf);
-        }
-        buf.push(127);
-    }
 }
 
 impl PacketWrite for bool {

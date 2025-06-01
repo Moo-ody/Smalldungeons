@@ -66,8 +66,8 @@ impl Server {
                 if let Some(player) = self.players.remove(&client_id) {
                     for entity_id in player.observed_entities {
                         if let Some(entity) = self.world.entities.get_mut(&entity_id) {
-                            /// doesnt call stop_observing_entity because player is borrowed to get its observed entities ids.
-                            /// and the player object itself should be destroyed sometime here.
+                            // doesnt call stop_observing_entity because player is borrowed to get its observed entities ids.
+                            // and the player object itself should be destroyed sometime here.
                             entity.observing_players.remove(&client_id);
                         }
                     }

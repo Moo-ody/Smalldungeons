@@ -6,7 +6,6 @@ use crate::server::entity::entity_type::EntityType;
 use crate::server::entity::metadata::Metadata;
 use anyhow::bail;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 const MOTION_CLAMP: f64 = 3.9;
@@ -24,7 +23,7 @@ pub struct SpawnMob {
     velocity_x: i16,
     velocity_y: i16,
     velocity_z: i16,
-    metadata: HashMap<i8, Metadata>
+    metadata: Metadata
 }
 
 impl SpawnMob {
