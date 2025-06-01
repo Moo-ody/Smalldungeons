@@ -10,17 +10,19 @@ pub struct ItemStack {
     pub tag_compound: Option<NBT>,
 }
 
-impl PacketWrite for ItemStack {
+impl PacketWrite for Option<ItemStack> {
     fn write(&self, buf: &mut Vec<u8>) {
-        self.item.write(buf);
-        self.stack_size.write(buf);
-        self.metadata.write(buf);
+        if let Some(item_stack) = self {
+            item_stack.item.write(buf);
+            item_stack.stack_size.write(buf);
+            item_stack.metadata.write(buf);
 
-        match &self.tag_compound {
-            None => { 0u8.write(buf) }
-            Some(nbt) => {
-                buf.extend(serialize_nbt(nbt));
+            match &item_stack.tag_compound {
+                None => 0u8.write(buf),
+                Some(nbt) => buf.extend(serialize_nbt(nbt)),
             }
+        } else {
+            (-1i16).write(buf)
         }
     }
 }

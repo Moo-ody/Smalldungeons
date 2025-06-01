@@ -17,6 +17,7 @@ pub struct PlayerBlockPlacement {
 impl ServerBoundPacket for PlayerBlockPlacement {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
         let packet = PlayerBlockPlacement {
+            // todo: unpack
             position: buf.get_u64(),
             placed_direction: buf.get_u8(),
             item_stack: read_item_stack(buf),
@@ -24,7 +25,6 @@ impl ServerBoundPacket for PlayerBlockPlacement {
             facing_y: buf.get_u8() as f32 / 16.0,
             facing_z: buf.get_u8() as f32 / 16.0,
         };
-        println!("!!! item stack = {:?}", &packet.item_stack);
         Ok(packet)
     }
 }

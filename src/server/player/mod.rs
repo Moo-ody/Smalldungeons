@@ -1,3 +1,5 @@
+pub mod inventory;
+
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
