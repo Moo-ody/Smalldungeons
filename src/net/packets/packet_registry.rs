@@ -1,4 +1,5 @@
 use crate::net::connection_state::ConnectionState;
+use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
@@ -53,6 +54,7 @@ register_clientbound_packets! {
     SetSlot,
     WindowItems,
     Chat,
+    BlockChange,
 
     EntityLookMove,
     EntityHeadLook,

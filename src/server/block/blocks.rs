@@ -148,7 +148,7 @@ macro_rules! register_blocks {
         }),+ $(,)?
         //$($block:ident $({ $($field:ident: $ty:ty),+ $(,)?})? = ($id:expr, $meta:expr)),* $(,)?
     } => {
-        #[derive(PartialEq, Debug)]
+        #[derive(PartialEq, Debug, Copy, Clone)]
         pub enum Blocks {
             $(
                 $(

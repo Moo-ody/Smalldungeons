@@ -1,7 +1,7 @@
 
 
 #[repr(u8)]
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum Axis {
     Y, // y is first for whatever reason
     X,

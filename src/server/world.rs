@@ -1,11 +1,20 @@
+use crate::net::packets::client_bound::block_change::BlockChange;
+use crate::net::packets::packet::SendPacket;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::Chunk;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
+use crate::server::server::Server;
 use crate::server::utils::vec3f::Vec3f;
 use std::collections::HashMap;
 
 pub struct World {
+    /// Don't use directly!!, use .server() instead
+    /// This is unsafe,
+    /// but since server should be alive for the entire program this is fine (I hope)
+    pub server: *mut Server,
+
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)
     // it could be represented by a flattened 2d array,
@@ -19,12 +28,18 @@ pub struct World {
 }
 
 impl World {
+
     pub fn new() -> World {
         World {
+            server: std::ptr::null_mut(),
             chunks: Vec::new(),
             entities: HashMap::new(),
             next_entity_id: 1 // might have to start at 1
         }
+    }
+
+    pub fn server<'a>(&self) -> &'a mut Server {
+        unsafe { self.server.as_mut().unwrap() }
     }
 
     pub fn new_entity_id(&mut self) -> EntityId {
@@ -60,11 +75,44 @@ impl World {
         None
     }
 
-    pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
-        let chunk_x = x.div_euclid(16);
-        let chunk_z = z.div_euclid(16);
+    pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) -> anyhow::Result<()> {
+        if y < 0 || y >= 256 {
+            return Ok(());
+        }
 
-        let chunk = self.chunks.iter().find(|c| c.pos_x == chunk_x && c.pos_z == chunk_z);
+        let chunk_x = x >> 4;
+        let chunk_z = z >> 4;
+
+        let c = self.chunks.iter_mut().find(|c| c.pos_x == chunk_x && c.pos_z == chunk_z);
+        
+        if let Some(chunk) = c {
+            let section_index = (y / 16) as usize;
+
+            if let Some(Some(section)) = chunk.chunk_sections.get_mut(section_index) {
+                let local_x = (x & 15) as usize;
+                let local_y = (y & 15) as usize; // y / 4 looked suspicious, usually local_y is y & 15 (within the section)
+                let local_z = (z & 15) as usize;
+                section.set_block_at(block.clone(), local_x, local_y, local_z);
+                
+                let server = self.server();
+                for (client_id, _) in server.players.iter() {
+                    let packet = BlockChange {
+                        block_pos: BlockPos { x, y, z },
+                        block_state: block.block_state_id()
+                    };
+                    packet.send_packet(client_id.clone(), &server.network_tx)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
+        let chunk_x = x >> 4;
+        let chunk_z = z >> 4;
+        let chunk = self.chunks.iter().find(|c|{
+            c.pos_x == chunk_x && c.pos_z == chunk_z
+        });
 
         if let Some(chunk) = chunk {
             if y < 0 || y >= 256 {
