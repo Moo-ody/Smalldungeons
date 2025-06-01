@@ -1,5 +1,10 @@
 use crate::net::packets::packet_write::PacketWrite;
 
+/// representation of Minecraft's [Data Watcher](https://github.com/Marcelektro/MCP-919/blob/main/src/minecraft/net/minecraft/entity/DataWatcher.java) structure.
+/// Renamed to Metadata because thats pretty much exactly what it is and its more clear.
+///
+/// has 2 parts base metadata and entity metadata. base metadata is for all shared metadata values.
+/// entity metadata is for metadata unique to an entity, such as is_child for zombies.
 #[derive(Clone, Debug)]
 pub struct Metadata {
     pub(crate) base_metadata: BaseMetadata,
@@ -28,16 +33,16 @@ impl BaseMetadata {
 crate::metadata! {
     Player,
     Zombie {
-        is_child: 12; bool,
-        is_villager: 13; bool,
-        is_converting: 14; bool
+        is_child: bool = 12,
+        is_villager: bool = 13,
+        is_converting: bool = 14
     }
 }
 
 
 #[macro_export]
 macro_rules! metadata {
-    ($($name:ident $({$($field:ident: $id:expr; $ty:tt), *$(,)?})?),* $(,)?) => {
+    ($($name:ident $({$($field:ident: $ty:tt = $id:expr), *$(,)?})?),* $(,)?) => {
         #[derive(Debug, Clone)]
         pub enum EntityMetadata {
             $(
@@ -46,10 +51,10 @@ macro_rules! metadata {
                 })?
             ),*
         }
-        
+
         impl EntityMetadata {
             pub fn write_to_buffer(&self, buf: &mut Vec<u8>) {
-                match self { 
+                match self {
                     $(
                         Self::$name $({$($field),* })? => {
                             $(
@@ -66,11 +71,11 @@ macro_rules! metadata {
     };
 }
 
-/// macro handling meta data types. 
+/// macro handling meta data types.
 /// This is missing a few types still.
 #[macro_export]
 macro_rules! type_to_id {
-    (bool) => { u8::from(0) }; // this needs the from stuff otherwise it cries 
+    (bool) => { u8::from(0) }; // this needs the from stuff otherwise it cries
     (i16) => { u8::from(1) };
     (i32) => { u8::from(2) };
     (f32) => { u8::from(3) };
