@@ -34,7 +34,7 @@ pub struct Entity {
     pub pos: Vec3f,
     pub motion: Vec3f,
     pub prev_pos: Vec3f,
-    pub last_sent_pos: Vec3f, // TEMPORARY, this will and should be different for every player.
+    pub last_sent_pos: Vec3f,
     pub last_sent_yaw: f32,
     pub last_sent_pitch: f32,
     pub yaw: f32,
@@ -79,10 +79,10 @@ impl Entity {
             ticks_existed: 0,
 
             metadata: Metadata {
-                base_metadata: BaseMetadata {
+                base: BaseMetadata {
                     name: stringify!(entity_type).to_owned()
                 },
-                entity_metadata: entity_type.metadata(),
+                entity: entity_type.metadata(),
             },
 
             attributes: Attributes::new(),

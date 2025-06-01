@@ -7,25 +7,26 @@ use crate::net::packets::packet_write::PacketWrite;
 /// entity metadata is for metadata unique to an entity, such as is_child for zombies.
 #[derive(Clone, Debug)]
 pub struct Metadata {
-    pub(crate) base_metadata: BaseMetadata,
-    pub(crate) entity_metadata: EntityMetadata,
+    pub base: BaseMetadata,
+    pub entity: EntityMetadata,
 }
 
 impl PacketWrite for Metadata {
     fn write(&self, buf: &mut Vec<u8>) {
-        self.base_metadata.write_to_buffer(buf);
-        self.entity_metadata.write_to_buffer(buf);
+        self.base.write_to_buffer(buf);
+        self.entity.write_to_buffer(buf);
+        buf.push(127)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct BaseMetadata {
-    pub(crate) name: String,
+    pub name: String,
 }
 
 impl BaseMetadata {
     pub fn write_to_buffer(&self, buf: &mut Vec<u8>) {
-        buf.push((4 << 5 & 255) as u8);
+        buf.push(((4 << 5 | 2 & 31) & 255) as u8);
         self.name.write(buf)
     }
 }

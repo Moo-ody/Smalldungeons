@@ -10,6 +10,8 @@ use crate::net::run_network::run_network_thread;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
 use crate::server::chunk::Chunk;
+use crate::server::entity::entity::Entity;
+use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
@@ -53,10 +55,8 @@ async fn main() -> Result<()> {
         z: 6.0,
     };
 
-    // let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
-
-    //zombie.set_name("Dinnerbone");
-    // server.world.entities.insert(zombie.entity_id, zombie);
+    let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+    server.world.entities.insert(zombie.entity_id, zombie);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
