@@ -7,7 +7,9 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
+use crate::server::dungeon::room::Room;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
@@ -30,16 +32,16 @@ async fn main() -> Result<()> {
     let mut server = Server::initialize(network_tx);
     server.world.server = &mut server;
 
-    for x in 0..100 {
-        for z in 0..100 {
-            server.world.chunk_grid.set_block_at(
-                Blocks::Stone,
-                x,
-                0,
-                z
-            );
-        }
-    }
+    // for x in 0..100 {
+    //     for z in 0..100 {
+    //         server.world.chunk_grid.set_block_at(
+    //             Blocks::Stone,
+    //             x,
+    //             0,
+    //             z
+    //         );
+    //     }
+    // }
 
     let spawn_pos = Vec3f {
         x: 6.0,
@@ -49,6 +51,15 @@ async fn main() -> Result<()> {
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
     server.world.entities.insert(zombie.entity_id, zombie);
+
+    let room = Room {
+        position: BlockPos {
+            x: 0,
+            y: 0,
+            z: 0,
+        },
+    };
+    room.load_into_world(&mut server.world);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
@@ -161,6 +172,7 @@ async fn main() -> Result<()> {
 
         // if  {  }
 
-        crusher.tick(&mut server)?;
+        // crusher.tick(&mut server)?;
+
     }
 }

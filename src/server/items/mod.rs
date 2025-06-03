@@ -25,7 +25,6 @@ impl Item {
 
                 if player.is_sneaking {
                     handle_etherwarp(player, &server.network_tx, world, entity)?;
-                    println!("hello, erc'd ether");
                 }
 
                 // let pos = raycast_first_solid_block(world, entity, 60.0);

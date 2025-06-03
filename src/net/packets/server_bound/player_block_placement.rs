@@ -48,9 +48,8 @@ impl ServerBoundPacket for PlayerBlockPlacement {
                     block_pos: bp,
                     block_state: block.block_state_id(),
                 }.send_packet(player.client_id, &player.server_mut().network_tx)?;
-            } else {
-                player.handle_right_click()
             }
+            player.handle_right_click()
         }
         Ok(())
     }
