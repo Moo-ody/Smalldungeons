@@ -31,7 +31,6 @@ impl ServerBoundPacket for PlayerBlockPlacement {
         Ok(packet)
     }
 
-    /// cancels block placement
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
         if self.item_stack.is_some() {
             if !self.block_pos.is_invalid() {
@@ -53,9 +52,6 @@ impl ServerBoundPacket for PlayerBlockPlacement {
                 player.handle_right_click()
             }
         }
-
-
-
         Ok(())
     }
 }

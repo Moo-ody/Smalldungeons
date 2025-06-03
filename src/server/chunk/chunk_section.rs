@@ -23,9 +23,9 @@ impl ChunkSection {
         Blocks::from_block_state_id(self.data[index])
     }
     
-    pub fn get_block_at(&self, x: usize, y: usize, z: usize) -> Blocks {
+    pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
         let index = (y << 8) | (z << 4) | x;
-        Blocks::from_block_state_id(self.data[index])
+        Blocks::from_block_state_id(self.data[index as usize])
     }
     
 
@@ -40,9 +40,9 @@ impl ChunkSection {
         self.data[index] = block_state_id;
     }
 
-    pub fn set_block_at(&mut self, block: Blocks,x: usize, y: usize, z: usize) {
+    pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
         let index = (y << 8) | (z << 4) | x;
-        self.set_block(block, index)
+        self.set_block(block, index as usize)
     }
 
     pub fn is_empty(&self) -> bool {

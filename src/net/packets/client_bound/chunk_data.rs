@@ -63,9 +63,11 @@ impl ChunkData {
         // for sky and block lights,
         // it is expensive (and potentially unnecessary) to calculate lighting it will be hard-coded.
         // this might change in the future, however it is very unlikely
-        for _ in 0..4096 {
-            data[offset] = 255;
-            offset += 1;
+        if section_count != 0 {
+            for _ in 0..4096 {
+                data[offset] = 255;
+                offset += 1;
+            }
         }
         for _ in 0..256 {
             data[offset] = 1;

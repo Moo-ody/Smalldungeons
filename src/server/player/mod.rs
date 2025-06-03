@@ -107,7 +107,7 @@ impl Player {
         // println!("test {:?}", self.inventory.get_hotbar_slot(self.held_slot as usize));
         if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             // println!("item {:?}", item);
-            item.handle_right_click(self).unwrap()
+            item.on_right_click(self).unwrap()
         }
     }
 

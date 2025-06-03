@@ -52,6 +52,11 @@ pub fn handle_etherwarp(
     Ok(())
 }
 
+enum EtherResult {
+    Valid(i32, i32, i32),
+    Failed,
+}
+
 /// gets the position
 
 fn get_ether_position(
@@ -74,11 +79,6 @@ fn get_ether_position(
         return Some(BlockPos { x, y, z })
     }
     None
-}
-
-enum EtherResult {
-    Valid(i32, i32, i32),
-    Failed,
 }
 
 fn get_look(yaw: f32, pitch: f32) -> Vec3f {

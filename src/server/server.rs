@@ -55,7 +55,7 @@ impl Server {
 
                 self.world.entities.insert(player_entity.entity_id, player_entity);
 
-                for chunk in self.world.chunks.iter() {
+                for chunk in self.world.chunk_grid.chunks.iter() {
                     ChunkData::from_chunk(chunk, true).send_packet(client_id, &self.network_tx)?;
                 }
 
