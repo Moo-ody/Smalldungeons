@@ -21,14 +21,38 @@ impl NBT {
         }
     }
     
-    /// creates a string nbt node used for [NBTNode::Compound] and [NBT]
+    /// creates a string nbt node
+    /// used for [NBTNode::Compound] and [NBT]
     pub fn string(name: &str, value: &str) -> (String, NBTNode) {
         (name.to_string(), NBTNode::String(value.to_string()))
     }
 
-    /// creates a compound node used for [NBTNode::Compound] and [NBT]
-    pub fn compound(names: &str, nodes: Vec<(String, NBTNode)>) -> (String, NBTNode) {
-        (names.to_string(), NBTNode::Compound(nodes))
+    /// creates a compound node
+    /// used for [NBTNode::Compound] and [NBT]
+    pub fn compound(name: &str, nodes: Vec<(String, NBTNode)>) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Compound(nodes))
+    }
+
+    /// creates a list node
+    /// used for [NBTNode::Compound] and [NBT]
+    pub fn list(name: &str, type_id: u8, list: Vec<NBTNode>) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::List { type_id, children: list })
+    }
+
+    pub fn byte(name: &str, value: i8) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Byte(value))
+    }
+
+    pub fn short(name: &str, value: i16) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Short(value))
+    }
+
+    pub fn int(name: &str, value: i32) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Int(value))
+    }
+
+    pub fn long(name: &str, value: i64) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Long(value))
     }
 }
 

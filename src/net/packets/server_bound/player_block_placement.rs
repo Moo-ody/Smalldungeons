@@ -32,23 +32,23 @@ impl ServerBoundPacket for PlayerBlockPlacement {
     }
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        if self.item_stack.is_some() {
-            if !self.block_pos.is_invalid() {
-                let mut bp = self.block_pos.clone();
-                match self.placed_direction {
-                    0 => bp.y -= 1,
-                    1 => bp.y += 1,
-                    2 => bp.z -= 1,
-                    3 => bp.z += 1,
-                    4 => bp.x -= 1,
-                    _ => bp.x += 1
-                }
-                let block = world.get_block_at(bp.x, bp.y, bp.z);
-                BlockChange {
-                    block_pos: bp,
-                    block_state: block.block_state_id(),
-                }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+        if !self.block_pos.is_invalid() {
+            let mut bp = self.block_pos.clone();
+            match self.placed_direction {
+                0 => bp.y -= 1,
+                1 => bp.y += 1,
+                2 => bp.z -= 1,
+                3 => bp.z += 1,
+                4 => bp.x -= 1,
+                _ => bp.x += 1
             }
+            let block = world.get_block_at(bp.x, bp.y, bp.z);
+            BlockChange {
+                block_pos: bp,
+                block_state: block.block_state_id(),
+            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+        }
+        if self.item_stack.is_some() {
             player.handle_right_click()
         }
         Ok(())

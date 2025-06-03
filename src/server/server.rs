@@ -7,10 +7,11 @@ use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::items::ASPECT_OF_THE_VOID;
+use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
-use crate::server::utils::nbt::NBT;
+use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
+use crate::server::utils::nbt::{NBTNode, NBT};
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
@@ -63,8 +64,22 @@ impl Server {
                     if entity.entity_id == player.entity_id { continue }
                     player.observe_entity(entity, &self.network_tx)?
                 }
+                
+                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe, ItemStack {
+                    item: 278,
+                    stack_size: 1,
+                    metadata: 0,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::list("ench", TAG_COMPOUND_ID, vec![
+                            NBTNode::Compound(vec![
+                                NBT::short("id", 32),
+                                NBT::short("lvl", 10),
+                            ])
+                        ])
+                    ])),
+                }), 28);
 
-                player.inventory.set_slot(ItemSlot::Filled(&ASPECT_OF_THE_VOID, ItemStack {
+                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid, ItemStack {
                     item: 277,
                     stack_size: 1,
                     metadata: 0,

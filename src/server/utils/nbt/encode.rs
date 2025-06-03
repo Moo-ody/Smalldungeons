@@ -57,7 +57,15 @@ pub fn write_entry(name: &str, node: &NBTNode, vec: &mut Vec<u8>) {
             write_string(vec, name);
             write_string(vec, value);
         }
-        NBTNode::List { .. } => { todo!() }
+        NBTNode::List { type_id, children } => {
+            vec.push(TAG_LIST_ID);
+            write_string(vec, name);
+            vec.push(*type_id);
+            vec.extend_from_slice(&(children.len() as i32).to_be_bytes());
+            for child in children {
+                write_entry_unnamed(child, vec);
+            }
+        }
         NBTNode::Compound(nodes) => {
             vec.push(TAG_COMPOUND_ID);
             write_string(vec, name);
@@ -80,6 +88,61 @@ pub fn write_entry(name: &str, node: &NBTNode, vec: &mut Vec<u8>) {
             vec.extend_from_slice(&(values.len() as i32).to_be_bytes());
             for value in values {
                 vec.extend_from_slice(&value.to_be_bytes());
+            }
+        }
+    }
+}
+
+fn write_entry_unnamed(node: &NBTNode, vec: &mut Vec<u8>) {
+    match node {
+        NBTNode::Byte(value) => {
+            vec.push(*value as u8);
+        }
+        NBTNode::Short(value) => {
+            vec.extend_from_slice(&value.to_be_bytes());
+        }
+        NBTNode::Int(value) => {
+            vec.extend_from_slice(&value.to_be_bytes());
+        }
+        NBTNode::Long(value) => {
+            vec.extend_from_slice(&value.to_be_bytes());
+        }
+        NBTNode::Float(value) => {
+            vec.extend_from_slice(&value.to_be_bytes());
+        }
+        NBTNode::Double(value) => {
+            vec.extend_from_slice(&value.to_be_bytes());
+        }
+        NBTNode::ByteArray(value) => {
+            vec.extend_from_slice(&(value.len() as i32).to_be_bytes());
+            vec.extend_from_slice(value);
+        }
+        NBTNode::String(value) => {
+            write_string(vec, value);
+        }
+        NBTNode::List { type_id, children, .. } => {
+            vec.push(*type_id);
+            vec.extend_from_slice(&(children.len() as i32).to_be_bytes());
+            for child in children {
+                write_entry_unnamed(child, vec);
+            }
+        }
+        NBTNode::Compound(nodes) => {
+            for (str, node) in nodes {
+                write_entry(str, node, vec);
+            }
+            vec.push(TAG_END_ID);
+        }
+        NBTNode::IntArray(values) => {
+            vec.extend_from_slice(&(values.len() as i32).to_be_bytes());
+            for v in values {
+                vec.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        NBTNode::LongArray(values) => {
+            vec.extend_from_slice(&(values.len() as i32).to_be_bytes());
+            for v in values {
+                vec.extend_from_slice(&v.to_be_bytes());
             }
         }
     }

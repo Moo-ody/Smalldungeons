@@ -18,7 +18,7 @@ pub struct Inventory {
 pub enum ItemSlot {
     #[default]
     Empty,
-    Filled(&'static Item, ItemStack),
+    Filled(Item, ItemStack),
 }
 
 impl Inventory {

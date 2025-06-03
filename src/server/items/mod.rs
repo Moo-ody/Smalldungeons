@@ -9,6 +9,7 @@ mod etherwarp;
 #[derive(Copy, Debug, Clone)]
 pub enum Item {
     AspectOfTheVoid,
+    DiamondPickaxe,
     SpiritSceptre,
 }
 
@@ -34,12 +35,9 @@ impl Item {
                 // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but
                 // when they hit a solid block they blow up in like 10 block radius (or square) or something
             }
+            _ => {}
         }
         Ok(())
     }
 
 }
-
-// static items for cooldown sharing, and stuff?
-pub static ASPECT_OF_THE_VOID: Item = Item::AspectOfTheVoid;
-pub static SPIRIT_SCEPTRE: Item = Item::SpiritSceptre;
