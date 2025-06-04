@@ -1,4 +1,4 @@
-use crate::net::varint::write_varint;
+use crate::net::var_int::write_var_int;
 use uuid::Uuid;
 
 pub trait PacketWrite {
@@ -79,14 +79,14 @@ impl<const N: usize> PacketWrite for &[u8; N] {
 
 impl PacketWrite for &str {
     fn write(&self, buf: &mut Vec<u8>) {
-        write_varint(buf, self.len() as i32);
+        write_var_int(buf, self.len() as i32);
         buf.extend_from_slice(self.as_bytes());
     }
 }
 
 impl PacketWrite for String {
     fn write(&self, buf: &mut Vec<u8>) {
-        write_varint(buf, self.len() as i32);
+        write_var_int(buf, self.len() as i32);
         buf.extend_from_slice(self.as_bytes());
     }
 }

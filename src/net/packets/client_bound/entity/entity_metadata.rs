@@ -1,6 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::net::varint::VarInt;
+use crate::net::var_int::VarInt;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::metadata::Metadata;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};

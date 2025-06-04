@@ -1,5 +1,5 @@
 use crate::net::packets::packet_write::PacketWrite;
-use crate::net::varint::VarInt;
+use crate::net::var_int::VarInt;
 use std::collections::HashMap;
 use uuid::Uuid;
 

@@ -1,3 +1,6 @@
+use crate::net::packets::client_bound::block_change::BlockChange;
+use crate::net::packets::packet::SendPacket;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_grid::ChunkGrid;
 use crate::server::entity::entity::{Entity, EntityId};
@@ -70,11 +73,18 @@ impl World {
             .map(|(e, _)| e)
     }
 
-    pub fn get_closest_in_aabb(&self, aabb: &Vec3f) -> Option<&Entity> {
+    pub fn get_closest_in_aabb(&self, _: &Vec3f) -> Option<&Entity> {
         None
     }
 
     pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
+        let server = self.server_mut();
+        for (client_id, _) in server.players.iter() {
+            BlockChange {
+                block_pos: BlockPos { x, y, z },
+                block_state: block.block_state_id()
+            }.send_packet(*client_id, &server.network_tx).unwrap();
+        }
         self.chunk_grid.set_block_at(block, x, y, z);
     }
 

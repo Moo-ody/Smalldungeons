@@ -5,11 +5,11 @@ pub struct VarInt(pub i32);
 
 impl PacketWrite for VarInt {
     fn write(&self, buf: &mut Vec<u8>) {
-        write_varint(buf, self.0);
+        write_var_int(buf, self.0);
     }
 }
 
-pub fn read_varint(buf: &mut BytesMut) -> Option<i32> {
+pub fn read_var_int(buf: &mut BytesMut) -> Option<i32> {
     let mut num_read = 0;
     let mut result = 0i32;
 
@@ -32,7 +32,7 @@ pub fn read_varint(buf: &mut BytesMut) -> Option<i32> {
     Some(result)
 }
 
-pub fn write_varint(buf: &mut Vec<u8>, mut value: i32) {
+pub fn write_var_int(buf: &mut Vec<u8>, mut value: i32) {
     loop {
         if (value & !0x7F) == 0 {
             buf.push(value as u8);

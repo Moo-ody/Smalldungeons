@@ -1,5 +1,5 @@
 pub mod client;
-pub mod varint;
+pub mod var_int;
 pub mod packets;
 pub mod network_message;
 pub mod client_event;

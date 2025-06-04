@@ -1,5 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::net::varint::read_varint;
+use crate::net::var_int::read_var_int;
 use crate::server::player::Player;
 use crate::server::world::World;
 use bytes::BytesMut;
@@ -27,9 +27,9 @@ pub enum Action {
 impl ServerBoundPacket for PlayerAction {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
         Ok(PlayerAction {
-            entity_id: read_varint(buf).unwrap(),
+            entity_id: read_var_int(buf).unwrap(),
             action: {
-                match read_varint(buf).unwrap() { 
+                match read_var_int(buf).unwrap() {
                     0 => Action::StartSneaking,
                     1 => Action::StopSneaking,
                     2 => Action::StopSleeping,
@@ -39,7 +39,7 @@ impl ServerBoundPacket for PlayerAction {
                     _ => Action::OpenInventory,
                 }
             },
-            aux_data: read_varint(buf).unwrap(),
+            aux_data: read_var_int(buf).unwrap(),
         })
     }
 

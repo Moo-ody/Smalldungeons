@@ -1,4 +1,4 @@
-use crate::net::varint::read_varint;
+use crate::net::var_int::read_var_int;
 use anyhow::bail;
 use bytes::BytesMut;
 
@@ -11,7 +11,7 @@ pub mod packet_write;
 
 // maybe own file?
 pub fn read_string_from_buf(buf: &mut BytesMut, max_length: i32) -> anyhow::Result<String> {
-    let len = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read string length"))?;
+    let len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read string length"))?;
     if len > max_length * 4 {
         bail!("String too long. {:?} / {}", len, max_length * 4);
     }

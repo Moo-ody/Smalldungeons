@@ -93,7 +93,7 @@ macro_rules! register_serverbound_packets {
         use crate::net::packets::packet_context::PacketContext;
         use crate::net::client::Client;
         use crate::net::packets::packet::ServerBoundPacket;
-        use crate::net::varint::read_varint;
+        use crate::net::var_int::read_var_int;
         use anyhow::{bail};
         use bytes::BytesMut;
 
@@ -141,8 +141,8 @@ macro_rules! register_serverbound_packets {
 
             // println!("Raw bytes [{}]: {}", buf.len(), hex_string);
 
-            let _packet_len = read_varint(buf).unwrap_or(0);
-            let packet_id = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
+            let _packet_len = read_var_int(buf).unwrap_or(0);
+            let packet_id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
 
             match client.connection_state {
                 $(
@@ -176,11 +176,11 @@ macro_rules! print_bytes_hex {
 pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
-    async fn process(&self, context: PacketContext) -> Result<()> {
+    async fn process(&self, _: PacketContext) -> Result<()> {
         Ok(())
     }
 
-    fn main_process(&self, world: &mut crate::server::world::World, player: &mut crate::server::player::Player) -> Result<()> {
+    fn main_process(&self, _: &mut crate::server::world::World, _: &mut crate::server::player::Player) -> Result<()> {
         Ok(())
     }
 }
@@ -191,13 +191,13 @@ macro_rules! build_packet {
         let mut buf = Vec::new();
         let mut payload = Vec::new();
 
-        $crate::net::varint::write_varint(&mut payload, $packet_id);
+        $crate::net::var_int::write_var_int(&mut payload, $packet_id);
 
         $(
             $crate::net::packets::packet_write::PacketWrite::write(&$value, &mut payload);
         )*
 
-        $crate::net::varint::write_varint(&mut buf, payload.len() as i32);
+        $crate::net::var_int::write_var_int(&mut buf, payload.len() as i32);
         buf.extend_from_slice(&payload);
 
         buf

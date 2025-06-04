@@ -2,7 +2,7 @@ use crate::net::connection_state::ConnectionState;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
-use crate::net::varint::read_varint;
+use crate::net::var_int::read_var_int;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
 
@@ -17,8 +17,8 @@ pub struct Handshake {
 #[async_trait::async_trait]
 impl ServerBoundPacket for Handshake {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> {
-        let protocol_version = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read protocol version"))?;
-        let addr_len = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read addr length"))?  as usize;
+        let protocol_version = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read protocol version"))?;
+        let addr_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read addr length"))?  as usize;
 
         if buf.len() < addr_len + 3 {
             bail!("Buffer too small for server address + port + next_state");
@@ -30,7 +30,7 @@ impl ServerBoundPacket for Handshake {
 
         let server_port = buf.get_i16();
 
-        let next_state = read_varint(buf).ok_or_else(|| anyhow::anyhow!("Failed to read next state"))?;
+        let next_state = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read next state"))?;
 
         Ok(Handshake {
             _protocol_version: protocol_version,

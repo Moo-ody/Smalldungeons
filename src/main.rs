@@ -1,18 +1,20 @@
 mod net;
 mod server;
+mod dungeon;
 
+use crate::dungeon::crushers::Crusher;
+use crate::dungeon::room::{Room, RoomType};
+use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
-use crate::server::block::blocks::Blocks;
-use crate::server::dungeon::room::Room;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
+use crate::server::utils::direction::Direction;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use std::time::Duration;
@@ -52,14 +54,47 @@ async fn main() -> Result<()> {
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
     server.world.entities.insert(zombie.entity_id, zombie);
 
-    let room = Room {
+
+    let dungeon = Dungeon::with_rooms(vec![
+            Room {
+                room_x: 0,
+                room_z: 0,
+                tick_amount: 0,
+                room_type: RoomType::Shape2x1,
+            },
+            Room {
+                room_x: 1,
+                room_z: 0,
+                tick_amount: 0,
+                room_type: RoomType::Shape1x1,
+            },
+            Room {
+                room_x: 1,
+                room_z: 1,
+                tick_amount: 0,
+                room_type: RoomType::Shape2x2,
+            },
+        ]);
+
+    for room in &dungeon.rooms {
+        room.load_room(&mut server.world)
+    }
+
+    let mut crusher = Crusher {
         position: BlockPos {
-            x: 0,
-            y: 0,
-            z: 0,
+            x: 20,
+            y: 1,
+            z: 1
         },
+        direction: Direction::North,
+        max_length: 5,
+        length: 0,
+        tick: 0,
+        tick_per_block: 2,
+        pause_duration: 50,
+        is_reversed: false,
+        is_paused: false
     };
-    room.load_into_world(&mut server.world);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
@@ -69,77 +104,6 @@ async fn main() -> Result<()> {
             event_tx.clone()
         )
     );
-
-    // THIS IS NOT ACTUAL IMPL. I JUST WANTED TO TEST HOW REASONABLE IT IS TO MAKE SOMETHING LIKE THIS
-    struct Crusher {
-        pub block_pos: (i32, i32, i32),
-        pub length: i32,
-        pub max_length: i32,
-        pub reverse: bool,
-    }
-
-    impl Crusher {
-        fn tick(&mut self, server: &mut Server) -> Result<()> {
-            let world = &mut server.world;
-            self.length += 1;
-            if self.length == self.max_length {
-                self.reverse = !self.reverse;
-                self.length = 0;
-            }
-
-            if !self.reverse {
-                let block_x = self.block_pos.0 + self.length;
-                let block_y = self.block_pos.1;
-                let block_z = self.block_pos.2;
-
-                world.set_block_at(
-                    Blocks::PolishedGranite,
-                    block_x,
-                    block_y,
-                    block_z
-                );
-
-                for (id, player) in &server.players {
-                    let entity = player.get_entity_mut(world)?;
-
-                    let px = entity.pos.x;
-                    let py = entity.pos.y;
-                    let pz = entity.pos.z;
-
-                    if  px >= block_x as f64 && px < (block_x + 1) as f64 &&
-                        py >= block_y as f64 && py < (block_y + 1) as f64 &&
-                        pz >= block_z as f64 && pz < (block_z + 1) as f64
-                    {
-                        PositionLook {
-                            x: px + 1.0,
-                            y: py,
-                            z: pz,
-                            yaw: entity.yaw,
-                            pitch: entity.pitch,
-                            flags: 0,
-                        }.send_packet(*id, &server.network_tx)?;
-                    }
-                }
-
-            } else {
-                world.set_block_at(
-                    Blocks::Air,
-                    self.block_pos.0 + (self.max_length - self.length),
-                    self.block_pos.1,
-                    self.block_pos.2
-                );
-            }
-            Ok(())
-        }
-    }
-    
-    let mut crusher = Crusher {
-        block_pos: (10, 1, 10),
-        length: 0,
-        max_length: 10,
-        reverse: false,
-    };
-    // ^^^ THIS IS NOT ACTUAL IMPL. I JUST WANTED TO TEST HOW REASONABLE IT IS TO MAKE SOMETHING LIKE THIS
 
     loop {
         tick_interval.tick().await;
@@ -168,11 +132,13 @@ async fn main() -> Result<()> {
             //         EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
             //     }
             // }
+
+            dungeon.get_room(player);
         }
 
         // if  {  }
 
+        crusher.tick(&mut server);
         // crusher.tick(&mut server)?;
-
     }
 }

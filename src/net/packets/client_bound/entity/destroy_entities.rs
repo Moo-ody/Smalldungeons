@@ -1,6 +1,6 @@
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::packets::packet_write::PacketWrite;
-use crate::net::varint::VarInt;
+use crate::net::var_int::VarInt;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone)]
