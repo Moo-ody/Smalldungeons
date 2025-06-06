@@ -182,9 +182,9 @@ impl Entity {
         let (min_x, min_y, min_z) = (min_x as f64, min_y as f64, min_z as f64);
         let (max_x, max_y, max_z) = (max_x as f64, max_y as f64, max_z as f64);
         let (x, y, z) = (self.pos.x, self.pos.y, self.pos.z);
-        x >= min_x && x <= max_x &&
-        y >= min_y && y <= max_y &&
-        z >= min_z && z <= max_z
+        x >= min_x && x < max_x &&
+        y >= min_y && y < max_y &&
+        z >= min_z && z < max_z
     }
 
     pub fn is_in_box_i32(
