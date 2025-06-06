@@ -80,21 +80,19 @@ async fn main() -> Result<()> {
         room.load_room(&mut server.world)
     }
 
-    let mut crusher = Crusher {
-        position: BlockPos {
+    let mut crusher = Crusher::new(
+        BlockPos {
             x: 20,
             y: 1,
-            z: 1
+            z: 20,
         },
-        direction: Direction::North,
-        max_length: 5,
-        length: 0,
-        tick: 0,
-        tick_per_block: 2,
-        pause_duration: 50,
-        is_reversed: false,
-        is_paused: false
-    };
+        Direction::North,
+        5,
+        5,
+        10,
+        10,
+        20,
+    );
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
@@ -139,6 +137,5 @@ async fn main() -> Result<()> {
         // if  {  }
 
         crusher.tick(&mut server);
-        // crusher.tick(&mut server)?;
     }
 }

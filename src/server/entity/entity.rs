@@ -16,6 +16,7 @@ use crate::server::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
+use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
@@ -170,5 +171,34 @@ impl Entity {
         } else if rotated {
             ClientBoundPacket::from(EntityLook::from_entity(self))
         } else { return None })
+    }
+
+    pub fn is_in_aabb_i32(
+        &self,
+        min_x: i32, min_y: i32, min_z: i32,
+        max_x: i32, max_y: i32, max_z: i32,
+    ) -> bool {
+        // pmo
+        let (min_x, min_y, min_z) = (min_x as f64, min_y as f64, min_z as f64);
+        let (max_x, max_y, max_z) = (max_x as f64, max_y as f64, max_z as f64);
+        let (x, y, z) = (self.pos.x, self.pos.y, self.pos.z);
+        x >= min_x && x <= max_x &&
+        y >= min_y && y <= max_y &&
+        z >= min_z && z <= max_z
+    }
+
+    pub fn is_in_box_i32(
+        &self,
+        x: i32, y: i32, z: i32,
+        width: i32, height: i32, length: i32,
+    ) -> bool {
+        // im too lazy to make this not repeat bunch of stuff
+        let min_x = min(x, x + width);
+        let min_y = min(y, y + height);
+        let min_z = min(z, z + length);
+        let max_x = max(x, x + width);
+        let max_y = max(y, y + height);
+        let max_z = max(z, z + length);
+        self.is_in_aabb_i32(min_x, min_y, min_z, max_x, max_y, max_z)
     }
 }

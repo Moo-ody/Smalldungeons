@@ -14,7 +14,7 @@ pub async fn run_network_thread(
     network_tx: UnboundedSender<NetworkMessage>,
     event_tx: UnboundedSender<ClientEvent>,
 ) {
-    let listener = TcpListener::bind("127.0.0.1:4974").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:4972").await.unwrap();
     println!("Network thread listening on 127.0.0.1:4972");
 
     let mut clients: HashMap<ClientId, (Client, UnboundedSender<Vec<u8>>)> = HashMap::new();
