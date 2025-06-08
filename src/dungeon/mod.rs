@@ -115,7 +115,7 @@ impl Dungeon {
         }
 
         let mut doors: Vec<Door> = Vec::new();
-        
+
         for i in 0..60usize {
             let type_str = layout_str.get(i + 72..i+73).unwrap();
             let (x, z) = DOOR_POSITIONS[i];
@@ -203,8 +203,8 @@ impl Dungeon {
     }
 
     pub fn load_door(&self, door: &Door, world: &mut World) {
-        for dx in 0..5 {
-            for dz in 0..5 {
+        for dx in -2..=2 {
+            for dz in -2..=2 {
                 world.set_block_at(
                     Blocks::Bedrock,
                     door.x + dx,
