@@ -3,7 +3,6 @@ mod server;
 mod dungeon;
 
 use crate::dungeon::crushers::Crusher;
-use crate::dungeon::room::{Room, RoomShape, RoomType};
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
@@ -33,17 +32,6 @@ async fn main() -> Result<()> {
 
     let mut server = Server::initialize(network_tx);
     server.world.server = &mut server;
-
-    // for x in 0..100 {
-    //     for z in 0..100 {
-    //         server.world.chunk_grid.set_block_at(
-    //             Blocks::Stone,
-    //             x,
-    //             0,
-    //             z
-    //         );
-    //     }
-    // }
 
     let spawn_pos = Vec3f {
         x: 25.0,

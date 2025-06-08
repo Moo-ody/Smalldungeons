@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde_json::Number;
 
 use crate::dungeon::door::{Door, DoorType};
-use crate::dungeon::room::{Room, RoomShape, RoomType};
+use crate::dungeon::room::{Room, RoomType};
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -35,8 +35,6 @@ impl Dungeon {
 
         // populate index grid
         for (room_id, room) in rooms.iter().enumerate() {
-            // let segments = room.get_segment_locations();
-
             for (x, z) in room.segments.iter() {
                 let segment_index = x + z * 6;
 
@@ -54,8 +52,8 @@ impl Dungeon {
     }
 
     // Layout String:
-    // 36 x room ids, two digits long each. 0 = no room, 1->6 are special rooms like spawn, puzzles etc
-    // 7+ are normal rooms, with unique ids to differentiate them and preserve layout
+    // 36 x room ids, two digits long each. 00 = no room, 01 -> 06 are special rooms like spawn, puzzles etc
+    // 07 -> ... are normal rooms, with unique ids to differentiate them and preserve layout
     // Doors are 60x single digit numbers in the order left -> right top -> down for every spot they can possibly spawn
     pub fn from_string(layout_str: &str) -> Dungeon {
         let mut rooms: Vec<Room> = Vec::new();
@@ -91,11 +89,7 @@ impl Dungeon {
                     _ => unreachable!()
                 };
 
-                rooms.push(Room {
-                    segments: vec![(x, z)],
-                    room_type,
-                    tick_amount: 0,
-                });
+                rooms.push(Room::new(vec![(x, z)], room_type));
 
                 continue
             }
@@ -107,11 +101,7 @@ impl Dungeon {
 
         // Make the normal rooms
         for (_, segments) in room_id_map {
-            rooms.push(Room {
-                segments,
-                room_type: RoomType::Normal,
-                tick_amount: 0,
-            });
+            rooms.push(Room::new(segments, RoomType::Normal));
         }
 
         let mut doors: Vec<Door> = Vec::new();
