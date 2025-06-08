@@ -34,7 +34,7 @@ impl World {
     pub fn new() -> World {
         World {
             server: std::ptr::null_mut(),
-            chunk_grid: ChunkGrid::new(10),
+            chunk_grid: ChunkGrid::new(14),
             entities: HashMap::new(),
             next_entity_id: 1 // might have to start at 1
         }

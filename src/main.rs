@@ -3,7 +3,7 @@ mod server;
 mod dungeon;
 
 use crate::dungeon::crushers::Crusher;
-use crate::dungeon::room::{Room, RoomType};
+use crate::dungeon::room::{Room, RoomShape, RoomType};
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
@@ -46,44 +46,28 @@ async fn main() -> Result<()> {
     // }
 
     let spawn_pos = Vec3f {
-        x: 6.0,
-        y: 1.0,
-        z: 6.0,
+        x: 25.0,
+        y: 69.0,
+        z: 25.0,
     };
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
     server.world.entities.insert(zombie.entity_id, zombie);
 
-
-    let dungeon = Dungeon::with_rooms(vec![
-            Room {
-                room_x: 0,
-                room_z: 0,
-                tick_amount: 0,
-                room_type: RoomType::Shape2x1,
-            },
-            Room {
-                room_x: 1,
-                room_z: 0,
-                tick_amount: 0,
-                room_type: RoomType::Shape1x1,
-            },
-            Room {
-                room_x: 1,
-                room_z: 1,
-                tick_amount: 0,
-                room_type: RoomType::Shape2x2,
-            },
-        ]);
+    let dungeon = Dungeon::from_string("040809090104050409091011121314151516121314041516121714031802120414061818009999999309099109099199090999999909099999910092999999190099");
 
     for room in &dungeon.rooms {
-        room.load_room(&mut server.world)
+        dungeon.load_room(room, &mut server.world);
+    }
+
+    for door in &dungeon.doors {
+        dungeon.load_door(door, &mut server.world);
     }
 
     let mut crusher = Crusher::new(
         BlockPos {
-            x: 20,
-            y: 1,
+            x: 30,
+            y: 69,
             z: 20,
         },
         Direction::North,
@@ -131,7 +115,8 @@ async fn main() -> Result<()> {
             //     }
             // }
 
-            dungeon.get_room(player);
+            let room = dungeon.get_player_room(player);
+
         }
 
         // if  {  }

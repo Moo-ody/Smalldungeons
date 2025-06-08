@@ -1,60 +1,75 @@
+use crate::dungeon::DUNGEON_ORIGIN;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
+use crate::server::utils::direction::Direction;
 use crate::server::world::World;
 
 pub struct Room {
-    pub room_x: i32,
-    pub room_z: i32,
+    pub segments: Vec<(usize, usize)>,
+    pub room_type: RoomType,
 
     pub tick_amount: u32,
+}
 
-    pub room_type: RoomType,
+pub enum RoomShape {
+    OneByOne,
+    OneByTwo,
+    OneByThree,
+    OneByFour,
+    TwoByTwo,
+    L,
 }
 
 pub enum RoomType {
-    Shape1x1,
-    Shape2x1,
-    Shape2x2,
+    Normal,
+    Puzzle,
+    Trap,
+    Fairy,
+    Entrance,
+    Blood,
+    Yellow,
 }
 
 impl Room {
+    // pub fn get_corner_pos(&self) -> BlockPos {
+    //     BlockPos {
+    //         x: self.room_x as i32 * 32 + DUNGEON_ORIGIN.0,
+    //         y: 68,
+    //         z: self.room_z as i32 * 32 + DUNGEON_ORIGIN.1,
+    //     }
+    // }
 
-
-    pub fn load_room(&self, world: &mut World) {
-        match self.room_type {
-            RoomType::Shape1x1 => {
-
-                let start_x = self.room_x * 33;
-                let start_z = self.room_z * 33;
-
-                for x in start_x..start_x + 32 {
-                    for z in start_z..start_z + 32 {
-                        world.set_block_at(Blocks::Stone, x, 0, z);
-                    }
-                }
-            }
-            RoomType::Shape2x1 => {
-
-                let start_x = self.room_x * 33;
-                let start_z = self.room_z * 33;
-
-                for x in start_x..start_x + 32 {
-                    for z in start_z..start_z + 63 {
-                        world.set_block_at(Blocks::Stone, x, 0, z);
-                    }
-                }
-            }
-            RoomType::Shape2x2 => {
-                let start_x = self.room_x * 33;
-                let start_z = self.room_z * 33;
-
-                for x in start_x..start_x + 63 {
-                    for z in start_z..start_z + 63 {
-                        world.set_block_at(Blocks::Stone, x, 0, z);
-                    }
-                }
-            }
-        }
-    }
+    // pub fn get_segment_locations(&self) -> Vec<(usize, usize)> {
+    //     match self.shape {
+    //         RoomShape::OneByOne => vec![(self.room_x, self.room_z)],
+    //         RoomShape::OneByTwo => vec![
+    //             (self.room_x, self.room_z),
+    //             (self.room_x + 1, self.room_z),
+    //         ],
+    //         RoomShape::OneByThree => vec![
+    //             (self.room_x, self.room_z),
+    //             (self.room_x + 1, self.room_z),
+    //             (self.room_x + 1, self.room_z),
+    //         ],
+    //         RoomShape::OneByFour => vec![
+    //             (self.room_x, self.room_z),
+    //             (self.room_x + 1, self.room_z),
+    //             (self.room_x + 2, self.room_z),
+    //             (self.room_x + 3, self.room_z),
+    //         ],
+    //         RoomShape::TwoByTwo => vec![
+    //             (self.room_x, self.room_z),
+    //             (self.room_x + 1, self.room_z),
+    //             (self.room_x, self.room_z + 1),
+    //             (self.room_x + 1, self.room_z + 1),
+    //         ],
+    //         RoomShape::L => vec![
+    //             (self.room_x, self.room_z),
+    //             (self.room_x, self.room_z + 1),
+    //             (self.room_x + 1, self.room_z + 1),
+    //         ]
+    //     }
+    // }
 
 
     pub fn tick(&mut self) {

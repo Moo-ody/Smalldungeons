@@ -1,4 +1,4 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug, Clone)]
@@ -11,6 +11,15 @@ pub struct BlockPos {
 impl BlockPos {
     pub fn is_invalid(&self) -> bool {
         self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
+    }
+
+    pub fn rotate(&self, rotation: Direction) -> BlockPos {
+        match rotation {
+            Direction::North => BlockPos { x: self.x, y: self.y, z: self.z },
+            Direction::East => BlockPos { x: self.z, y: self.y, z: -self.x },
+            Direction::South => BlockPos { x: -self.x, y: self.y, z: -self.z },
+            Direction::West => BlockPos { x: -self.z, y: self.y, z: self.x },
+        }
     }
 }
 
