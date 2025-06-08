@@ -6,7 +6,7 @@ mod utils;
 use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room_data::RoomData;
+use crate::dungeon::room::room_data::RoomData;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};

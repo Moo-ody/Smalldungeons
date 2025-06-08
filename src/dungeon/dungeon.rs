@@ -1,7 +1,7 @@
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::Room;
-use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::dungeon::room::room::Room;
+use crate::dungeon::room::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_pos::BlockPos;

@@ -105,7 +105,7 @@ impl UI {
                 } else {
                     ("§aReady", 13)
                 };
-                content.insert(4, Some(ItemStack {
+                content[4] = Some(ItemStack {
                     item: 397,
                     stack_size: 1,
                     metadata: 3,
@@ -116,8 +116,8 @@ impl UI {
                         ]),
                         NBT::string("SkullOwner", &player.profile.username),
                     ])),
-                }));
-                content.insert(13, Some(ItemStack {
+                });
+                content[13] = Some(ItemStack {
                     item: 95,
                     stack_size: 1,
                     metadata: color,
@@ -126,8 +126,8 @@ impl UI {
                             NBT::string("Name", item_name)
                         ])
                     ])),
-                }));
-                content.insert(49, Some(ItemStack {
+                });
+                content[49] = Some(ItemStack {
                     item: 166,
                     stack_size: 1,
                     metadata: 0,
@@ -136,7 +136,7 @@ impl UI {
                             NBT::string("Name", "§cClose")
                         ])
                     ])),
-                }));
+                });
                 Some(content)
             }
             _ => None

@@ -1,8 +1,13 @@
-use std::collections::HashSet;
-
+use crate::dungeon::crushers::Crusher;
+use crate::dungeon::door::Door;
 use crate::dungeon::dungeon::DUNGEON_ORIGIN;
+use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
+use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
-use crate::{dungeon::{crushers::Crusher, door::Door, room_data::{RoomData, RoomShape, RoomType}}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
+use crate::server::utils::direction::Direction;
+use crate::server::world::World;
+use std::collections::HashSet;
 
 pub struct Room {
     pub segments: Vec<(usize, usize)>,

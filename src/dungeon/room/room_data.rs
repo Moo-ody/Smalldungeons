@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::dungeon::door::Door;
+use crate::dungeon::room::room::Room;
+use crate::server::block::blocks::Blocks;
 use rand::seq::IteratorRandom;
 use serde_json::Value;
-
-use crate::dungeon::{door::Door, room::Room};
-use crate::server::block::blocks::Blocks;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
