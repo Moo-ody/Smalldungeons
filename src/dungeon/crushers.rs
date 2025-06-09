@@ -62,12 +62,8 @@ impl Crusher {
             }
         } else {
             if self.tick % self.tick_per_block == 0 {
-                let (dx, dz) = match self.direction {
-                    Direction::North => (0, -1),
-                    Direction::East => (1, 0),
-                    Direction::South => (0, 1),
-                    Direction::West => (-1, 0),
-                };
+                let (dx, dz) = self.direction.get_offset();
+                
                 if !self.is_reversed {
                     let x = self.block_pos.x + (self.current_length as i32 * dx);
                     let y = self.block_pos.y;
