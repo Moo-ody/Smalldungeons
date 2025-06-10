@@ -3,6 +3,7 @@ use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
+use crate::net::packets::client_bound::custom_payload::CustomPayload;
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
@@ -55,6 +56,7 @@ register_clientbound_packets! {
     WindowItems,
     Chat,
     BlockChange,
+    CustomPayload,
 
     EntityLookMove,
     EntityHeadLook,

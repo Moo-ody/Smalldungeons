@@ -11,6 +11,7 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
@@ -80,6 +81,12 @@ async fn main() -> Result<()> {
         room.load_room(&mut server.world)
     }
 
+    for x in 0..5 {
+        for y in 0..5 {
+            server.world.set_block_at(Blocks::Stone, x, y, 20);
+        }
+    }
+
     let mut crusher = Crusher::new(
         BlockPos {
             x: 20,
@@ -93,6 +100,7 @@ async fn main() -> Result<()> {
         10,
         20,
     );
+
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
