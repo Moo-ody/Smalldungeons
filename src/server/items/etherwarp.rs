@@ -128,6 +128,8 @@ fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
             // Check if above blocks are air as in Kotlin code
             if world.get_block_at(x, y + 1, z) == Blocks::Air && world.get_block_at(x, y + 2, z) == Blocks::Air {
                 return EtherResult::Valid(x, y, z);
+            } else {
+                return EtherResult::Failed;
             }
         }
 

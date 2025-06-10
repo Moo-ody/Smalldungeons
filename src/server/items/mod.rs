@@ -1,3 +1,4 @@
+use crate::net::packets::packet::SendPacket;
 use crate::server::items::etherwarp::handle_etherwarp;
 use crate::server::player::Player;
 
@@ -23,6 +24,12 @@ impl Item {
                 let server = &player.server_mut();
                 let world = &server.world;
                 let entity = player.get_entity(world)?;
+
+                // test
+                // CustomPayload {
+                //     channel: "rustclear".to_string(),
+                //     data: vec![30],
+                // }.send_packet(player.client_id, &server.network_tx)?;
 
                 if player.is_sneaking {
                     handle_etherwarp(player, &server.network_tx, world, entity)?;

@@ -12,6 +12,7 @@ use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
@@ -79,6 +80,12 @@ async fn main() -> Result<()> {
         room.load_room(&mut server.world)
     }
 
+    for x in 0..5 {
+        for y in 0..5 {
+            server.world.set_block_at(Blocks::Stone, x, y, 20);
+        }
+    }
+
     let mut crusher = Crusher::new(
         BlockPos {
             x: 20,
@@ -122,7 +129,6 @@ async fn main() -> Result<()> {
             }
         }
 
-
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to add a method to only send the right entity packet given movement data based on last sent.
         // also needs to actually be in a vanilla adjacent way.
@@ -155,7 +161,7 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            
+
             dungeon.get_room(player);
         }
 
