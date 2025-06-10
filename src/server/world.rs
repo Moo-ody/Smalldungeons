@@ -41,7 +41,7 @@ impl World {
     }
 
     pub fn server_mut<'a>(&self) -> &'a mut Server {
-        unsafe { self.server.as_mut().unwrap() }
+        unsafe { self.server.as_mut().expect("server is null") }
     }
 
     pub fn new_entity_id(&mut self) -> EntityId {

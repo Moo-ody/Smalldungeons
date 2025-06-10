@@ -47,6 +47,21 @@ macro_rules! entity_type_registry {
                     ),*
                 }
             }
+            
+            pub const fn get_width(&self) -> f32 {
+                match self {
+                    $(
+                        Self::$name => crate::server::entity::r#impl::$path::WIDTH
+                    ),*
+                }
+            }
+            pub const fn get_height(&self) -> f32 {
+                match self {
+                    $(
+                        Self::$name => crate::server::entity::r#impl::$path::HEIGHT
+                    ),*
+                }
+            }
         }
     };
 }

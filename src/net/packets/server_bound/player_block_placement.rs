@@ -33,7 +33,7 @@ impl ServerBoundPacket for PlayerBlockPlacement {
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
         if !self.block_pos.is_invalid() {
-            let mut bp = self.block_pos.clone();
+            let mut bp = self.block_pos;
             match self.placed_direction {
                 0 => bp.y -= 1,
                 1 => bp.y += 1,

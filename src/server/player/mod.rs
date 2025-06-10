@@ -53,7 +53,7 @@ impl Player {
 
     // potentially unsafe
     pub fn server_mut<'a>(&self) -> &'a mut Server {
-        unsafe { self.server.as_mut().unwrap() }
+        unsafe { self.server.as_mut().expect("Server is null") }
     }
 
     pub fn get_entity<'a>(&self, world: &'a World) -> Result<&'a Entity> {

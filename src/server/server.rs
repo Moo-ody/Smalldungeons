@@ -27,7 +27,6 @@ pub struct Server {
     // im not sure about having players in server directly.
     pub players: HashMap<ClientId, Player>,
 }
-
 impl Server {
     pub fn initialize(network_tx: UnboundedSender<NetworkMessage>) -> Server {
         Server {

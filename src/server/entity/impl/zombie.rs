@@ -15,3 +15,6 @@ pub const fn metadata() -> EntityMetadata {
         is_converting: false,
     }
 }
+
+pub const WIDTH: f32 = 0.6;
+pub const HEIGHT: f32 = 1.95;

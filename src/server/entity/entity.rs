@@ -8,10 +8,11 @@ use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
 use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::server::entity::ai::ai_tasks::AiTasks;
-use crate::server::entity::attributes::Attributes;
+use crate::server::entity::attributes::{Attribute, AttributeTypes, Attributes};
 use crate::server::entity::entity_type::EntityType;
-use crate::server::entity::look_helper::LookHelper;
+use crate::server::entity::look_helper::{wrap_to_180, LookHelper};
 use crate::server::entity::metadata::{BaseMetadata, Metadata};
+use crate::server::entity::move_helper::MoveHelper;
 use crate::server::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::vec3f::Vec3f;
@@ -55,12 +56,15 @@ pub struct Entity {
     pub ai_target: Option<EntityId>,
 
     pub look_helper: LookHelper,
+    pub move_helper: MoveHelper,
 
     pub observing_players: HashSet<ClientId>
 }
 
 impl Entity {
     pub fn create_at(entity_type: EntityType, pos: Vec3f, id: EntityId) -> Entity {
+        let width = entity_type.get_width();
+        let height = entity_type.get_height();
         Entity {
             entity_id: id,
             entity_type,
@@ -73,10 +77,10 @@ impl Entity {
             yaw: 0.0,
             pitch: 0.0,
             head_yaw: 0.0,
-            aabb: AABB::new_empty(), // aabb should be determined by height and width, which are determined by entity type and certain entity properties like size.
+            aabb: AABB::from_height_width(width as f64, height as f64),
             health: 20.0, // todo: replace by using max health attribute, add requirement for attributes. could also make max health a normal param instead since its required but well see how i want to implement that in the attribute packet.
-            height: 0.0,
-            width: 0.0,
+            height,
+            width,
             ticks_existed: 0,
 
             metadata: Metadata {
@@ -86,16 +90,29 @@ impl Entity {
                 entity: entity_type.metadata(),
             },
 
-            attributes: Attributes::new(),
+            attributes: Attributes::from([(AttributeTypes::MovementSpeed, Attribute::new(10.0))]),
 
             ai_tasks: entity_type.get_tasks(),
             ai_target: None,
 
             look_helper: LookHelper::from_pos(pos, 10.0, 10.0),
+            move_helper: MoveHelper::from_pos(pos),
 
             observing_players: HashSet::new()
         }
     }
+
+    pub fn positioned_aabb(&self) -> AABB {
+        AABB {
+            min_x: self.pos.x - self.width as f64 / 2.0,
+            min_y: self.pos.y,
+            min_z: self.pos.z - self.width as f64 / 2.0,
+            max_x: self.pos.x + self.width as f64 / 2.0,
+            max_y: self.pos.y + self.height as f64,
+            max_z: self.pos.z + self.width as f64 / 2.0,
+        }
+    }
+    
     pub fn update_position(&mut self, x: f64, y: f64, z: f64) {
         self.prev_pos = self.pos;
         self.pos.x = x;
@@ -110,7 +127,7 @@ impl Entity {
     pub fn update(mut self, world: &mut World, network_tx: &UnboundedSender<NetworkMessage>) -> Self {
         // i dont know where in vanilla this happens but its necessary for vanilla to handle the packet properly and it isnt in the packet handling section.
         // living update mods yaw/pitch stuff if it got an update but that doesnt happen via at least the watchclosest ai and it wouldnt even work for this.
-        self.head_yaw = LookHelper::wrap_to_180(self.head_yaw);
+        self.head_yaw = wrap_to_180(self.head_yaw);
         let mut current = self.update_state(world);
 
         // this has not been checked to see if its in the right order, its just here because it needs to be here for now.

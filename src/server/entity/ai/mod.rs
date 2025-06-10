@@ -2,8 +2,7 @@ use crate::server::entity::entity_type::EntityType;
 
 pub mod task_data;
 pub mod ai_tasks;
-
-
+pub mod pathfinding;
 
 crate::ai_tasks! {
     WatchClosest: 2 => {

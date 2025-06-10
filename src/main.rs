@@ -8,13 +8,16 @@ use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
+use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::direction::Direction;
+use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use std::time::Duration;
@@ -50,11 +53,7 @@ async fn main() -> Result<()> {
         y: 1.0,
         z: 6.0,
     };
-
-    let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
-    server.world.entities.insert(zombie.entity_id, zombie);
-
-
+    // this stuff all being here is kinda messy we should move it at some point.
     let dungeon = Dungeon::with_rooms(vec![
             Room {
                 room_x: 0,
@@ -103,6 +102,11 @@ async fn main() -> Result<()> {
         )
     );
 
+    let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 1, z: 10 }, &server.world)?;
+
+    server.world.entities.insert(zombie.entity_id, zombie);
+
     loop {
         tick_interval.tick().await;
 
@@ -118,6 +122,7 @@ async fn main() -> Result<()> {
             }
         }
 
+
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to add a method to only send the right entity packet given movement data based on last sent.
         // also needs to actually be in a vanilla adjacent way.
@@ -131,6 +136,26 @@ async fn main() -> Result<()> {
             //     }
             // }
 
+            if let Some(player_entity) = server.world.entities.get(&player.entity_id) {
+                if player_entity.ticks_existed % 20 == 0 {
+                    let mut current_index = 1;
+                    for pos in path.iter() {
+                        let particle = Particles::new(
+                            ParticleTypes::Crit,
+                            Vec3f::new(pos.x as f64, pos.y as f64, pos.z as f64),
+                            Vec3f::new(0.1, 0.1, 0.1),
+                            0.0,
+                            current_index,
+                            true,
+                            None,
+                        );
+                        current_index += 1;
+
+                        particle?.send_packet(player.client_id, &server.network_tx)?;
+                    }
+                }
+            }
+            
             dungeon.get_room(player);
         }
 

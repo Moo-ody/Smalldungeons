@@ -10,3 +10,6 @@ pub const fn ai_tasks() -> Option<AiTasks> {
 pub const fn metadata() -> EntityMetadata {
     EntityMetadata::Player
 }
+
+pub const WIDTH: f32 = 0.6;
+pub const HEIGHT: f32 = 1.8;

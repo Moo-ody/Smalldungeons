@@ -7,3 +7,5 @@ pub mod ai;
 pub mod r#impl;
 mod look_helper;
 pub mod metadata;
+mod move_helper;
+mod navigator;

@@ -15,6 +15,7 @@ use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
+use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::pong::Pong;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::server_info::ServerInfo;
@@ -62,6 +63,8 @@ register_clientbound_packets! {
     EntityRelMove,
     EntityLook,
     EntityTeleport,
+    
+    Particles,
 }
 
 register_serverbound_packets! {

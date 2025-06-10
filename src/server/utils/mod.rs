@@ -4,3 +4,4 @@ pub mod nbt;
 pub mod chat_component;
 pub mod color;
 pub mod direction;
+pub mod particles;
