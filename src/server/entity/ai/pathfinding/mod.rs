@@ -1,17 +1,18 @@
 use crate::server::block::block_pos::BlockPos;
 use crate::server::entity::ai::pathfinding::check_collision::CollisionType;
-use crate::server::utils::aabb::AABB;
+use crate::server::entity::ai::pathfinding::entity_context::EntityContext;
 use crate::server::world::World;
 
 pub mod node;
 pub mod pathfinder;
 pub mod check_collision;
+mod entity_context;
 
-fn get_neighbors(pos: &BlockPos, entity_aabb: &AABB, world: &World) -> Vec<BlockPos> {
+fn get_neighbors(pos: &BlockPos, entity: &EntityContext, world: &World) -> Vec<BlockPos> {
     let mut neighbors = Vec::new();
     let directions = [
-        (1, 0), (-1, 0),
-        (0, 1), (0, -1),
+        (1, 0), (0, -1),
+        (0, 1), (-1, 0),
     ];
 
     for (dx, dz) in directions {
@@ -21,23 +22,21 @@ fn get_neighbors(pos: &BlockPos, entity_aabb: &AABB, world: &World) -> Vec<Block
             z: pos.z + dz,
         };
 
-        println!("checking neighbor at {:?}", pos);
-
-        if let Some(safe_point) = get_safe_point(pos, entity_aabb, world) {
+        if let Some(safe_point) = get_safe_point(pos, entity, world) {
             neighbors.push(safe_point);
-            println!("neighbor is safe! ")
-        } else {
-            println!("neighbor is unsafe...")
         }
     }
 
     neighbors
 }
 
-pub fn is_valid(pos: &BlockPos, entity_aabb: &AABB, world: &World) -> bool {
-    for x in entity_aabb.min_x.floor() as i32..entity_aabb.max_x.ceil() as i32 {
-        for y in entity_aabb.min_y.floor() as i32..entity_aabb.max_y.ceil() as i32 {
-            for z in entity_aabb.min_z.floor() as i32..entity_aabb.max_z.ceil() as i32 {
+pub fn is_valid(pos: &BlockPos, entity: &EntityContext, world: &World) -> bool {
+    let width = entity.width.ceil() as i32;
+    let height = entity.height.ceil() as i32;
+
+    for x in pos.x..pos.x + width {
+        for y in pos.y..pos.y + height {
+            for z in pos.z..pos.z + width {
                 let block = world.get_block_at(x, y, z);
                 let path_type = block.collision_type();
                 if path_type != CollisionType::Clear { // todo rest of this
@@ -49,34 +48,33 @@ pub fn is_valid(pos: &BlockPos, entity_aabb: &AABB, world: &World) -> bool {
     true
 }
 
-pub fn get_safe_point(pos: BlockPos, entity_aabb: &AABB, world: &World) -> Option<BlockPos> {
-    let mut target_y = pos.y - 1;
-    let collision = world.get_block_at(pos.x, target_y, pos.z).collision_type();
-    println!("collision at {:?} is {:?}", pos.replace_y(target_y), collision);
+pub fn is_valid_position(pos: &BlockPos, entity: &EntityContext, world: &World) -> bool {
+    let below = pos.add_y(-1);
+    let collision = world.get_block_at(below.x, below.y, below.z).collision_type();
+    let valid = is_valid(pos, entity, world);
+    collision == CollisionType::Solid && valid
+}
 
-    if collision == CollisionType::Solid && is_valid(&pos, entity_aabb, world) {
-        return Some(pos);
-    }
-
-    for dy in 1..=3 {
-        let ny = pos.y - dy;
-        let collision = world.get_block_at(pos.x, ny, pos.z).collision_type();
-        if collision == CollisionType::Solid && is_valid(&pos.replace_y(ny), entity_aabb, world) {
-            return Some(pos.replace_y(ny));
+pub fn get_safe_point(pos: BlockPos, entity: &EntityContext, world: &World) -> Option<BlockPos> {
+    for dy in 0..=3 {
+        let candidate = pos.add_y(-dy);
+        if is_valid_position(&candidate, entity, world) {
+            return Some(candidate);
         }
     }
 
     for dy in 1..=1 { //todo: step height
-        let ny = pos.y + dy;
-        let collision = world.get_block_at(pos.x, ny, pos.z).collision_type();
-        if collision == CollisionType::Solid && is_valid(&pos.replace_y(ny), entity_aabb, world) {
-            return Some(pos.replace_y(ny));
+        let candidate = pos.add_y(dy);
+        if is_valid_position(&candidate, entity, world) {
+            return Some(candidate);
         }
     }
 
     None
 }
 
-pub fn heuristic(a: &BlockPos, b: &BlockPos) -> i32 {
-    (a.x - b.x).abs() + (a.y - b.y).abs() + (a.z - b.z).abs()
+pub const fn heuristic(a: &BlockPos, b: &BlockPos) -> i32 {
+    a.distance_squared(b)
+
+    // (a.x - b.x).abs() + (a.y - b.y).abs() + (a.z - b.z).abs()
 }

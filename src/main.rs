@@ -86,6 +86,23 @@ async fn main() -> Result<()> {
         }
     }
 
+    let blocks = [
+        (8, 1, 5),
+        (8, 1, 6),
+        (8, 1, 7),
+        (7, 1, 5),
+        (7, 1, 6),
+        (7, 1, 7),
+        (9, 1, 5),
+        (9, 1, 6),
+        (9, 1, 7),
+        (6, 1, 8),
+        (5, 1, 8)
+    ];
+    for (x, y, z) in blocks.iter() {
+        server.world.set_block_at(Blocks::Stone, *x, *y, *z);
+    }
+
     let mut crusher = Crusher::new(
         BlockPos {
             x: 20,
@@ -110,7 +127,7 @@ async fn main() -> Result<()> {
     );
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
-    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 1, z: 10 }, &server.world)?;
+    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 15, y: 1, z: 15 }, &server.world)?;
 
     server.world.entities.insert(zombie.entity_id, zombie);
 

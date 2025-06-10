@@ -1,4 +1,5 @@
 use crate::server::block::block_pos::BlockPos;
+use crate::server::entity::ai::pathfinding::entity_context::EntityContext;
 use crate::server::entity::ai::pathfinding::node::{NodeData, NodeEntry};
 use crate::server::entity::ai::pathfinding::{get_neighbors, heuristic};
 use crate::server::entity::entity::Entity;
@@ -28,7 +29,6 @@ impl Pathfinder {
         });
 
         while let Some(NodeEntry { pos: current, .. }) = open.pop() {
-            println!("current pos: {:?}", current);
             if current == *goal {
                 let mut path = vec![current];
                 let mut cur = current;
@@ -48,8 +48,9 @@ impl Pathfinder {
             }
             node_data.visited = true;
 
-            for neighbor_pos in get_neighbors(&current, &entity.positioned_aabb(), world) {
-                let tentative = data.get(&current).ok_or_else(|| anyhow::anyhow!("failed to get cost from g_score..."))?.tentative_cost + 1.0; // adjust depending on cost?
+            let context = EntityContext::from_entity(entity);
+            for neighbor_pos in get_neighbors(&current, &context, world) {
+                let tentative = data.get(&current).ok_or_else(|| anyhow::anyhow!("failed to get data..."))?.tentative_cost + 1.0; // adjust depending on cost?
 
                 if data.get(&neighbor_pos).map_or(true, |existing| tentative < existing.tentative_cost) {
                     data.insert(neighbor_pos, NodeData {
