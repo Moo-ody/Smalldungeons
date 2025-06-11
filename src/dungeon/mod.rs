@@ -155,39 +155,64 @@ impl Dungeon {
         println!("{:?}", room.segments);
 
         for (x, z) in room.segments.iter() {
-            for dx in 0..31 {
-                for dz in 0..31 {
-                    world.set_block_at(
-                        Blocks::Bedrock,
-                        dx + *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                        68,
-                        dz + *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                    );
-                }
-            }
+            
+            // Temporary for room colors, will be changed later on to paste saved room block states
+            let block = match room.room_type {
+                RoomType::Normal => Blocks::BrownWool,
+                RoomType::Blood => Blocks::RedWool,
+                RoomType::Entrance => Blocks::GreenWool,
+                RoomType::Fairy => Blocks::PinkWool,
+                RoomType::Trap => Blocks::OrangeWool,
+                RoomType::Yellow => Blocks::YellowWool,
+                RoomType::Puzzle => Blocks::PurpleWool,
+            };
+
+            world.fill_blocks(
+                block,
+                (
+                    *x as i32 * 32 + DUNGEON_ORIGIN.0,
+                    68,
+                    *z as i32 * 32 + DUNGEON_ORIGIN.1,
+                ),
+                (
+                    *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+                    68,
+                    *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+                )
+            );
 
             // Merge to the side
             if room.segments.contains(&(x+1, *z)) {
-                for dz in 0..31 {
-                    world.set_block_at(
-                        Blocks::Bedrock,
+                world.fill_blocks(
+                    block,
+                    (
                         *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
                         68,
-                        dz + *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                    );
-                }
+                        *z as i32 * 32 + DUNGEON_ORIGIN.1,
+                    ),
+                    (
+                        *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
+                        68,
+                        *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+                    )
+                );
             }
             
-            // Merge below
-            if room.segments.contains(&(*x, z + 1)) {
-                for dx in 0..31 {
-                    world.set_block_at(
-                        Blocks::Bedrock,
-                        dx + *x as i32 * 32 + DUNGEON_ORIGIN.0,
+            // // Merge below
+            if room.segments.contains(&(*x, z+1)) {
+                world.fill_blocks(
+                    block,
+                    (
+                        *x as i32 * 32 + DUNGEON_ORIGIN.0,
                         68,
                         *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
-                    );
-                }
+                    ),
+                    (
+                        *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+                        68,
+                        *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
+                    )
+                );
             }
         }
     }

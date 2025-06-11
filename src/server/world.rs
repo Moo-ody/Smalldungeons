@@ -7,6 +7,7 @@ use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::vec3f::Vec3f;
+use std::cmp::min;
 use std::collections::HashMap;
 
 pub struct World {
@@ -86,6 +87,25 @@ impl World {
             }.send_packet(*client_id, &server.network_tx).unwrap();
         }
         self.chunk_grid.set_block_at(block, x, y, z);
+    }
+
+    pub fn fill_blocks(&mut self, block: Blocks, start: (i32, i32, i32), end: (i32, i32, i32)) {
+        // TODO: Make this use the multi block fill packet instead of spamming set_block_at
+        let x0 = start.0.min(end.0);
+        let y0 = start.1.min(end.1);
+        let z0 = start.2.min(end.2);
+        
+        let x1 = start.0.max(end.0);
+        let y1 = start.1.max(end.1);
+        let z1 = start.2.max(end.2);
+
+        for x in x0..=x1 {
+            for z in z0..=z1 {
+                for y in y0..=y1 {
+                    self.set_block_at(block, x, y, z);
+                }
+            }
+        }
     }
 
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {

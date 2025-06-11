@@ -78,6 +78,24 @@ crate::register_blocks! {
         BirchWood { axis: Axis } => 2 | ((axis as u8) << 2),
         JungleWood { axis: Axis } => 3 | ((axis as u8) << 2),
     },
+    35 => {
+        WhiteWool => 0,
+        OrangeWool => 1,
+        MagentaWool => 2,
+        LightBlueWool => 3,
+        YellowWool => 4,
+        LimeWool => 5,
+        PinkWool => 6,
+        GrayWool => 7,
+        LightGrayWool => 8,
+        CyanWool => 9,
+        PurpleWool => 10,
+        BlueWool => 11,
+        BrownWool => 12,
+        GreenWool => 13,
+        RedWool => 14,
+        BlackWool => 15,
+    }
 }
 
 impl Blocks {
@@ -121,6 +139,24 @@ impl Blocks {
             }
             7 => Blocks::Bedrock,
             8 => Blocks::FlowingWater { level: meta },
+            35 => match meta {
+                1 => Blocks::OrangeWool,
+                2 => Blocks::MagentaWool,
+                3 => Blocks::LightBlueWool,
+                4 => Blocks::YellowWool,
+                5 => Blocks::LimeWool,
+                6 => Blocks::PinkWool,
+                7 => Blocks::GrayWool,
+                8 => Blocks::LightGrayWool,
+                9 => Blocks::CyanWool,
+                10 => Blocks::PurpleWool,
+                11 => Blocks::BlueWool,
+                12 => Blocks::BrownWool,
+                13 => Blocks::GreenWool,
+                14 => Blocks::RedWool,
+                15 => Blocks::BlackWool,
+                _ => Blocks::WhiteWool
+            }
             _ => todo!() // for now to make it obvious
         }
     }
