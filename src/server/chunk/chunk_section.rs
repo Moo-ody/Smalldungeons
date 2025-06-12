@@ -30,7 +30,7 @@ impl ChunkSection {
     
 
     pub fn set_block(&mut self, block: Blocks, index: usize) {
-        if !self.data[index] == 0 {
+        if self.data[index] != 0 {
             self.solid_block_amount -= 1;
         }
         if block != Blocks::Air {
