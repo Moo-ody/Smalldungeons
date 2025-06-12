@@ -10,6 +10,7 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
@@ -65,6 +66,29 @@ async fn main() -> Result<()> {
         10,
         20,
     );
+
+    let fairy_room = include_bytes!("room_data/Fairy_462_-312_1x1");
+
+    println!("{} {}", fairy_room.len(), fairy_room.len() / 2);
+
+    for i in (0..fairy_room.len() - 1).step_by(2) {
+        let state_id = ((fairy_room[i] as u16) << 8) | fairy_room[i+1] as u16;
+
+        // println!("{:#b} | {} | {}", state_id, state_id >> 4, state_id & 0xF);
+
+        let block = Blocks::from_block_state_id(state_id);
+
+        // println!("{:?}", block);
+        let num = i / 2;
+        let x = num % 31;
+        let z = (num / 31) % 31;
+        let y = num / (31 * 31);
+
+        server.world.set_block_at(block, x as i32, y as i32, z as i32);
+
+    }
+
+    // println!("{:?}", fairy_room);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(

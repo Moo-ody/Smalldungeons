@@ -157,7 +157,7 @@ impl Blocks {
                 15 => Blocks::BlackWool,
                 _ => Blocks::WhiteWool
             }
-            _ => todo!() // for now to make it obvious
+            _ => Blocks::Air // for now to make it obvious
         }
     }
 }
