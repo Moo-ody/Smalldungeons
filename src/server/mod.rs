@@ -7,4 +7,3 @@ pub mod items;
 pub mod world;
 pub mod server;
 pub mod player;
-pub mod dungeon;
