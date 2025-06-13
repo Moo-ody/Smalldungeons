@@ -2,7 +2,9 @@ mod net;
 mod server;
 mod dungeon;
 
-use crate::dungeon::crushers::Crusher;
+use crate::dungeon::room::{Room};
+use crate::dungeon::room_data::RoomData;
+use crate::{dungeon::crushers::Crusher};
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
@@ -10,13 +12,13 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
-use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::direction::Direction;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
+use serde_json::ser;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -46,7 +48,7 @@ async fn main() -> Result<()> {
     let dungeon = Dungeon::from_string("040809090104050409091011121314151516121314041516121714031802120414061818009999999309099109099199090999999909099999910092999999190099");
 
     for room in &dungeon.rooms {
-        dungeon.load_room(room, &mut server.world);
+        room.load_into_world(&mut server.world);
     }
 
     for door in &dungeon.doors {
@@ -67,28 +69,15 @@ async fn main() -> Result<()> {
         20,
     );
 
-    let fairy_room = include_bytes!("room_data/Fairy_462_-312_1x1");
+    let room_to_load = include_str!("room_data/462,-312");
 
-    println!("{} {}", fairy_room.len(), fairy_room.len() / 2);
+    let room_data = RoomData::from_raw_json(room_to_load);
+    
+    let room = Room::new(vec![(0, 0)], room_data);
+    
+    room.load_into_world(&mut server.world);
 
-    for i in (0..fairy_room.len() - 1).step_by(2) {
-        let state_id = ((fairy_room[i] as u16) << 8) | fairy_room[i+1] as u16;
-
-        // println!("{:#b} | {} | {}", state_id, state_id >> 4, state_id & 0xF);
-
-        let block = Blocks::from_block_state_id(state_id);
-
-        // println!("{:?}", block);
-        let num = i / 2;
-        let x = num % 31;
-        let z = (num / 31) % 31;
-        let y = num / (31 * 31);
-
-        server.world.set_block_at(block, x as i32, y as i32, z as i32);
-
-    }
-
-    // println!("{:?}", fairy_room);
+    // println!("Room Data: {:?}", room_data);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(

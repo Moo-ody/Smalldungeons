@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use serde_json::Number;
-
 use crate::dungeon::door::{Door, DoorType};
-use crate::dungeon::room::{Room, RoomType};
+use crate::dungeon::room::Room;
+use crate::dungeon::room_data::{RoomData, RoomType};
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -11,6 +10,7 @@ use crate::server::world::World;
 pub mod room;
 pub mod door;
 pub mod crushers;
+pub mod room_data;
 
 // The top leftmost corner of the dungeon
 const DUNGEON_ORIGIN: (i32, i32) = (0, 0);
@@ -42,7 +42,7 @@ impl Dungeon {
             }
         }
 
-        println!("grid {:?}", &index_grid);
+        // println!("grid {:?}", &index_grid);
 
         Dungeon {
             rooms,
@@ -89,7 +89,10 @@ impl Dungeon {
                     _ => unreachable!()
                 };
 
-                rooms.push(Room::new(vec![(x, z)], room_type));
+                let mut room_data = RoomData::dummy();
+                room_data.room_type = room_type;
+
+                rooms.push(Room::new(vec![(x, z)], room_data));
 
                 continue
             }
@@ -101,7 +104,7 @@ impl Dungeon {
 
         // Make the normal rooms
         for (_, segments) in room_id_map {
-            rooms.push(Room::new(segments, RoomType::Normal));
+            rooms.push(Room::new(segments, RoomData::dummy()));
         }
 
         let mut doors: Vec<Door> = Vec::new();
@@ -148,73 +151,6 @@ impl Dungeon {
         let entity = player.get_entity(&server.world).unwrap();
 
         self.get_room_at(entity.pos.x as i32, entity.pos.z as i32)
-    }
-
-    pub fn load_room(&self, room: &Room, world: &mut World) {
-
-        println!("{:?}", room.segments);
-
-        for (x, z) in room.segments.iter() {
-            
-            // Temporary for room colors, will be changed later on to paste saved room block states
-            let block = match room.room_type {
-                RoomType::Normal => Blocks::BrownWool,
-                RoomType::Blood => Blocks::RedWool,
-                RoomType::Entrance => Blocks::GreenWool,
-                RoomType::Fairy => Blocks::PinkWool,
-                RoomType::Trap => Blocks::OrangeWool,
-                RoomType::Yellow => Blocks::YellowWool,
-                RoomType::Puzzle => Blocks::PurpleWool,
-            };
-
-            world.fill_blocks(
-                block,
-                (
-                    *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                    68,
-                    *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                ),
-                (
-                    *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
-                    68,
-                    *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
-                )
-            );
-
-            // Merge to the side
-            if room.segments.contains(&(x+1, *z)) {
-                world.fill_blocks(
-                    block,
-                    (
-                        *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        68,
-                        *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                    ),
-                    (
-                        *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        68,
-                        *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
-                    )
-                );
-            }
-            
-            // // Merge below
-            if room.segments.contains(&(*x, z+1)) {
-                world.fill_blocks(
-                    block,
-                    (
-                        *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                        68,
-                        *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
-                    ),
-                    (
-                        *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
-                        68,
-                        *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
-                    )
-                );
-            }
-        }
     }
 
     pub fn load_door(&self, door: &Door, world: &mut World) {
