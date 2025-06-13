@@ -18,7 +18,9 @@ use crate::server::server::Server;
 use crate::server::utils::direction::Direction;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
+use include_dir::include_dir;
 use serde_json::ser;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -45,7 +47,25 @@ async fn main() -> Result<()> {
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
     server.world.entities.insert(zombie.entity_id, zombie);
 
-    let dungeon = Dungeon::from_string("040809090104050409091011121314151516121314041516121714031802120414061818009999999309099109099199090999999909099999910092999999190099");
+    let rooms_dir = include_dir!("src/room_data/");
+
+    let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
+        .iter()
+        .map(|file| {
+            let file = file.as_file().unwrap();
+
+            let contents = file.contents_utf8().unwrap();
+            let name = file.path().file_name().unwrap().to_str().unwrap();
+            let room_data = RoomData::from_raw_json(contents);
+
+            let name_parts: Vec<&str> = name.splitn(3, ",").collect();
+            let room_id = name_parts.get(0).unwrap().parse::<usize>().unwrap();
+
+            (room_id, room_data)
+        }).collect();
+
+    let dungeon_str = "040809090104050409091011121314151516121314041516121714031802120414061818009999999309099109099199090999999909099999910092999999190099";
+    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
 
     for room in &dungeon.rooms {
         room.load_into_world(&mut server.world);
@@ -69,13 +89,13 @@ async fn main() -> Result<()> {
         20,
     );
 
-    let room_to_load = include_str!("room_data/462,-312");
+    // let room_to_load = include_str!("room_data/462,-312");
 
-    let room_data = RoomData::from_raw_json(room_to_load);
+    // let room_data = RoomData::from_raw_json(room_to_load);
     
-    let room = Room::new(vec![(0, 0)], room_data);
+    // let room = Room::new(vec![(0, 0)], room_data);
     
-    room.load_into_world(&mut server.world);
+    // room.load_into_world(&mut server.world);
 
     // println!("Room Data: {:?}", room_data);
 

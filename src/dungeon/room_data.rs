@@ -1,10 +1,11 @@
-use std::os::linux::raw;
+use std::{collections::HashMap, os::linux::raw};
 
+use rand::seq::{IndexedRandom, IteratorRandom};
 use serde_json::{json, Value};
 
 use crate::server::block::blocks::Blocks;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum RoomShape {
     OneByOne,
     OneByTwo,
@@ -28,7 +29,7 @@ impl RoomShape {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum RoomType {
     Normal,
     Puzzle,
@@ -54,7 +55,7 @@ impl RoomType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RoomData {
     pub name: String,
     pub shape: RoomShape,
@@ -115,4 +116,15 @@ impl RoomData {
             block_data: vec![]
         }
     }
+}
+
+pub fn get_random_data_with_type(room_type: RoomType, data_storage: &HashMap<usize, RoomData>) -> RoomData {
+    let mut rng = rand::rng();
+    
+    data_storage.iter()
+        .filter(|data| data.1.room_type == room_type)
+        .map(|x| x.1)
+        .choose(&mut rng)
+        .unwrap_or(&RoomData::dummy())
+        .clone()
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::room::Room;
-use crate::dungeon::room_data::{RoomData, RoomType};
+use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomType};
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -55,7 +55,7 @@ impl Dungeon {
     // 36 x room ids, two digits long each. 00 = no room, 01 -> 06 are special rooms like spawn, puzzles etc
     // 07 -> ... are normal rooms, with unique ids to differentiate them and preserve layout
     // Doors are 60x single digit numbers in the order left -> right top -> down for every spot they can possibly spawn
-    pub fn from_string(layout_str: &str) -> Dungeon {
+    pub fn from_string(layout_str: &str, room_data_storage: &HashMap<usize, RoomData>) -> Dungeon {
         let mut rooms: Vec<Room> = Vec::new();
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
         let mut room_id_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
@@ -89,7 +89,7 @@ impl Dungeon {
                     _ => unreachable!()
                 };
 
-                let mut room_data = RoomData::dummy();
+                let mut room_data = get_random_data_with_type(room_type, room_data_storage);
                 room_data.room_type = room_type;
 
                 rooms.push(Room::new(vec![(x, z)], room_data));
@@ -104,7 +104,7 @@ impl Dungeon {
 
         // Make the normal rooms
         for (_, segments) in room_id_map {
-            rooms.push(Room::new(segments, RoomData::dummy()));
+            rooms.push(Room::new(segments, get_random_data_with_type(RoomType::Normal, room_data_storage)));
         }
 
         let mut doors: Vec<Door> = Vec::new();

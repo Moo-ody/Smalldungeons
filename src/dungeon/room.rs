@@ -109,11 +109,15 @@ impl Room {
             return;
         }
 
+        let corner = self.get_corner_pos();
+        let x0 = corner.x;
+        let z0 = corner.z;
+
         for (i, block) in self.room_data.block_data.iter().enumerate() {
             let ind = i as i32;
 
-            let x = ind % self.room_data.width;
-            let z = (ind / self.room_data.width) % self.room_data.length;
+            let x = x0 + ind % self.room_data.width;
+            let z = z0 + (ind / self.room_data.width) % self.room_data.length;
             let y = self.room_data.bottom + ind / (self.room_data.width * self.room_data.length);
 
             world.set_block_at(*block, x, y, z);
