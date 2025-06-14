@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::room::Room;
-use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomType};
+use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::server::block::block_parameter::Axis;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -60,6 +61,36 @@ impl Dungeon {
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
         let mut room_id_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
 
+        let mut doors: Vec<Door> = Vec::new();
+
+        for i in 0..60usize {
+            let type_str = layout_str.get(i + 72..i+73).unwrap();
+            let (x, z) = DOOR_POSITIONS[i];
+
+            let door_type = match type_str {
+                "0" => Some(DoorType::NORMAL),
+                "1" => Some(DoorType::WITHER),
+                "2" => Some(DoorType::BLOOD),
+                "3" => Some(DoorType::ENTRANCE),
+                _ => None,
+            };
+
+            if !door_type.is_none() {
+                let direction = match x % 2 {
+                    0 => Axis::Z,
+                    1 => Axis::X,
+                    _ => unreachable!(),
+                };
+
+                doors.push(Door {
+                    x,
+                    z,
+                    direction,
+                    door_type: door_type.unwrap()
+                })
+            }
+        }
+
         for i in 0..36 {
             let substr = layout_str.get(i*2..i*2+2);
             let x = i % 6;
@@ -89,10 +120,19 @@ impl Dungeon {
                     _ => unreachable!()
                 };
 
-                let mut room_data = get_random_data_with_type(room_type, room_data_storage);
+                let mut room_data = get_random_data_with_type(
+                    room_type,
+                    RoomShape::OneByOne,
+                    room_data_storage
+                );
+
                 room_data.room_type = room_type;
 
-                rooms.push(Room::new(vec![(x, z)], room_data));
+                rooms.push(Room::new(
+                    vec![(x, z)],
+                    &doors,
+                    room_data
+                ));
 
                 continue
             }
@@ -104,30 +144,17 @@ impl Dungeon {
 
         // Make the normal rooms
         for (_, segments) in room_id_map {
-            rooms.push(Room::new(segments, get_random_data_with_type(RoomType::Normal, room_data_storage)));
-        }
+            let shape = RoomShape::from_segments(&segments);
 
-        let mut doors: Vec<Door> = Vec::new();
-
-        for i in 0..60usize {
-            let type_str = layout_str.get(i + 72..i+73).unwrap();
-            let (x, z) = DOOR_POSITIONS[i];
-
-            let door_type = match type_str {
-                "0" => Some(DoorType::NORMAL),
-                "1" => Some(DoorType::WITHER),
-                "2" => Some(DoorType::BLOOD),
-                "3" => Some(DoorType::ENTRANCE),
-                _ => None,
-            };
-
-            if !door_type.is_none() {
-                doors.push(Door {
-                    x,
-                    z,
-                    door_type: door_type.unwrap()
-                })
-            }
+            rooms.push(Room::new(
+                segments,
+                &doors,
+                get_random_data_with_type(
+                    RoomType::Normal,
+                    shape,
+                    room_data_storage
+                )
+            ));
         }
 
         Dungeon::with_rooms_and_doors(rooms, doors)

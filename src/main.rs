@@ -2,8 +2,10 @@ mod net;
 mod server;
 mod dungeon;
 
+use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::room::{Room};
-use crate::dungeon::room_data::RoomData;
+use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::server::block::block_parameter::Axis;
 use crate::{dungeon::crushers::Crusher};
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
@@ -19,6 +21,7 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use include_dir::include_dir;
+use rand::seq::IndexedRandom;
 use serde_json::ser;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -58,16 +61,48 @@ async fn main() -> Result<()> {
             let name = file.path().file_name().unwrap().to_str().unwrap();
             let room_data = RoomData::from_raw_json(contents);
 
-            let name_parts: Vec<&str> = name.splitn(3, ",").collect();
+            let name_parts: Vec<&str> = name.split(",").collect();
             let room_id = name_parts.get(0).unwrap().parse::<usize>().unwrap();
 
             (room_id, room_data)
         }).collect();
+    
+    let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
+        .split("\n")
+        .collect::<Vec<&str>>();
 
-    let dungeon_str = "040809090104050409091011121314151516121314041516121714031802120414061818009999999309099109099199090999999909099999910092999999190099";
+    let mut rng = rand::rng();
+    let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
+    println!("Dungeon String: {}", dungeon_str);
+
     let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
+    // let doors = vec![Door { x: 0, z: 0, direction: Axis::X, door_type: DoorType::NORMAL}];
+    // let dungeon = Dungeon::with_rooms_and_doors(
+    //     vec![
+    //         Room::new(
+    //             vec![(3, 1), (3, 2), (3, 3)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByThree, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(1, 0), (2, 0), (3, 0), (4, 0)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByFour, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(1, 1), (2, 1)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByTwo, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(2, 2)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByOne, &room_data_storage)
+    //         ),
+    //     ], doors);
 
     for room in &dungeon.rooms {
+        println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
     }
 

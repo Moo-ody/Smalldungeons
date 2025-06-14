@@ -1,11 +1,11 @@
-use std::{collections::HashMap, os::linux::raw};
+use std::{collections::{HashMap, HashSet}};
 
-use rand::seq::{IndexedRandom, IteratorRandom};
-use serde_json::{json, Value};
+use rand::seq::{IteratorRandom};
+use serde_json::{Value};
 
 use crate::server::block::blocks::Blocks;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
     OneByOne,
     OneByTwo,
@@ -13,6 +13,7 @@ pub enum RoomShape {
     OneByFour,
     TwoByTwo,
     L,
+    Empty, // Shouldn't happen probably
 }
 
 impl RoomShape {
@@ -25,6 +26,34 @@ impl RoomShape {
             "2x2" => Self::TwoByTwo,
             "L" => Self::L,
             _ => unimplemented!(),
+        }
+    }
+
+    pub fn from_segments(segments: &Vec<(usize, usize)>) -> RoomShape {
+
+        let unique_x = segments.iter()
+            .map(|x| x.0)
+            .collect::<HashSet<usize>>();
+
+        let unique_z = segments.iter()
+            .map(|x| x.1)
+            .collect::<HashSet<usize>>();
+
+        let not_long = unique_x.len() > 1 && unique_z.len() > 1;
+
+        // Impossible for rooms to have < 1 or > 4 segments
+        match segments.len() {
+            1 => RoomShape::OneByOne,
+            2 => RoomShape::OneByTwo,
+            3 => match not_long {
+                true => RoomShape::L,
+                false => RoomShape::OneByThree,
+            },
+            4 => match not_long {
+                true => RoomShape::TwoByTwo,
+                false => RoomShape::OneByFour,
+            },
+            _ => RoomShape::Empty,
         }
     }
 }
@@ -118,11 +147,15 @@ impl RoomData {
     }
 }
 
-pub fn get_random_data_with_type(room_type: RoomType, data_storage: &HashMap<usize, RoomData>) -> RoomData {
+pub fn get_random_data_with_type(
+    room_type: RoomType,
+    room_shape: RoomShape,
+    data_storage: &HashMap<usize, RoomData>
+) -> RoomData {
     let mut rng = rand::rng();
     
     data_storage.iter()
-        .filter(|data| data.1.room_type == room_type)
+        .filter(|data| data.1.room_type == room_type && data.1.shape == room_shape)
         .map(|x| x.1)
         .choose(&mut rng)
         .unwrap_or(&RoomData::dummy())

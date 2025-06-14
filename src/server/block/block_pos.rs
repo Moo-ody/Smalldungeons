@@ -13,10 +13,10 @@ impl BlockPos {
         self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
     }
 
-    pub fn rotate(&self, rotation: Direction) -> BlockPos {
+    pub fn rotate(&self, rotation: &Direction) -> BlockPos {
         match rotation {
             Direction::North => BlockPos { x: self.x, y: self.y, z: self.z },
-            Direction::East => BlockPos { x: self.z, y: self.y, z: -self.x },
+            Direction::East => BlockPos { x: -self.z, y: self.y, z: self.x },
             Direction::South => BlockPos { x: -self.x, y: self.y, z: -self.z },
             Direction::West => BlockPos { x: -self.z, y: self.y, z: self.x },
         }

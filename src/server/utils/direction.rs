@@ -1,5 +1,6 @@
 
 #[repr(u8)]
+#[derive(Debug)]
 pub enum Direction {
     North, // -Z
     East, // // +X
