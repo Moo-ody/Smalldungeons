@@ -1,3 +1,4 @@
+use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::Player;
@@ -7,6 +8,7 @@ use indoc::indoc;
 
 mod etherwarp;
 pub mod item_stack;
+mod ether_transmission;
 
 /// List of items available to be used
 /// TODO, more
@@ -49,7 +51,7 @@ impl Item {
                         NBT::string("Name", "§9Diamond Pickaxe"),
                         NBT::list_from_string("Lore", indoc! {r#"
                             §8Breaking Power 4
-                            
+
                             §9Efficiency X
                             §7Increases how quickly your tool
                             §7breaks blocks.
@@ -89,6 +91,12 @@ impl Item {
                 if player.is_sneaking {
                     handle_ether_warp(player, &server.network_tx, world, entity)?;
                 }
+                else {
+                    handle_teleport(player, &server.network_tx, world, entity)?;
+                }
+
+                // let pos = raycast_first_solid_block(world, entity, 60.0);
+                // println!("pos raycasted {:?}", pos)
             }
             Item::SpiritSceptre => {
                 // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but

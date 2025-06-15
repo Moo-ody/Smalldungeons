@@ -2,8 +2,11 @@ mod net;
 mod server;
 mod dungeon;
 
-use crate::dungeon::crushers::Crusher;
-use crate::dungeon::room::{Room, RoomType};
+use crate::dungeon::door::{Door, DoorType};
+use crate::dungeon::room::{Room};
+use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::server::block::block_parameter::Axis;
+use crate::{dungeon::crushers::Crusher};
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
@@ -23,6 +26,10 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
+use include_dir::include_dir;
+use rand::seq::IndexedRandom;
+use serde_json::ser;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -40,76 +47,77 @@ async fn main() -> Result<()> {
     let mut server = Server::initialize(network_tx);
     server.world.server = &mut server;
 
-    // for x in 0..100 {
-    //     for z in 0..100 {
-    //         server.world.chunk_grid.set_block_at(
-    //             Blocks::Stone,
-    //             x,
-    //             0,
-    //             z
-    //         );
-    //     }
-    // }
-
     let spawn_pos = Vec3f {
-        x: 6.0,
-        y: 1.0,
-        z: 6.0,
+        x: 25.0,
+        y: 69.0,
+        z: 25.0,
     };
-    // this stuff all being here is kinda messy we should move it at some point.
-    let dungeon = Dungeon::with_rooms(vec![
-            Room {
-                room_x: 0,
-                room_z: 0,
-                tick_amount: 0,
-                room_type: RoomType::Shape2x1,
-            },
-            Room {
-                room_x: 1,
-                room_z: 0,
-                tick_amount: 0,
-                room_type: RoomType::Shape1x1,
-            },
-            Room {
-                room_x: 1,
-                room_z: 1,
-                tick_amount: 0,
-                room_type: RoomType::Shape2x2,
-            },
-        ]);
+
+    let rooms_dir = include_dir!("src/room_data/");
+
+    let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
+        .iter()
+        .map(|file| {
+            let file = file.as_file().unwrap();
+
+            let contents = file.contents_utf8().unwrap();
+            let name = file.path().file_name().unwrap().to_str().unwrap();
+            let room_data = RoomData::from_raw_json(contents);
+
+            let name_parts: Vec<&str> = name.split(",").collect();
+            let room_id = name_parts.get(0).unwrap().parse::<usize>().unwrap();
+
+            (room_id, room_data)
+        }).collect();
+
+    let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
+        .split("\n")
+        .collect::<Vec<&str>>();
+
+    let mut rng = rand::rng();
+    let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
+    // let dungeon_str = "080909090900080310021104081010121304081415121600041718180100171705190600999999291999901099991999990999919009190001999993999009999909";
+    println!("Dungeon String: {}", dungeon_str);
+
+    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
+    // let doors = vec![Door { x: 0, z: 0, direction: Axis::X, door_type: DoorType::NORMAL}];
+    // let dungeon = Dungeon::with_rooms_and_doors(
+    //     vec![
+    //         Room::new(
+    //             vec![(2, 2), (3, 2), (3, 1)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::L, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(0, 0), (1, 0), (2, 0), (3, 0)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByFour, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(1, 1), (2, 1)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByTwo, &room_data_storage)
+    //         ),
+    //         Room::new(
+    //             vec![(4, 2)],
+    //             &doors,
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByOne, &room_data_storage)
+    //         ),
+    //     ], doors);
 
     for room in &dungeon.rooms {
-        room.load_room(&mut server.world)
+        // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
+        room.load_into_world(&mut server.world);
     }
 
-    for x in 0..5 {
-        for y in 0..5 {
-            server.world.set_block_at(Blocks::Stone, x, y, 20);
-        }
-    }
-
-    // blocks for pathfinding testing
-    let blocks = [
-        (8, 1, 5),
-        (8, 1, 6),
-        (8, 1, 7),
-        (7, 1, 5),
-        (7, 1, 6),
-        (7, 1, 7),
-        (9, 1, 5),
-        (9, 1, 6),
-        (9, 1, 7),
-        (6, 1, 8),
-        (5, 1, 8)
-    ];
-    for (x, y, z) in blocks.iter() {
-        server.world.set_block_at(Blocks::Stone, *x, *y, *z);
+    for door in &dungeon.doors {
+        dungeon.load_door(door, &mut server.world);
     }
 
     let mut crusher = Crusher::new(
         BlockPos {
-            x: 20,
-            y: 1,
+            x: 30,
+            y: 69,
             z: 20,
         },
         Direction::North,
@@ -119,6 +127,16 @@ async fn main() -> Result<()> {
         10,
         20,
     );
+
+    // let room_to_load = include_str!("room_data/462,-312");
+
+    // let room_data = RoomData::from_raw_json(room_to_load);
+
+    // let room = Room::new(vec![(0, 0)], room_data);
+
+    // room.load_into_world(&mut server.world);
+
+    // println!("Room Data: {:?}", room_data);
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
@@ -163,6 +181,8 @@ async fn main() -> Result<()> {
             //         EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
             //     }
             // }
+
+            let room = dungeon.get_player_room(player);
 
             if player.scoreboard.header_dirty {
                 player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;

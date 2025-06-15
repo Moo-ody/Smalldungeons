@@ -44,9 +44,9 @@ impl Server {
                 println!("added player with id {client_id}");
 
                 let spawn_point = Vec3f {
-                    x: 3.0,
-                    y: 1.0,
-                    z: 3.0,
+                    x: 20.0,
+                    y: 69.0,
+                    z: 20.0,
                 };
 
                 let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
