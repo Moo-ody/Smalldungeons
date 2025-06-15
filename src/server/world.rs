@@ -8,6 +8,8 @@ use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::vec3f::Vec3f;
 use std::collections::HashMap;
+use crate::server::utils::player_list::PlayerList;
+use crate::server::utils::scoreboard::scoreboard::Scoreboard;
 
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
@@ -17,6 +19,8 @@ pub struct World {
 
     pub chunk_grid: ChunkGrid,
 
+    pub player_info: PlayerList,
+    
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)
     // it could be represented by a flattened 2d array,
@@ -35,6 +39,7 @@ impl World {
         World {
             server: std::ptr::null_mut(),
             chunk_grid: ChunkGrid::new(10),
+            player_info: PlayerList::new(),
             entities: HashMap::new(),
             next_entity_id: 1 // might have to start at 1
         }

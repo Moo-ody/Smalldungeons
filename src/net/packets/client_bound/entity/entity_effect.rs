@@ -3,13 +3,17 @@ use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
+#[derive(Clone, Debug)]
 pub struct EntityEffect {
-    entity_id: i32,
-    effect_id: i8,
-    amplifier: i8,
-    duration: i32,
-    hide_particles: bool,
+    pub entity_id: i32,
+    pub effect_id: i8,
+    pub amplifier: i8,
+    pub duration: i32,
+    pub hide_particles: bool,
 }
+
+pub const HASTEID: i8 = 3;
+pub const NIGHTVISIONID: i8 = 16;
 
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for EntityEffect {
@@ -22,6 +26,9 @@ impl ClientBoundPacketImpl for EntityEffect {
             VarInt(self.duration),
             self.hide_particles as u8
         );
+
+        println!("entity effect: {self:?}");
+        
         writer.write_all(&buf).await
     }
 }

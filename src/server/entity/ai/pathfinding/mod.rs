@@ -56,7 +56,7 @@ pub fn is_valid_position(pos: &BlockPos, entity: &EntityContext, world: &World) 
 }
 
 pub fn get_safe_point(pos: BlockPos, entity: &EntityContext, world: &World) -> Option<BlockPos> {
-    for dy in 0..=3 {
+    for dy in 0..=3 { // todo: max fall height.
         let candidate = pos.add_y(-dy);
         if is_valid_position(&candidate, entity, world) {
             return Some(candidate);

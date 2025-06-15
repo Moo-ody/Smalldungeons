@@ -130,8 +130,8 @@ impl Mul for Vec3f {
     }
 }
 
-impl From<BlockPos> for Vec3f {
-    fn from(pos: BlockPos) -> Self {
+impl From<&BlockPos> for Vec3f {
+    fn from(pos: &BlockPos) -> Self {
         Self::new(pos.x as f64, pos.y as f64, pos.z as f64)
     }
 }

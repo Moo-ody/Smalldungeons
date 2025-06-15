@@ -17,6 +17,14 @@ use crate::server::world::World;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
+use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
+use crate::net::packets::client_bound::player_list_item::PlayerListItem;
+use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType, ADD_OBJECTIVE};
+use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
+use crate::server::utils::player_list::footer::footer;
+use crate::server::utils::player_list::header::header;
 
 pub struct Server {
     pub network_tx: UnboundedSender<NetworkMessage>,
@@ -63,6 +71,53 @@ impl Server {
                     if entity.entity_id == player.entity_id { continue }
                     player.observe_entity(entity, &self.network_tx)?
                 }
+
+                PlayerListItem::init_packet(self.world.player_info.tab_list()).send_packet(client_id, &self.network_tx)?;
+
+                PlayerListHeaderFooter {
+                    header: header(),
+                    footer: footer(),
+                }.send_packet(player.client_id, &self.network_tx)?;
+
+                player.scoreboard.header_packet().send_packet(player.client_id, &self.network_tx)?;
+
+                for packet in player.scoreboard.get_packets() {
+                    packet.send_packet(player.client_id, &self.network_tx)?;
+                }
+
+                player.scoreboard.display_packet().send_packet(player.client_id, &self.network_tx)?;
+
+                player.scoreboard.add_line("roomid", "§706/14/25 §8m24§87W 730,-420");
+                player.scoreboard.add_line("e1", "");
+                player.scoreboard.add_line("season", "Winter 22nd");
+                player.scoreboard.add_line("ctime", "§73:10pm");
+                player.scoreboard.add_line("zone", " §7⏣ §cThe Catac§combs §7(F7)");
+                player.scoreboard.add_line("e2", "");
+                // boxes stay, red gets ✔ or ✖ depending on blood key and gray increments counter per wither key probably
+                // im not sure if these are the right box symbols but well have to see
+                player.scoreboard.add_line("keys", "Keys: §c■ §c✖ §8§8■ §a0x");
+                player.scoreboard.add_line("etime", "Time Elapsed: §a§a00s");
+                player.scoreboard.add_line("clear", "Cleared: §c0% §8§8(0)");
+                player.scoreboard.add_line("s1", "          ");
+                player.scoreboard.add_line("solo", "§3§lSolo");
+                player.scoreboard.add_line("s2", "          ");
+                player.scoreboard.add_line("footer", "§emc.hypixel.net");
+
+                EntityEffect {
+                    entity_id: player.entity_id,
+                    effect_id: HASTEID,
+                    amplifier: 2,
+                    duration: 200,
+                    hide_particles: true,
+                }.send_packet(player.client_id, &self.network_tx)?;
+
+                // EntityEffect {
+                //     entity_id: player.entity_id,
+                //     effect_id: NIGHTVISIONID,
+                //     amplifier: 0,
+                //     duration: 400,
+                //     hide_particles: true,
+                // }.send_packet(player.client_id, &self.network_tx)?;
                 
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe, ItemStack {
                     item: 278,

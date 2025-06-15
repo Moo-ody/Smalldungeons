@@ -39,6 +39,13 @@ use crate::net::packets::server_bound::player_position::PlayerPosition;
 use crate::net::packets::server_bound::player_update::PlayerUpdate;
 use crate::net::packets::server_bound::status_request::StatusRequest;
 use crate::{register_clientbound_packets, register_serverbound_packets};
+use crate::net::packets::client_bound::display_scoreboard::DisplayScoreboard;
+use crate::net::packets::client_bound::entity::entity_effect::EntityEffect;
+use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
+use crate::net::packets::client_bound::player_list_item::PlayerListItem;
+use crate::net::packets::client_bound::scoreboard_objective::ScoreboardObjective;
+use crate::net::packets::client_bound::teams::Teams;
+use crate::net::packets::client_bound::update_score::UpdateScore;
 
 register_clientbound_packets! {
     JoinGame,
@@ -65,8 +72,17 @@ register_clientbound_packets! {
     EntityRelMove,
     EntityLook,
     EntityTeleport,
+    EntityEffect,
     
     Particles,
+    
+    PlayerListItem,
+    PlayerListHeaderFooter,
+    ScoreboardObjective,
+    UpdateScore,
+    DisplayScoreboard,
+    Teams,
+    
 }
 
 register_serverbound_packets! {

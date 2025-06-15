@@ -20,7 +20,7 @@ impl EntityRelMove {
             pos_x: ((entity.last_sent_pos.x - entity.pos.x) * 32.0) as i8,
             pos_y: ((entity.last_sent_pos.y - entity.pos.y) * 32.0) as i8,
             pos_z: ((entity.last_sent_pos.z - entity.pos.z) * 32.0) as i8,
-            on_ground: true,
+            on_ground: entity.on_ground,
         }
     }
 }

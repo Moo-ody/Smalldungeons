@@ -24,7 +24,7 @@ impl EntityTeleport {
             pos_z: (entity.pos.z * 32.0) as i32,
             yaw: (entity.yaw * 256.0 / 360.0) as i8,
             pitch: (entity.pitch * 256.0 / 360.0) as i8,
-            on_ground: true, // todo replace with entity.grounded or smth.
+            on_ground: entity.on_ground,
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::server::entity::entity::Entity;
 use crate::server::world::World;
 use std::collections::{BinaryHeap, HashMap};
 
-/// Pathfinding reimplementation from minecraft's pathfinding.
+/// Pathfinding reimplementation of minecraft's pathfinding.
 /// various things are not ironed out and need accounting for, such as the various types of blocks and potentially their weights.
 /// some entity data will need to passed through in some sort of entity context struct, such as aabb (or width/height), step height, max fall height, etc.
 pub struct Pathfinder;
@@ -67,7 +67,7 @@ impl Pathfinder {
             }
         }
 
-        // replace with an empty vec when this actually needs to be used.
+        // replace with an empty vec when this actually needs to be used probably.
         Err(anyhow::anyhow!("failed to find path..."))
     }
 }

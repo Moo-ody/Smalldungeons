@@ -1,3 +1,4 @@
+use crate::server::entity::attributes::Attribute;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::look_helper::wrap_to_180;
 use crate::server::utils::vec3f::Vec3f;
@@ -24,29 +25,28 @@ impl MoveHelper {
         self.update = true;
     }
 
-    pub fn update(&mut self, entity: &mut Entity) -> anyhow::Result<()> {
-        if !self.update {
-            return Ok(());
+    pub fn update(entity: &mut Entity) {
+        // set move forward 0?
+        if !entity.move_helper.update {
+            return 
         };
-        self.update = false;
-        let x = self.pos.x - entity.pos.x;
-        let z = self.pos.z - entity.pos.z;
-        let i = entity.aabb.min_y.round();
-        let y = self.pos.y - i;
+        entity.move_helper.update = false;
+        let x = entity.move_helper.pos.x - entity.pos.x;
+        let z = entity.move_helper.pos.z - entity.pos.z;
+        let y = entity.move_helper.pos.y - entity.aabb.min_y.round();;
 
         let g = z.mul_add(z, x.mul_add(x, y * y));
 
         if g < 2.500000277905201e-7 {
-            return Ok(()); // this might need to error out idrk
+            return // this might need to error out idrk
         }
 
         let yaw = x.atan2(z).to_degrees() as f32 - 90.0;
         entity.yaw = limit_angle(entity.yaw, yaw, 30.0);
-        //todo: entity move speed stuff
-        if y > 0.0 && x * x + z * z < 1.0 {
+        entity.set_move((entity.move_helper.speed * entity.move_speed()) as f32);
+        if y > 0.0 && x.mul_add(x, z * z) < 1.0 {
             //todo: jump helper jump
         }
-        Ok(())
     }
 }
 

@@ -18,7 +18,7 @@ impl EntityLook {
             entity_id: entity.entity_id,
             yaw: ((entity.last_sent_yaw - entity.yaw) * 256.0 / 360.0) as i8,
             pitch: ((entity.last_sent_pitch - entity.pitch) * 256.0 / 360.0) as i8,
-            on_ground: true,
+            on_ground: entity.on_ground,
         }
     }
 }

@@ -1,3 +1,10 @@
+use std::fmt::Formatter;
+
+/// if this becomes big, we should use a hashset.
+pub const NON_LIVING: [EntityType; 1] = [
+    EntityType::Player,
+];
+
 crate::entity_type_registry! {
     Zombie: zombie,
     Player: player,
@@ -23,7 +30,6 @@ macro_rules! entity_type_registry {
         }
 
         impl EntityType {
-            #[inline]
             pub const fn get_id(&self) -> i8 {
                 match self {
                     $(
@@ -60,6 +66,16 @@ macro_rules! entity_type_registry {
                     $(
                         Self::$name => crate::server::entity::r#impl::$path::HEIGHT
                     ),*
+                }
+            }
+        }
+        
+        impl std::fmt::Display for EntityType {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(
+                        Self::$name => write!(f, stringify!($name)),
+                    )*
                 }
             }
         }

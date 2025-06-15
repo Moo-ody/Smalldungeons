@@ -10,6 +10,7 @@ use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::server::utils::scoreboard::scoreboard::Scoreboard;
 
 /// type alias to represent a client's user id.
 ///
@@ -24,6 +25,8 @@ pub struct Player {
 
     pub client_id: ClientId,
     pub entity_id: EntityId,
+
+    pub scoreboard: Scoreboard,
 
     pub last_keep_alive: i32,
     pub ping: i32,
@@ -42,6 +45,7 @@ impl Player {
             server,
             client_id,
             entity_id,
+            scoreboard: Scoreboard::new("§e§lSKYBLOCK"),
             last_keep_alive: -1,
             ping: -1,
             is_sneaking: false,

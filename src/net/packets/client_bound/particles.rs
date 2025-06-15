@@ -1,11 +1,12 @@
-use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
-use crate::net::var_int::write_var_int;
+use crate::net::var_int::{write_var_int, VarInt};
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::bail;
 use std::io::{Error, ErrorKind};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use crate::{partial_packet, print_bytes_hex};
 
 #[derive(Debug, Clone)]
 pub struct Particles {
@@ -51,17 +52,21 @@ impl Particles {
 impl ClientBoundPacketImpl for Particles {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
         let mut payload = Vec::new();
-        write_var_int(&mut payload, 0x2A);
-        self.particle_type.write(&mut payload);
-        self.long_distance.write(&mut payload);
-        self.x.write(&mut payload);
-        self.y.write(&mut payload);
-        self.z.write(&mut payload);
-        self.offset_x.write(&mut payload);
-        self.offset_y.write(&mut payload);
-        self.offset_z.write(&mut payload);
-        self.speed.write(&mut payload);
-        self.count.write(&mut payload);
+
+        partial_packet!(payload =>
+            VarInt(0x2A),
+            self.particle_type,
+            self.long_distance,
+            self.x,
+            self.y,
+            self.z,
+            self.offset_x,
+            self.offset_y,
+            self.offset_z,
+            self.speed,
+            self.count,
+        );
+
         if let Some(arg_count) = self.particle_type.get_arg_count() {
             if let Some(args) = self.args.as_ref() {
                 for i in 0..arg_count {
@@ -70,11 +75,6 @@ impl ClientBoundPacketImpl for Particles {
             }
         }
 
-        let mut buf = Vec::new();
-        write_var_int(&mut buf, payload.len() as i32);
-        buf.extend_from_slice(&payload);
-
-        writer.write_all(&buf).await?;
-        Ok(())
+        writer.write_all(&finish_packet(payload)).await
     }
 }

@@ -23,6 +23,13 @@ use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
+use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
+use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
+use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType};
+use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
+use crate::server::utils::chat_component::chat_component_text::{ChatComponentText, ChatComponentTextBuilder, HoverAction, HoverEvent};
+use crate::server::utils::color::Color;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
@@ -86,6 +93,7 @@ async fn main() -> Result<()> {
         }
     }
 
+    // blocks for pathfinding testing
     let blocks = [
         (8, 1, 5),
         (8, 1, 6),
@@ -127,9 +135,11 @@ async fn main() -> Result<()> {
     );
 
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
-    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 15, y: 1, z: 15 }, &server.world)?;
+    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 1, z: 10 }, &server.world)?;
 
     server.world.entities.insert(zombie.entity_id, zombie);
+    let text = ChatComponentTextBuilder::new("Hello World!").build();
+    server.world.player_info.update_text(1, text);
 
     loop {
         tick_interval.tick().await;
@@ -139,7 +149,8 @@ async fn main() -> Result<()> {
         }
 
         for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
-            if let Some(entity) = server.world.entities.remove(&entity_id) {
+            if let Some(mut entity) = server.world.entities.remove(&entity_id) {
+                entity.ticks_existed += 1;
                 // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
                 let returned = entity.update(&mut server.world, &server.network_tx);
                 server.world.entities.insert(entity_id, returned);
@@ -147,9 +158,8 @@ async fn main() -> Result<()> {
         }
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
-        // also needs to add a method to only send the right entity packet given movement data based on last sent.
         // also needs to actually be in a vanilla adjacent way.
-        for player in server.players.values() {
+        for player in server.players.values_mut() {
             // println!("player ticked: {player:?}");
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
             // for entity in player.tracked_entities.iter() {
@@ -159,13 +169,44 @@ async fn main() -> Result<()> {
             //     }
             // }
 
+            if player.scoreboard.header_dirty {
+                player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;
+            }
+
+            if player.scoreboard.line_dirty {
+                for packet in player.scoreboard.get_packets() {
+                    packet.send_packet(player.client_id, &server.network_tx)?;
+                }
+            }
+
+            if !player.scoreboard.displaying {
+                player.scoreboard.display_packet().send_packet(player.client_id, &server.network_tx)?;
+            }
+
             if let Some(player_entity) = server.world.entities.get(&player.entity_id) {
                 if player_entity.ticks_existed % 20 == 0 {
+                    let seconds = player_entity.ticks_existed / 20;
+                    player.scoreboard.update_line("etime", format!("Time Elapsed: §a§a{seconds}s")); // this isnt accurate to hypixel atm but its ok!
+                }
+
+                // if player_entity.ticks_existed % 150 == 0 {
+                //     player.scoreboard.add_line_at(0, "resize", "DYNAMIC RESIZE");
+                //
+                //     player.scoreboard.update_header("NEW HEADER WOWOWOW");
+                // }
+                //
+                // if player_entity.ticks_existed % 250 == 0 {
+                //     player.scoreboard.remove_line("resize");
+                //
+                //     player.scoreboard.update_header("old header :(");
+                // }
+
+                if player_entity.ticks_existed % 5 == 0 {
                     let mut current_index = 1;
                     for pos in path.iter() {
                         let particle = Particles::new(
                             ParticleTypes::Crit,
-                            Vec3f::new(pos.x as f64, pos.y as f64, pos.z as f64),
+                            Vec3f::from(pos),
                             Vec3f::new(0.1, 0.1, 0.1),
                             0.0,
                             current_index,
@@ -176,6 +217,24 @@ async fn main() -> Result<()> {
 
                         particle?.send_packet(player.client_id, &server.network_tx)?;
                     }
+                }
+
+                if player_entity.ticks_existed % 60 == 0 {
+                    EntityEffect {
+                        entity_id: player.entity_id,
+                        effect_id: HASTEID,
+                        amplifier: 2,
+                        duration: 200,
+                        hide_particles: true,
+                    }.send_packet(player.client_id, &server.network_tx)?;
+
+                    // EntityEffect {
+                    //     entity_id: player.entity_id,
+                    //     effect_id: NIGHTVISIONID,
+                    //     amplifier: 0,
+                    //     duration: 400,
+                    //     hide_particles: true,
+                    // }.send_packet(player.client_id, &server.network_tx)?;
                 }
             }
 
