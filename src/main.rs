@@ -73,6 +73,7 @@ async fn main() -> Result<()> {
 
     let mut rng = rand::rng();
     let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
+    // let dungeon_str = "080909090900080310021104081010121304081415121600041718180100171705190600999999291999901099991999990999919009190001999993999009999909";
     println!("Dungeon String: {}", dungeon_str);
 
     let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
@@ -80,12 +81,12 @@ async fn main() -> Result<()> {
     // let dungeon = Dungeon::with_rooms_and_doors(
     //     vec![
     //         Room::new(
-    //             vec![(3, 1), (3, 2), (3, 3)],
+    //             vec![(2, 2), (3, 2), (3, 1)],
     //             &doors,
-    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByThree, &room_data_storage)
+    //             get_random_data_with_type(RoomType::Normal, RoomShape::L, &room_data_storage)
     //         ),
     //         Room::new(
-    //             vec![(1, 0), (2, 0), (3, 0), (4, 0)],
+    //             vec![(0, 0), (1, 0), (2, 0), (3, 0)],
     //             &doors,
     //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByFour, &room_data_storage)
     //         ),
@@ -95,14 +96,14 @@ async fn main() -> Result<()> {
     //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByTwo, &room_data_storage)
     //         ),
     //         Room::new(
-    //             vec![(2, 2)],
+    //             vec![(4, 2)],
     //             &doors,
     //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByOne, &room_data_storage)
     //         ),
     //     ], doors);
 
     for room in &dungeon.rooms {
-        println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
+        // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
     }
 

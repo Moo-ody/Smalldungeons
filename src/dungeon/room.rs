@@ -1,5 +1,6 @@
-use std::collections::HashSet;
+use std::{cmp::min, collections::HashSet};
 
+use include_dir::Dir;
 use serde_json::json;
 
 use crate::{dungeon::{door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
@@ -34,18 +35,20 @@ impl Room {
     }
 
     pub fn get_corner_pos(&self) -> BlockPos {
-        let first_segment = self.segments[0];
+        // let first_segment = self.segments[0];
+        let min_x = self.segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
+        let min_y = self.segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
 
-        let x = first_segment.0 as i32 * 32 + DUNGEON_ORIGIN.0;
+        let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
         let y = 68;
-        let z = first_segment.1 as i32 * 32 + DUNGEON_ORIGIN.1;
+        let z = min_y as i32 * 32 + DUNGEON_ORIGIN.1;
 
         // BlockPos { x, y, z }
         match self.rotation {
             Direction::North => BlockPos { x, y, z },
             Direction::East => BlockPos { x: x + self.room_data.length - 1, y, z },
             Direction::South => BlockPos { x: x + self.room_data.length - 1, y, z: z + self.room_data.width - 1 },
-            Direction::West => BlockPos { x, y, z: z + self.room_data.width - 1 }
+            Direction::West => BlockPos { x: x, y, z: z + self.room_data.width - 1 }
         }
     }
 
@@ -53,7 +56,60 @@ impl Room {
         self.tick_amount += 1;
     }
 
+    pub fn get_1x1_shape_and_type(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> (RoomShape, Direction) {
+        let center_x = segments[0].0 as i32 * 32 + 15;
+        let center_z = segments[0].1 as i32 * 32 + 15;
+
+        // Actual doors found in the world
+        let doors_opt = [
+            (center_x, center_z - 16),
+            (center_x + 16, center_z),
+            (center_x, center_z + 16),
+            (center_x - 16, center_z)
+        ].iter().map(|pos| {
+            dungeon_doors.iter()
+                .find(|door| door.x == pos.0 && door.z == pos.1)
+                .is_some()
+        }).collect::<Vec<bool>>();
+
+        let mut num: u8 = 0;
+        for i in 0..4 {
+            num |= doors_opt[i] as u8;
+            if i < 3 {
+                num <<= 1;
+            }
+        }
+
+        // println!("{:04b} {:?}", num, doors_opt);
+
+        match num {
+            // Doors on all sides, never changes
+            0b1111 => (RoomShape::OneByOneCross, Direction::North),
+            // Dead end 1x1
+            0b1000 => (RoomShape::OneByOneEnd, Direction::North),
+            0b0100 => (RoomShape::OneByOneEnd, Direction::East),
+            0b0010 => (RoomShape::OneByOneEnd, Direction::South),
+            0b0001 => (RoomShape::OneByOneEnd, Direction::West),
+            // Opposite doors
+            0b0101 => (RoomShape::OneByOneStraight, Direction::North),
+            0b1010 => (RoomShape::OneByOneStraight, Direction::East),
+            // L bend
+            0b0011 => (RoomShape::OneByOneBend, Direction::North),
+            0b1001 => (RoomShape::OneByOneBend, Direction::East),
+            0b1100 => (RoomShape::OneByOneBend, Direction::South),
+            0b0110 => (RoomShape::OneByOneBend, Direction::West),
+            // Triple door
+            0b1011 => (RoomShape::OneByOneTriple, Direction::North),
+            0b1101 => (RoomShape::OneByOneTriple, Direction::East),
+            0b1110 => (RoomShape::OneByOneTriple, Direction::South),
+            0b0111 => (RoomShape::OneByOneTriple, Direction::West),
+            
+            _ => (RoomShape::OneByOne, Direction::North),
+        }
+    }
+
     pub fn get_rotation_from_segments(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> Direction {
+
         let unique_x = segments.iter()
             .map(|x| x.0)
             .collect::<HashSet<usize>>();
@@ -66,8 +122,9 @@ impl Room {
 
         match segments.len() {
             1 => {
-                // Check door locations
-                Direction::North
+                let (_, direction) = Room::get_1x1_shape_and_type(segments, dungeon_doors);
+
+                return direction
             },
             2 => match unique_z.len() == 1 {
                 true => Direction::North,
@@ -76,7 +133,27 @@ impl Room {
             3 => {  
                 // L room
                 if not_long {
-                    // TODO
+                    let corner_value = segments.iter().find(|x| {
+                        segments.iter().all(|y| {
+                            x.0.abs_diff(y.0) + x.1.abs_diff(y.1) <= 1
+                        })
+                    }).expect(format!("Invalid L room: Segments: {:?}", segments).as_str());
+
+                    let min_x = segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
+                    let min_y = segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
+                    let max_x = segments.iter().max_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
+                    let max_y = segments.iter().max_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
+
+                    if corner_value == &(min_x, min_y) {
+                        return Direction::East
+                    }
+                    if corner_value == &(max_x, min_y) {
+                        return Direction::South
+                    }
+                    if corner_value == &(max_x, max_y) {
+                        return Direction::West
+                    }
+
                     return Direction::North
                 }
 
@@ -111,6 +188,7 @@ impl Room {
                 RoomType::Trap => Blocks::OrangeWool,
                 RoomType::Yellow => Blocks::YellowWool,
                 RoomType::Puzzle => Blocks::PurpleWool,
+                RoomType::Rare => Blocks::YellowWool,
             };
 
             world.fill_blocks(

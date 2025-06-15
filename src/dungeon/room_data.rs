@@ -3,11 +3,17 @@ use std::{collections::{HashMap, HashSet}};
 use rand::seq::{IteratorRandom};
 use serde_json::{Value};
 
-use crate::server::block::blocks::Blocks;
+use crate::{dungeon::{door::Door, room::Room}, server::block::blocks::Blocks};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
-    OneByOne,
+    OneByOne, // Fairy room, doors can vary
+    OneByOneEnd, // A dead end, only one door
+    OneByOneCross, // Four doors
+    OneByOneStraight, // Two doors opposite each other
+    OneByOneBend, // Two doors making an L bend
+    OneByOneTriple, // Two opposite with one in the middle
+
     OneByTwo,
     OneByThree,
     OneByFour,
@@ -20,6 +26,11 @@ impl RoomShape {
     pub fn from_str(value: &str) -> RoomShape {
         match value {
             "1x1" => Self::OneByOne,
+            "1x1_E" => Self::OneByOneEnd,
+            "1x1_X" => Self::OneByOneCross,
+            "1x1_I" => Self::OneByOneStraight,
+            "1x1_L" => Self::OneByOneBend,
+            "1x1_3" => Self::OneByOneTriple,
             "1x2" => Self::OneByTwo,
             "1x3" => Self::OneByThree,
             "1x4" => Self::OneByFour,
@@ -29,7 +40,7 @@ impl RoomShape {
         }
     }
 
-    pub fn from_segments(segments: &Vec<(usize, usize)>) -> RoomShape {
+    pub fn from_segments(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> RoomShape {
 
         let unique_x = segments.iter()
             .map(|x| x.0)
@@ -43,7 +54,11 @@ impl RoomShape {
 
         // Impossible for rooms to have < 1 or > 4 segments
         match segments.len() {
-            1 => RoomShape::OneByOne,
+            1 => {
+                let (shape, _) = Room::get_1x1_shape_and_type(segments, dungeon_doors);
+
+                shape
+            },
             2 => RoomShape::OneByTwo,
             3 => match not_long {
                 true => RoomShape::L,
@@ -67,6 +82,7 @@ pub enum RoomType {
     Entrance,
     Blood,
     Yellow,
+    Rare,
 }
 
 impl RoomType {
@@ -79,6 +95,7 @@ impl RoomType {
             "fairy" => RoomType::Fairy,
             "entrance" => RoomType::Entrance,
             "trap" => RoomType::Trap,
+            "rare" => RoomType::Rare,
             _ => RoomType::Normal,
         }
     }

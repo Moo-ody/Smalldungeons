@@ -1,8 +1,10 @@
+use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_etherwarp;
 use crate::server::player::Player;
 
 pub mod item_stack;
 mod etherwarp;
+mod ether_transmission;
 
 /// List of items available to be used
 /// TODO, more
@@ -26,6 +28,9 @@ impl Item {
 
                 if player.is_sneaking {
                     handle_etherwarp(player, &server.network_tx, world, entity)?;
+                }
+                else {
+                    handle_teleport(player, &server.network_tx, world, entity)?;
                 }
 
                 // let pos = raycast_first_solid_block(world, entity, 60.0);
