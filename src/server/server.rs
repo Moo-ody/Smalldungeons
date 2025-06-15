@@ -1,7 +1,10 @@
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
 use crate::net::packets::client_bound::join_game::JoinGame;
+use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
+use crate::net::packets::client_bound::player_list_item::PlayerListItem;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
@@ -10,21 +13,15 @@ use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
-use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
+use crate::server::utils::nbt::encode::{TAG_COMPOUND_ID, TAG_STRING_ID};
 use crate::server::utils::nbt::{NBTNode, NBT};
+use crate::server::utils::player_list::footer::footer;
+use crate::server::utils::player_list::header::header;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
-use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
-use crate::net::packets::client_bound::player_list_item::PlayerListItem;
-use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType, ADD_OBJECTIVE};
-use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
-use crate::server::utils::player_list::footer::footer;
-use crate::server::utils::player_list::header::header;
 
 pub struct Server {
     pub network_tx: UnboundedSender<NetworkMessage>,
@@ -129,9 +126,10 @@ impl Server {
                                 NBT::short("id", 32),
                                 NBT::short("lvl", 10),
                             ])
-                        ])
+                        ]),
+                        NBT::byte("Unbreakable", 1),
                     ])),
-                }), 28);
+                }), 37);
 
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid, ItemStack {
                     item: 277,
@@ -139,10 +137,22 @@ impl Server {
                     metadata: 0,
                     tag_compound: Some(NBT::with_nodes(vec![
                         NBT::compound("display", vec![
-                            NBT::string("Name", "AOTV")
-                        ])
+                            NBT::string("Name", "§r§6Aspect of the Void"),
+                            NBT::list("Lore", TAG_STRING_ID, vec![
+                                NBTNode::String("§r".to_string()),
+                                NBTNode::String("§r§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK".to_string()),
+                                NBTNode::String("§r§7Teleport to your targeted block up".to_string()),
+                                NBTNode::String("§r§7to §a61 blocks §7away.".to_string()),
+                                NBTNode::String("§r§8Soulflow Cost: §30".to_string()),
+                                NBTNode::String("§r§8Mana Cost: §30".to_string()),
+                                NBTNode::String("§r".to_string()),
+                                NBTNode::String("§r§6§l§kU§r§6§l LEGENDARY SWORD §kU".to_string()),
+                            ])
+                        ]),
+                        NBT::byte("Unbreakable", 1),
+                        NBT::int("HideFlags", 127),
                     ])),
-                }), 27);
+                }), 36);
 
                 player.inventory.sync(&player, &self.network_tx)?;
 

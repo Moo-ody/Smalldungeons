@@ -1,7 +1,7 @@
 use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::block::block_pos::{read_block_pos, BlockPos};
-use crate::server::items::item_stack::ItemStack;
+use crate::server::items::item_stack::{read_item_stack, ItemStack};
 use crate::server::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
@@ -27,7 +27,6 @@ impl ServerBoundPacket for PlayerBlockPlacement {
             facing_y: buf.get_u8() as f32 / 16.0,
             facing_z: buf.get_u8() as f32 / 16.0,
         };
-        // println!("packet: {:?}", packet);
         Ok(packet)
     }
 
@@ -51,21 +50,8 @@ impl ServerBoundPacket for PlayerBlockPlacement {
         if self.item_stack.is_some() {
             player.handle_right_click()
         }
+        // make sure inventory is synced
+        player.inventory.sync(player, &player.server_mut().network_tx)?;
         Ok(())
     }
-}
-
-// todo, have this in its own file
-fn read_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
-    let id = buf.get_i16();
-    if id >= 0 {
-        let item_stack = ItemStack {
-            item: id,
-            stack_size: buf.get_i8(),
-            metadata: buf.get_i16(),
-            tag_compound: None,
-        };
-        return Some(item_stack);
-    }
-    None
 }

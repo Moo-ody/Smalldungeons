@@ -1,5 +1,5 @@
 use crate::net::packets::packet::SendPacket;
-use crate::server::items::etherwarp::handle_etherwarp;
+use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::player::Player;
 
 pub mod item_stack;
@@ -7,7 +7,7 @@ mod etherwarp;
 
 /// List of items available to be used
 /// TODO, more
-#[derive(Copy, Debug, Clone)]
+#[derive(Copy, Debug, Clone, PartialEq)]
 pub enum Item {
     AspectOfTheVoid,
     DiamondPickaxe,
@@ -15,8 +15,7 @@ pub enum Item {
 }
 
 impl Item {
-
-    // todo fix right clicking not triggering when clicking on a block
+    
     pub fn on_right_click(&self, player: &Player) -> anyhow::Result<()> {
         match self {
             Item::AspectOfTheVoid => {
@@ -24,7 +23,6 @@ impl Item {
                 let server = &player.server_mut();
                 let world = &server.world;
                 let entity = player.get_entity(world)?;
-
                 // test
                 // CustomPayload {
                 //     channel: "rustclear".to_string(),
@@ -32,7 +30,7 @@ impl Item {
                 // }.send_packet(player.client_id, &server.network_tx)?;
 
                 if player.is_sneaking {
-                    handle_etherwarp(player, &server.network_tx, world, entity)?;
+                    handle_ether_warp(player, &server.network_tx, world, entity)?;
                 }
 
                 // let pos = raycast_first_solid_block(world, entity, 60.0);

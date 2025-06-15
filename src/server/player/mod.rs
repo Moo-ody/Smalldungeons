@@ -6,11 +6,11 @@ use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::server::Server;
+use crate::server::utils::scoreboard::scoreboard::Scoreboard;
 use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::server::utils::scoreboard::scoreboard::Scoreboard;
 
 /// type alias to represent a client's user id.
 ///
@@ -93,24 +93,8 @@ impl Player {
         entity.observing_players.remove(&self.client_id);
     }
 
-    // pub fn set_position(
-    //     &mut self,
-    //     network_tx: &UnboundedSender<NetworkMessage>,
-    //     x: f64,
-    //     y: f64,
-    //     z: f64,
-    // ) -> Result<()> {
-    //     self.entity.update_position(x, y, z);
-    //     PositionLook::from_player(&self).send_packet(self.client_id, network_tx)?;
-    //     Ok(())
-    // }
-
-    // todo: allow for changing slots of items,
-    // currently it isn't tracked
     pub fn handle_right_click(&self) {
-        // println!("test {:?}", self.inventory.get_hotbar_slot(self.held_slot as usize));
         if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
-            // println!("item {:?}", item);
             item.on_right_click(self).unwrap()
         }
     }

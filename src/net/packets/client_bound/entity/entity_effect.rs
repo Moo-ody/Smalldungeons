@@ -27,7 +27,7 @@ impl ClientBoundPacketImpl for EntityEffect {
             self.hide_particles as u8
         );
 
-        println!("entity effect: {self:?}");
+        // println!("entity effect: {self:?}");
         
         writer.write_all(&buf).await
     }
