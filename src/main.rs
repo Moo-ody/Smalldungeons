@@ -8,6 +8,7 @@ use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
@@ -17,19 +18,13 @@ use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
-use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
-use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
-use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType};
-use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
-use crate::server::utils::chat_component::chat_component_text::{ChatComponentText, ChatComponentTextBuilder, HoverAction, HoverEvent};
-use crate::server::utils::color::Color;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
     "version": { "name": "1.8.9", "protocol": 47 },
@@ -173,10 +168,9 @@ async fn main() -> Result<()> {
                 player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;
             }
 
-            if player.scoreboard.line_dirty {
-                for packet in player.scoreboard.get_packets() {
-                    packet.send_packet(player.client_id, &server.network_tx)?;
-                }
+            // maybe another value if any lines are updated? this will just not pull any packets if nothing is updated but it will still iterate...
+            for packet in player.scoreboard.get_packets() {
+                packet.send_packet(player.client_id, &server.network_tx)?;
             }
 
             if !player.scoreboard.displaying {
@@ -189,17 +183,17 @@ async fn main() -> Result<()> {
                     player.scoreboard.update_line("etime", format!("Time Elapsed: §a§a{seconds}s")); // this isnt accurate to hypixel atm but its ok!
                 }
 
-                // if player_entity.ticks_existed % 150 == 0 {
-                //     player.scoreboard.add_line_at(0, "resize", "DYNAMIC RESIZE");
-                //
-                //     player.scoreboard.update_header("NEW HEADER WOWOWOW");
-                // }
-                //
-                // if player_entity.ticks_existed % 250 == 0 {
-                //     player.scoreboard.remove_line("resize");
-                //
-                //     player.scoreboard.update_header("old header :(");
-                // }
+                if player_entity.ticks_existed % 150 == 0 {
+                    //player.scoreboard.add_line_at(0, "resize", "amazing");
+
+                    // player.scoreboard.update_header("NEW HEADER WOWOWOW");
+                }
+
+                if player_entity.ticks_existed % 250 == 0 {
+                    player.scoreboard.remove_line("etime");
+
+                    // player.scoreboard.update_header("old header :(");
+                }
 
                 if player_entity.ticks_existed % 5 == 0 {
                     let mut current_index = 1;

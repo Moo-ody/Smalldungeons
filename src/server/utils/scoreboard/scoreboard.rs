@@ -1,15 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::convert::Into;
-use std::ops::Index;
-use indexmap::{IndexMap, IndexSet};
-use indexmap::map::MutableKeys;
-use indexmap::set::MutableValues;
 use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
 use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType, ADD_OBJECTIVE, UPDATE_NAME};
 use crate::net::packets::client_bound::teams::{Teams, ADD_PLAYER, CREATE_TEAM, REMOVE_TEAM, UPDATE_TEAM};
 use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
 use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::server::utils::scoreboard::SizedString;
+use indexmap::IndexMap;
+use std::collections::HashSet;
+use std::convert::Into;
 
 pub const OBJECTIVE_NAME: &str = "SBScoreboard";
 
@@ -17,9 +14,9 @@ pub const OBJECTIVE_NAME: &str = "SBScoreboard";
 pub struct Scoreboard {
     header: SizedString<32>,
     lines: IndexMap<String, ScoreboardLine>,
-    prev_lines: IndexMap<String, ScoreboardLine>,
+    to_add: Vec<(Option<usize>, (String, ScoreboardLine))>,
+    to_remove: HashSet<String>,
 
-    pub line_dirty: bool,
     pub header_dirty: bool,
     pub displaying: bool,
 }
@@ -56,8 +53,8 @@ impl Scoreboard {
         Self {
             header: header.into(),
             lines: IndexMap::new(),
-            prev_lines: IndexMap::new(),
-            line_dirty: true,
+            to_add: Vec::new(),
+            to_remove: HashSet::new(),
             header_dirty: true,
             displaying: false,
         }
@@ -85,23 +82,21 @@ impl Scoreboard {
     }
 
     pub fn remove_line(&mut self, key: impl Into<String>) {
-        self.lines.shift_remove(&key.into());
-        self.line_dirty = true;
+        self.to_remove.insert(key.into());
     }
 
     pub fn remove_line_at(&mut self, line: usize) {
-        self.lines.shift_remove_index(line);
-        self.line_dirty = true;
+        if let Some(entry) = self.lines.get_index_entry(line) {
+            self.to_remove.insert(entry.key().clone());
+        }
     }
 
     pub fn add_line(&mut self, key: impl Into<String>, line: impl Into<SizedString<32>>) {
-        self.lines.insert(key.into(), ScoreboardLine::new(line));
-        self.line_dirty = true;
+        self.to_add.push((None, (key.into(), ScoreboardLine::new(line))));
     }
 
     pub fn add_line_at(&mut self, index: usize, key: impl Into<String>, line: impl Into<SizedString<32>>) {
-        self.lines.shift_insert(index, key.into(), ScoreboardLine::new(line));
-        self.line_dirty = true;
+        self.to_add.push((Some(index), (key.into(), ScoreboardLine::new(line))));
     }
 
     pub fn header_packet(&mut self) -> ScoreboardObjective {
@@ -124,16 +119,20 @@ impl Scoreboard {
     pub fn get_packets(&mut self) -> Vec<ClientBoundPacket> {
         let mut packets = Vec::new();
 
-        let mut line_index = self.prev_lines.len() as i32;
-        if self.line_dirty {
-            self.prev_lines.retain(|key, line| {
-                if self.lines.contains_key(key) {
-                    line_index -= 1;
-                    return true;
-                }
+        let dirty = !self.to_remove.is_empty() || !self.to_add.is_empty();
 
-                let packet = Teams {
-                    name: format!("team_{line_index}").into(),
+        if dirty {
+            let len = self.lines.len();
+            for (index, key) in self.lines.keys().enumerate() {
+                packets.push(ClientBoundPacket::from(UpdateScore {
+                    name: hide_key(key),
+                    objective: OBJECTIVE_NAME.into(),
+                    value: 0,
+                    action: UpdateScoreAction::Remove,
+                }));
+
+                packets.push(ClientBoundPacket::from(Teams {
+                    name: format!("team_{}", len - index).into(),
                     display_name: "".into(),
                     prefix: "".into(),
                     suffix: "".into(),
@@ -142,34 +141,33 @@ impl Scoreboard {
                     players: vec![],
                     action: REMOVE_TEAM,
                     friendly_flags: 0,
-                };
-
-
-                packets.push(ClientBoundPacket::from(packet));
-
-                let packet = UpdateScore {
-                    name: hide_key(key),
-                    objective: "SBScoreboard".into(),
-                    value: 0,
-                    action: UpdateScoreAction::Remove,
-                };
-                packets.push(ClientBoundPacket::from(packet));
-
-                line_index -= 1;
-                false
-            })
+                }));
+            }
         }
 
-        let mut line_index = self.lines.len() as i32;
-        for (key, line) in self.lines.iter_mut() {
-            if !line.dirty && !self.line_dirty {
+        self.lines.retain(|key, _| !self.to_remove.contains(key));
+        self.to_remove.clear();
+
+        for (index, (key, line)) in self.to_add.drain(..) {
+            if let Some(index) = index {
+                self.lines.shift_insert(index, key, line);
+            } else {
+                self.lines.insert(key, line);
+            }
+        }
+
+        let len = self.lines.len();
+        for (index, (key, line)) in self.lines.iter_mut().enumerate() {
+            if !line.dirty && !dirty {
                 continue;
             }
+            let line_index = len - index - 1;
+            let team = format!("team_{}", line_index + 1);
 
-            if line.new || self.line_dirty {
-                let packet = Teams {
-                    name: format!("team_{line_index}").into(),
-                    display_name: format!("team_{line_index}").into(),
+            if dirty {
+                packets.push(ClientBoundPacket::from(Teams {
+                    name: team.clone().into(),
+                    display_name: team.clone().into(),
                     prefix: "".into(),
                     suffix: "".into(),
                     name_tag_visibility: "always".into(),
@@ -177,22 +175,19 @@ impl Scoreboard {
                     players: vec![],
                     action: CREATE_TEAM,
                     friendly_flags: 3,
-                };
+                }));
 
-                packets.push(ClientBoundPacket::from(packet));
-
-                let packet = UpdateScore {
+                packets.push(ClientBoundPacket::from(UpdateScore {
                     name: hide_key(key),
                     objective: OBJECTIVE_NAME.into(),
-                    value: line_index - 1,
+                    value: line_index as i32,
                     action: UpdateScoreAction::Change,
-                };
-                packets.push(ClientBoundPacket::from(packet));
+                }));
             }
 
-            let packet = Teams {
-                name: format!("team_{line_index}").into(),
-                display_name: format!("team_{line_index}").into(),
+            packets.push(ClientBoundPacket::from(Teams {
+                name: team.clone().into(),
+                display_name: team.clone().into(),
                 prefix: line.first_half(),
                 suffix: line.second_half(),
                 name_tag_visibility: "always".into(),
@@ -200,14 +195,12 @@ impl Scoreboard {
                 players: vec![],
                 action: UPDATE_TEAM,
                 friendly_flags: 3,
-            };
+            }));
 
-            packets.push(ClientBoundPacket::from(packet));
-
-            if line.new || self.line_dirty {
-                let packet = Teams {
-                    name: format!("team_{line_index}").into(),
-                    display_name: format!("team_{line_index}").into(),
+            if dirty {
+                packets.push(ClientBoundPacket::from(Teams {
+                    name: team.clone().into(),
+                    display_name: team.into(),
                     prefix: "".into(),
                     suffix: "".into(),
                     name_tag_visibility: "always".into(),
@@ -215,15 +208,10 @@ impl Scoreboard {
                     players: vec![hide_key(key)],
                     action: ADD_PLAYER,
                     friendly_flags: 0,
-                };
-                packets.push(ClientBoundPacket::from(packet));
+                }));
             }
 
-            line_index -= 1;
-
             line.dirty = false;
-            line.new = false;
-            self.prev_lines.insert(key.clone(), line.clone());
         }
 
         packets
