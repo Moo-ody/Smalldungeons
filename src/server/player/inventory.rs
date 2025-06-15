@@ -12,13 +12,13 @@ use tokio::sync::mpsc::UnboundedSender;
 pub enum ItemSlot {
     #[default]
     Empty,
-    Filled(Item, ItemStack),
+    Filled(Item, /*ItemStack*/),
 }
 
 impl ItemSlot {
     pub fn get_item_stack(&self) -> Option<ItemStack> {
-        if let ItemSlot::Filled(_, stack) = self {
-            Some(stack.clone())
+        if let ItemSlot::Filled(item) = self {
+            Some(item.get_item_stack())
         } else {
             None
         }
@@ -161,23 +161,20 @@ impl Inventory {
     ) -> anyhow::Result<()> {
         let mut window_items: Vec<Option<ItemStack>> = Vec::with_capacity(45);
         for item in &self.items {
-            if let ItemSlot::Filled(_, stack) = item {
-                window_items.push(Some(stack.clone()));
-            } else {
-                window_items.push(None);
-            }
+            window_items.push(item.get_item_stack());
         }
-
+        
         WindowItems {
             window_id: 0,
             items: window_items,
         }.send_packet(player.client_id, network_tx)?;
-
+        
         SetSlot {
             window_id: -1,
             slot: 0,
             item_stack: self.dragged_item.get_item_stack(),
         }.send_packet(player.client_id, network_tx)?;
+        
         Ok(())
     }
 }

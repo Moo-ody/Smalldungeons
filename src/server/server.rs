@@ -9,12 +9,9 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
-use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
-use crate::server::utils::nbt::encode::{TAG_COMPOUND_ID, TAG_STRING_ID};
-use crate::server::utils::nbt::{NBTNode, NBT};
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
 use crate::server::utils::vec3f::Vec3f;
@@ -115,47 +112,11 @@ impl Server {
                 //     duration: 400,
                 //     hide_particles: true,
                 // }.send_packet(player.client_id, &self.network_tx)?;
+
+                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
+                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 
-                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe, ItemStack {
-                    item: 278,
-                    stack_size: 1,
-                    metadata: 0,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::list("ench", TAG_COMPOUND_ID, vec![
-                            NBTNode::Compound(vec![
-                                NBT::short("id", 32),
-                                NBT::short("lvl", 10),
-                            ])
-                        ]),
-                        NBT::byte("Unbreakable", 1),
-                    ])),
-                }), 37);
-
-                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid, ItemStack {
-                    item: 277,
-                    stack_size: 1,
-                    metadata: 0,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::compound("display", vec![
-                            NBT::string("Name", "§r§6Aspect of the Void"),
-                            NBT::list("Lore", TAG_STRING_ID, vec![
-                                NBTNode::String("§r".to_string()),
-                                NBTNode::String("§r§6Ability: Ether Transmission §e§lSNEAK RIGHT CLICK".to_string()),
-                                NBTNode::String("§r§7Teleport to your targeted block up".to_string()),
-                                NBTNode::String("§r§7to §a61 blocks §7away.".to_string()),
-                                NBTNode::String("§r§8Soulflow Cost: §30".to_string()),
-                                NBTNode::String("§r§8Mana Cost: §30".to_string()),
-                                NBTNode::String("§r".to_string()),
-                                NBTNode::String("§r§6§l§kU§r§6§l LEGENDARY SWORD §kU".to_string()),
-                            ])
-                        ]),
-                        NBT::byte("Unbreakable", 1),
-                        NBT::int("HideFlags", 127),
-                    ])),
-                }), 36);
-
                 player.inventory.sync(&player, &self.network_tx)?;
-
                 self.players.insert(client_id, player);
             },
             ClientEvent::ClientDisconnected { client_id } => {

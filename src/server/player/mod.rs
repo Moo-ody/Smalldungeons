@@ -94,7 +94,7 @@ impl Player {
     }
 
     pub fn handle_right_click(&self) {
-        if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
+        if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
     }
