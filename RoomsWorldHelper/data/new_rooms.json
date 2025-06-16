@@ -1,0 +1,1337 @@
+[
+    {
+        "name": "Waterfall",
+        "type": "normal",
+        "room_id": 0,
+        "ids": [
+            "822,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Raccoon",
+        "type": "normal",
+        "room_id": 1,
+        "ids": [
+            "174,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Spider",
+        "type": "normal",
+        "room_id": 2,
+        "ids": [
+            "234,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Gold",
+        "type": "normal",
+        "room_id": 3,
+        "ids": [
+            "166,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Shadow Assassin",
+        "type": "yellow",
+        "room_id": 4,
+        "ids": [
+            "318,66"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Fairy",
+        "type": "fairy",
+        "room_id": 5,
+        "ids": [
+            "462,-312"
+        ],
+        "shape": "1x1",
+        "doors": "0110"
+    },
+    {
+        "name": "Mossy",
+        "type": "normal",
+        "room_id": 6,
+        "ids": [
+            "30,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Banners",
+        "type": "normal",
+        "room_id": 7,
+        "ids": [
+            "30,-276"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Catwalk",
+        "type": "normal",
+        "room_id": 8,
+        "ids": [
+            "630,-420"
+        ],
+        "shape": "1x3",
+        "doors": "0001"
+    },
+    {
+        "name": "Duncan",
+        "type": "normal",
+        "room_id": 9,
+        "ids": [
+            "30,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Blaze",
+        "type": "puzzle",
+        "room_id": 10,
+        "ids": [
+            "-60,-204",
+            "-96,-204"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Red Green",
+        "type": "normal",
+        "room_id": 11,
+        "ids": [
+            "570,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Entrance",
+        "type": "entrance",
+        "room_id": 12,
+        "ids": [
+            "282,66",
+            "102,66"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "New Trap",
+        "type": "trap",
+        "room_id": 13,
+        "ids": [
+            "-384,30",
+            "-348,30"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Wizard",
+        "type": "normal",
+        "room_id": 14,
+        "ids": [
+            "530,-420"
+        ],
+        "shape": "1x3",
+        "doors": "1010"
+    },
+    {
+        "name": "Blood",
+        "type": "blood",
+        "room_id": 15,
+        "ids": [
+            "354,66",
+            "138,30",
+            "138,66"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Dino Site",
+        "type": "normal",
+        "room_id": 16,
+        "ids": [
+            "778,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Spikes",
+        "type": "normal",
+        "room_id": 17,
+        "ids": [
+            "498,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Quiz",
+        "type": "puzzle",
+        "room_id": 18,
+        "ids": [
+            "-60,-600"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Hall",
+        "type": "normal",
+        "room_id": 19,
+        "ids": [
+            "30,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Bomb Defuse",
+        "type": "puzzle",
+        "room_id": 20,
+        "ids": [
+            "-60,-636"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Redstone Warrior",
+        "type": "normal",
+        "room_id": 21,
+        "ids": [
+            "1118,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Pit",
+        "type": "normal",
+        "room_id": 22,
+        "ids": [
+            "690,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Flags",
+        "type": "normal",
+        "room_id": 23,
+        "ids": [
+            "574,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Tic Tac Toe",
+        "type": "puzzle",
+        "room_id": 24,
+        "ids": [
+            "-96,-168"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Cages",
+        "type": "normal",
+        "room_id": 25,
+        "ids": [
+            "750,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Big Red Flag",
+        "type": "normal",
+        "room_id": 26,
+        "ids": [
+            "102,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Balcony",
+        "type": "normal",
+        "room_id": 27,
+        "ids": [
+            "710,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Dueces",
+        "type": "normal",
+        "room_id": 28,
+        "ids": [
+            "138,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Stairs",
+        "type": "normal",
+        "room_id": 29,
+        "ids": [
+            "234,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Dome",
+        "type": "normal",
+        "room_id": 30,
+        "ids": [
+            "642,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Small Waterfall",
+        "type": "normal",
+        "room_id": 31,
+        "ids": [
+            "210,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Cage",
+        "type": "normal",
+        "room_id": 32,
+        "ids": [
+            "498,-276"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Steps",
+        "type": "normal",
+        "room_id": 33,
+        "ids": [
+            "138,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Atlas",
+        "type": "normal",
+        "room_id": 34,
+        "ids": [
+            "778,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Dragon",
+        "type": "yellow",
+        "room_id": 35,
+        "ids": [
+            "174,66"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Lava Ravine",
+        "type": "normal",
+        "room_id": 36,
+        "ids": [
+            "642,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Deathmite",
+        "type": "normal",
+        "room_id": 37,
+        "ids": [
+            "730,-420"
+        ],
+        "shape": "1x3"
+    },
+    {
+        "name": "Blue Skulls",
+        "type": "normal",
+        "room_id": 38,
+        "ids": [
+            "102,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Ice Path",
+        "type": "puzzle",
+        "room_id": 39,
+        "ids": [
+            "-60,-276"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Purple Flags",
+        "type": "normal",
+        "room_id": 40,
+        "ids": [
+            "778,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Long Hall",
+        "type": "normal",
+        "room_id": 41,
+        "ids": [
+            "534,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Red Blue",
+        "type": "normal",
+        "room_id": 42,
+        "ids": [
+            "130,-420"
+        ],
+        "shape": "1x3"
+    },
+    {
+        "name": "Overgrown Chains",
+        "type": "normal",
+        "room_id": 43,
+        "ids": [
+            "642,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Old Trap",
+        "type": "trap",
+        "room_id": 44,
+        "ids": [
+            "-312,30"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Water",
+        "type": "normal",
+        "room_id": 45,
+        "ids": [
+            "498,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Rails",
+        "type": "normal",
+        "room_id": 46,
+        "ids": [
+            "166,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Ice Fill",
+        "type": "puzzle",
+        "room_id": 47,
+        "ids": [
+            "-132,-492"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Mushroom",
+        "type": "normal",
+        "room_id": 48,
+        "ids": [
+            "174,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Bridges",
+        "type": "normal",
+        "room_id": 50,
+        "ids": [
+            "1050,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Creeper Beams",
+        "type": "puzzle",
+        "room_id": 51,
+        "ids": [
+            "-60,-528"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Three Weirdos",
+        "type": "puzzle",
+        "room_id": 52,
+        "ids": [
+            "-60,-96"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Museum",
+        "type": "normal",
+        "room_id": 53,
+        "ids": [
+            "846,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Quad Lava",
+        "type": "normal",
+        "room_id": 54,
+        "ids": [
+            "30,-348"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Small Stairs",
+        "type": "normal",
+        "room_id": 55,
+        "ids": [
+            "606,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Jumping Skulls",
+        "type": "normal",
+        "room_id": 56,
+        "ids": [
+            "102,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "King Midas",
+        "type": "yellow",
+        "room_id": 57,
+        "ids": [
+            "210,102"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Diagonal",
+        "type": "normal",
+        "room_id": 58,
+        "ids": [
+            "230,-420"
+        ],
+        "shape": "1x3",
+        "doors": "1010"
+    },
+    {
+        "name": "Mural",
+        "type": "normal",
+        "room_id": 59,
+        "ids": [
+            "462,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Market",
+        "type": "normal",
+        "room_id": 60,
+        "ids": [
+            "574,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Hallway",
+        "type": "normal",
+        "room_id": 61,
+        "ids": [
+            "162,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Beams",
+        "type": "normal",
+        "room_id": 62,
+        "ids": [
+            "750,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Dip",
+        "type": "normal",
+        "room_id": 63,
+        "ids": [
+            "498,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Basement",
+        "type": "normal",
+        "room_id": 64,
+        "ids": [
+            "66,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Water Board",
+        "type": "puzzle",
+        "room_id": 65,
+        "ids": [
+            "-60,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Quartz Knight",
+        "type": "normal",
+        "room_id": 66,
+        "ids": [
+            "558,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Pressure Plates",
+        "type": "normal",
+        "room_id": 67,
+        "ids": [
+            "1186,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Default",
+        "type": "yellow",
+        "room_id": 68,
+        "ids": [
+            "246,102",
+            "210,66"
+        ],
+        "shape": "1x1",
+        "doors": "0010"
+    },
+    {
+        "name": "Cell",
+        "type": "normal",
+        "room_id": 69,
+        "ids": [
+            "66,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Mirror",
+        "type": "normal",
+        "room_id": 70,
+        "ids": [
+            "174,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Lots Of Floors",
+        "type": "normal",
+        "room_id": 71,
+        "ids": [
+            "102,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Mines",
+        "type": "normal",
+        "room_id": 73,
+        "ids": [
+            "710,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Sloth",
+        "type": "normal",
+        "room_id": 74,
+        "ids": [
+            "66,-276"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Withermancer",
+        "type": "normal",
+        "room_id": 75,
+        "ids": [
+            "710,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Cathedral",
+        "type": "normal",
+        "room_id": 76,
+        "ids": [
+            "506,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Gravel",
+        "type": "normal",
+        "room_id": 77,
+        "ids": [
+            "30,-420"
+        ],
+        "shape": "1x3",
+        "doors": "0010"
+    },
+    {
+        "name": "Crypt",
+        "type": "normal",
+        "room_id": 78,
+        "ids": [
+            "438,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Slabs",
+        "type": "normal",
+        "room_id": 79,
+        "ids": [
+            "570,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Double Diamond",
+        "type": "normal",
+        "room_id": 81,
+        "ids": [
+            "642,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Archway",
+        "type": "normal",
+        "room_id": 82,
+        "ids": [
+            "574,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Boulder",
+        "type": "puzzle",
+        "room_id": 83,
+        "ids": [
+            "-60,-564"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Chains",
+        "type": "normal",
+        "room_id": 84,
+        "ids": [
+            "498,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Skull",
+        "type": "normal",
+        "room_id": 85,
+        "ids": [
+            "98,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Scaffolding",
+        "type": "normal",
+        "room_id": 86,
+        "ids": [
+            "210,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Cobble Wall Pillar",
+        "type": "normal",
+        "room_id": 87,
+        "ids": [
+            "102,-348"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Buttons",
+        "type": "normal",
+        "room_id": 88,
+        "ids": [
+            "438,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Overgrown",
+        "type": "normal",
+        "room_id": 89,
+        "ids": [
+            "714,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Knight",
+        "type": "normal",
+        "room_id": 90,
+        "ids": [
+            "66,-312"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Grand Library",
+        "type": "normal",
+        "room_id": 91,
+        "ids": [
+            "1526,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Well",
+        "type": "normal",
+        "room_id": 92,
+        "ids": [
+            "438,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Andesite",
+        "type": "normal",
+        "room_id": 93,
+        "ids": [
+            "30,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Locked Away",
+        "type": "normal",
+        "room_id": 94,
+        "ids": [
+            "246,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Sarcophagus",
+        "type": "normal",
+        "room_id": 95,
+        "ids": [
+            "462,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Tomioka",
+        "type": "normal",
+        "room_id": 96,
+        "ids": [
+            "138,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Arrow Trap",
+        "type": "normal",
+        "room_id": 97,
+        "ids": [
+            "534,-204"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Melon",
+        "type": "normal",
+        "room_id": 98,
+        "ids": [
+            "166,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "End",
+        "type": "normal",
+        "room_id": 99,
+        "ids": [
+            "678,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Perch",
+        "type": "normal",
+        "room_id": 100,
+        "ids": [
+            "462,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Multicolored",
+        "type": "normal",
+        "room_id": 101,
+        "ids": [
+            "66,-348"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Painting",
+        "type": "normal",
+        "room_id": 102,
+        "ids": [
+            "30,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Layers",
+        "type": "normal",
+        "room_id": 103,
+        "ids": [
+            "1050,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Supertall",
+        "type": "normal",
+        "room_id": 104,
+        "ids": [
+            "642,-592"
+        ],
+        "shape": "2x2"
+    },
+    {
+        "name": "Admin",
+        "type": "normal",
+        "room_id": 105,
+        "ids": [
+            "102,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Silvers Sword",
+        "type": "normal",
+        "room_id": 106,
+        "ids": [
+            "30,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Logs",
+        "type": "normal",
+        "room_id": 107,
+        "ids": [
+            "102,-312"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Pedestal",
+        "type": "normal",
+        "room_id": 108,
+        "ids": [
+            "30,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Prison Cell",
+        "type": "normal",
+        "room_id": 109,
+        "ids": [
+            "66,-132"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Grass Ruin",
+        "type": "normal",
+        "room_id": 110,
+        "ids": [
+            "1322,-384"
+        ],
+        "shape": "1x2",
+        "doors": "0011"
+    },
+    {
+        "name": "Granite",
+        "type": "normal",
+        "room_id": 111,
+        "ids": [
+            "66,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Mage",
+        "type": "normal",
+        "room_id": 112,
+        "ids": [
+            "506,-384"
+        ],
+        "shape": "1x2"
+    },
+    {
+        "name": "Leaves",
+        "type": "normal",
+        "room_id": 113,
+        "ids": [
+            "66,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Redstone Key",
+        "type": "normal",
+        "room_id": 114,
+        "ids": [
+            "534,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Drop",
+        "type": "normal",
+        "room_id": 115,
+        "ids": [
+            "462,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Pillars",
+        "type": "rare",
+        "room_id": 116,
+        "ids": [
+            "282,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Vinny 8 Ball",
+        "type": "rare",
+        "room_id": 117,
+        "ids": [
+            "354,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Golden Oasis",
+        "type": "normal",
+        "room_id": 118,
+        "ids": [
+            "174,-312"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Black Flag",
+        "type": "normal",
+        "room_id": 119,
+        "ids": [
+            "534,-312"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Sand Dragon",
+        "type": "rare",
+        "room_id": 120,
+        "ids": [
+            "102,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Chambers",
+        "type": "normal",
+        "room_id": 121,
+        "ids": [
+            "506,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Doors",
+        "type": "normal",
+        "room_id": 122,
+        "ids": [
+            "642,-384"
+        ],
+        "shape": "1x2",
+        "doors": "1000"
+    },
+    {
+        "name": "Stone Window",
+        "type": "rare",
+        "room_id": 123,
+        "ids": [
+            "30,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Tombstone",
+        "type": "rare",
+        "room_id": 124,
+        "ids": [
+            "66,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Lava Pit",
+        "type": "rare",
+        "room_id": 125,
+        "ids": [
+            "318,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Trinity",
+        "type": "rare",
+        "room_id": 126,
+        "ids": [
+            "246,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Mini Rail Track",
+        "type": "rare",
+        "room_id": 129,
+        "ids": [
+            "210,-60"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Staircase",
+        "type": "normal",
+        "room_id": 130,
+        "ids": [
+            "570,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Pipes",
+        "type": "normal",
+        "room_id": 131,
+        "ids": [
+            "954,-456"
+        ],
+        "shape": "1x4"
+    },
+    {
+        "name": "Pirate",
+        "type": "normal",
+        "room_id": 133,
+        "ids": [
+            "914,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Altar",
+        "type": "normal",
+        "room_id": 134,
+        "ids": [
+            "846,-524"
+        ],
+        "shape": "L"
+    },
+    {
+        "name": "Slime",
+        "type": "normal",
+        "room_id": 135,
+        "ids": [
+            "830,-420"
+        ],
+        "shape": "1x3"
+    },
+    {
+        "name": "Temple",
+        "type": "normal",
+        "room_id": 80,
+        "ids": [
+            "678,-240"
+        ],
+        "shape": "1x1",
+        "doors": "1011"
+    },
+    {
+        "name": "Ritual",
+        "type": "normal",
+        "room_id": 138,
+        "ids": [
+            "822,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Teleport Maze",
+        "type": "puzzle",
+        "room_id": 72,
+        "ids": [
+            "-60,-456"
+        ],
+        "shape": "1x1",
+        "doors": "1000"
+    },
+    {
+        "name": "Criss Cross",
+        "type": "normal",
+        "room_id": 140,
+        "ids": [
+            "714,-168"
+        ],
+        "shape": "1x1",
+        "doors": "0101"
+    },
+    {
+        "name": "Carpets",
+        "type": "normal",
+        "room_id": 142,
+        "ids": [
+            "570,-312"
+        ],
+        "shape": "1x1",
+        "doors": "1111"
+    },
+    {
+        "name": "Redstone Crypt",
+        "type": "normal",
+        "room_id": 143,
+        "ids": [
+            "606,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    },
+    {
+        "name": "Zodd",
+        "type": "normal",
+        "room_id": 145,
+        "ids": [
+            "714,-96"
+        ],
+        "shape": "1x1",
+        "doors": "0011"
+    }
+]
