@@ -96,6 +96,10 @@ export const on_room_change = (func) => {
 }
 
 register("tick", () => {
+    if (Server.getIP() !== "localhost") {
+        current_room_data = null
+        return
+    }
     const new_data = find_room()
     const old_data = current_room_data
     const changed = old_data !== new_data

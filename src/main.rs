@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
 
     let mut rng = rand::rng();
     let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
-    // let dungeon_str = "080909090900080310021104081010121304081415121600041718180100171705190600999999291999901099991999990999919009190001999993999009999909";
+    // let dungeon_str = "030808091000051111021004121311141004151515150100161617181804161606181800291999991999991009999990910009199999399090999099099099999999";
     println!("Dungeon String: {}", dungeon_str);
 
     let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);

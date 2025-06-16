@@ -18,7 +18,7 @@ impl JoinGame {
     pub fn from_entity(player: &Entity) -> JoinGame {
         JoinGame {
             entity_id: player.entity_id,
-            gamemode: 0,
+            gamemode: 1,
             dimension: 0,
             difficulty: 0,
             max_players: 0,

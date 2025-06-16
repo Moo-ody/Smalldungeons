@@ -30,11 +30,26 @@ impl Room {
 
         let crushers = room_data.crusher_data.iter().map(|data| {
             let mut crusher = Crusher::from_json(data);
+            crusher.direction = crusher.direction.rotate(rotation);
 
-            crusher.block_pos = crusher.block_pos.rotate(&rotation)
+            let mut pos = crusher.block_pos.rotate(&rotation);
+
+            // This is fucking aids
+            pos = match rotation {
+                Direction::North => match crusher.direction {
+                    Direction::East | Direction::West => pos.add_z(crusher.width - 1),
+                    _ => pos.add_x(crusher.width - 1),
+                },
+                Direction::South => match crusher.direction {
+                    Direction::East | Direction::West => pos.add_z(-crusher.width + 1),
+                    _ => pos.add_x(-crusher.width + 1),
+                }
+                _ => crusher.block_pos,
+            };
+
+            crusher.block_pos = pos
                 .add_x(corner_pos.x)
                 .add_z(corner_pos.z);
-            crusher.direction = crusher.direction.rotate(rotation);
 
             crusher
         }).collect::<Vec<Crusher>>();
