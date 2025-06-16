@@ -1,9 +1,9 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::id_enum;
 use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
 use crate::net::var_int::VarInt;
-use crate::server::utils::scoreboard::SizedString;
+use crate::server::utils::scoreboard::sized_string::SizedString;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
 pub struct UpdateScore {

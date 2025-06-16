@@ -1,7 +1,7 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::utils::scoreboard::SizedString;
+use crate::server::utils::scoreboard::sized_string::SizedString;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
 pub struct DisplayScoreboard {

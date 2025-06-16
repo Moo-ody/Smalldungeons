@@ -1,4 +1,4 @@
-use crate::server::block::block_parameter::{Axis};
+use crate::server::block::block_parameter::Axis;
 use crate::server::entity::ai::pathfinding::check_collision::CollisionType;
 
 crate::register_blocks! {
@@ -301,10 +301,10 @@ crate::register_blocks! {
 }
 
 impl Blocks {
-    pub fn collision_type(&self) -> CollisionType {
+    pub const fn collision_type(&self) -> CollisionType {
         match self {
             // todo: rest of htis. we could add this into the enum itself too but well see.
-            Blocks::Air => CollisionType::Clear,
+            Self::Air => CollisionType::Clear,
             _ => CollisionType::Solid,
         }
     }

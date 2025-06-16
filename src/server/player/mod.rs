@@ -6,7 +6,7 @@ use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::server::Server;
-use crate::server::utils::scoreboard::scoreboard::Scoreboard;
+use crate::server::utils::scoreboard::Scoreboard;
 use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;

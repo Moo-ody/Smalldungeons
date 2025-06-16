@@ -2,11 +2,7 @@ mod net;
 mod server;
 mod dungeon;
 
-use crate::dungeon::door::{Door, DoorType};
-use crate::dungeon::room::{Room};
-use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
-use crate::server::block::block_parameter::Axis;
-use crate::{dungeon::crushers::Crusher};
+use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
@@ -16,7 +12,6 @@ use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
-use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
@@ -25,10 +20,10 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
+use crate::dungeon::crushers::Crusher;
 use anyhow::Result;
 use include_dir::include_dir;
 use rand::seq::IndexedRandom;
-use serde_json::ser;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
@@ -44,8 +39,18 @@ async fn main() -> Result<()> {
     let (network_tx, network_rx) = unbounded_channel::<NetworkMessage>();
     let (event_tx, mut event_rx) = unbounded_channel::<ClientEvent>();
 
+
     let mut server = Server::initialize(network_tx);
     server.world.server = &mut server;
+
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
+    tokio::spawn(
+        run_network_thread(
+            network_rx,
+            server.network_tx.clone(),
+            event_tx.clone(),
+        )
+    );
 
     let spawn_pos = Vec3f {
         x: 25.0,
@@ -65,7 +70,7 @@ async fn main() -> Result<()> {
             let room_data = RoomData::from_raw_json(contents);
 
             let name_parts: Vec<&str> = name.split(",").collect();
-            let room_id = name_parts.get(0).unwrap().parse::<usize>().unwrap();
+            let room_id = name_parts.first().unwrap().parse::<usize>().unwrap();
 
             (room_id, room_data)
         }).collect();
@@ -138,17 +143,8 @@ async fn main() -> Result<()> {
 
     // println!("Room Data: {:?}", room_data);
 
-    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
-    tokio::spawn(
-        run_network_thread(
-            network_rx,
-            server.network_tx.clone(),
-            event_tx.clone()
-        )
-    );
-
     let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
-    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 1, z: 10 }, &server.world)?;
+    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
 
     server.world.entities.insert(zombie.entity_id, zombie);
     let text = ChatComponentTextBuilder::new("Hello World!").build();
@@ -251,8 +247,6 @@ async fn main() -> Result<()> {
                     // }.send_packet(player.client_id, &server.network_tx)?;
                 }
             }
-
-            dungeon.get_room(player);
         }
 
         // if  {  }

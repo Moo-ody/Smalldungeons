@@ -68,6 +68,7 @@ impl Pathfinder {
         }
 
         // replace with an empty vec when this actually needs to be used probably.
-        Err(anyhow::anyhow!("failed to find path..."))
+        Ok(vec![])
+        //  Err(anyhow::anyhow!("failed to find path..."))
     }
 }

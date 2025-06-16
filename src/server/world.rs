@@ -6,11 +6,9 @@ use crate::server::chunk::chunk_grid::ChunkGrid;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
-use crate::server::utils::vec3f::Vec3f;
-use std::cmp::min;
-use std::collections::HashMap;
 use crate::server::utils::player_list::PlayerList;
-use crate::server::utils::scoreboard::scoreboard::Scoreboard;
+use crate::server::utils::vec3f::Vec3f;
+use std::collections::HashMap;
 
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
