@@ -48,7 +48,8 @@ impl Room {
             Direction::North => BlockPos { x, y, z },
             Direction::East => BlockPos { x: x + self.room_data.length - 1, y, z },
             Direction::South => BlockPos { x: x + self.room_data.length - 1, y, z: z + self.room_data.width - 1 },
-            Direction::West => BlockPos { x: x, y, z: z + self.room_data.width - 1 }
+            Direction::West => BlockPos { x: x, y, z: z + self.room_data.width - 1 },
+            _ => unreachable!(),
         }
     }
 

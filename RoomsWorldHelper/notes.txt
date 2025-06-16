@@ -1,0 +1,23 @@
+
+
+# Traps:
+Tripwires
+- Just string lol
+
+Crushers
+- Corner positions
+- Direction
+- Length
+- Delays
+
+Arrow Trap
+- Delay
+
+Falling Floors
+- Material
+
+# Superboom Walls
+- Blocks which need to be destroyed
+
+# Crypts
+- Blocks which need to be destroyed
