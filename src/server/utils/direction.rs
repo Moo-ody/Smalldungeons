@@ -11,12 +11,9 @@ pub enum Direction {
 }
 
 impl Direction {
-    /// Index is just the degrees / 90
-    /// 
-    /// Eg 0 = 0 degrees, 1 = 90 deg, 2 = 180 deg, 3 = 270 deg
-    pub fn rotate_by_index(&self, index: usize) -> Direction {
-        match index % 4 {
-            0 => {
+    pub fn rotate(&self, other: Direction) -> Direction {
+        match other {
+            Direction::North => {
                 match self {
                     Direction::North => Direction::North,
                     Direction::East => Direction::East,
@@ -26,7 +23,7 @@ impl Direction {
                     Direction::Down => Direction::Down,
                 }
             },
-            1 => {
+            Direction::East => {
                 match self {
                     Direction::North => Direction::East,
                     Direction::East => Direction::South,
@@ -36,7 +33,7 @@ impl Direction {
                     Direction::Down => Direction::Down,
                 }
             }
-            2 => {
+            Direction::South => {
                 match self {
                     Direction::North => Direction::South,
                     Direction::East => Direction::West,
@@ -46,7 +43,7 @@ impl Direction {
                     Direction::Down => Direction::Down,
                 }
             }
-            3 => {
+            Direction::West => {
                 match self {
                     Direction::North => Direction::West,
                     Direction::East => Direction::North,
@@ -58,6 +55,16 @@ impl Direction {
             }
             _ => unreachable!()
                
+        }
+    }
+
+    pub fn from_index(index: usize) -> Direction {
+        match index {
+            0 => Direction::North,
+            1 => Direction::East,
+            2 => Direction::South,
+            3 => Direction::West,
+            _ => unreachable!()
         }
     }
 

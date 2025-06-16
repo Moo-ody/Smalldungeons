@@ -294,7 +294,7 @@ export const make_default_data = (room_obj) => {
 export const export_room = (room_obj) => {
     const { room_id, name, id } = room_obj
 
-    room_obj.block_data = scan_room_blocks(room_obj, true)
+    room_obj.block_data = scan_room_blocks(room_obj, true).block_data
 
     FileLib.write("RoomsWorldHelper", `output/${room_id},${name.replace(/ /g, "_").toLowerCase()},${id}.json`, JSON.stringify(room_obj), true)
 }

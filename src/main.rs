@@ -2,6 +2,7 @@ mod net;
 mod server;
 mod dungeon;
 
+use crate::dungeon::room::Room;
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
@@ -84,7 +85,7 @@ async fn main() -> Result<()> {
     // let dungeon_str = "080909090900080310021104081010121304081415121600041718180100171705190600999999291999901099991999990999919009190001999993999009999909";
     println!("Dungeon String: {}", dungeon_str);
 
-    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
+    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
     // let doors = vec![Door { x: 0, z: 0, direction: Axis::X, door_type: DoorType::NORMAL}];
     // let dungeon = Dungeon::with_rooms_and_doors(
     //     vec![
@@ -250,6 +251,12 @@ async fn main() -> Result<()> {
         }
 
         // if  {  }
+
+        for room in dungeon.rooms.iter_mut() {
+            for crusher in room.crushers.iter_mut() {
+                crusher.tick(&mut server);
+            }
+        }
 
         crusher.tick(&mut server);
     }

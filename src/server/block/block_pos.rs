@@ -76,6 +76,14 @@ impl BlockPos {
             _ => BlockPos { x: self.x, y: self.y, z: self.z },
         }
     }
+
+    pub fn add(&self, other: BlockPos) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z
+        }
+    }
 }
 
 impl PacketWrite for BlockPos {
