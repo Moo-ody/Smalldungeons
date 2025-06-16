@@ -1,4 +1,5 @@
 use crate::server::block::block_parameter::{Axis};
+use crate::Direction;
 
 crate::register_blocks! {
     0 => {
@@ -88,14 +89,16 @@ crate::register_blocks! {
         LapisBlock => 0,
     },
     23 => {
-        Dispenser { facing: u8 } => facing,
+        Dispenser { facing: Direction } => facing.get_piston_index(),
     },
     31 => {
         TallGrass => 0,
         Fern => 1,
     },
     33 => {
-        Piston { facing: u8, extended: bool } => facing + 8 * extended as u8,
+        // Facing down is meta=0, facing up is meta=1
+        // Extended is +8
+        Piston { facing: Direction, extended: bool } => facing.get_piston_index() + extended as u8 * 8,
     },
     35 => {
         WhiteWool => 0,
@@ -140,7 +143,7 @@ crate::register_blocks! {
         QuartzSlab { top: bool } => 7 + (8 * top as u8),
     },
     50 => {
-        Torch { facing: u8 } => facing, // TODO: Other facing
+        Torch { facing: Direction } => facing.get_torch_meta(),
     },
     51 => {
         Fire => 0,
@@ -185,7 +188,7 @@ crate::register_blocks! {
         Melon => 0,
     },
     109 => {
-        StoneBrickStairs { facing: u8, half: bool } => facing << half as u8,
+        StoneBrickStairs { facing: Direction, half: bool } => facing.get_stair_index() << half as u8,
     },
     112 => {
         NetherBrick => 0,
@@ -212,7 +215,7 @@ crate::register_blocks! {
         FlowerPot => 0,
     },
     144 => {
-        Skull { facing: u8, nodrop: bool } => facing << nodrop as u8,
+        Skull { facing: Direction, nodrop: bool } => facing.get_piston_index() + nodrop as u8 * 8,
     },
     152 => {
         RedstoneBlock => 0,
@@ -257,7 +260,7 @@ crate::register_blocks! {
         BlackStainedGlassPane => 15,
     },
     164 => {
-        DarkOakStairs { facing: u8, half: bool } => facing << half as u8,
+        DarkOakStairs { facing: Direction, half: bool } => facing.get_stair_index() << half as u8,
     },
     169 => {
         SeaLantern => 0,
@@ -389,24 +392,31 @@ impl Blocks {
                 _ => Blocks::JungleLeaves { decayable: false, check_decay: true },
             },
             22 => Blocks::LapisBlock,
-            23 => Blocks::Dispenser { facing: meta },
+            23 => match meta {
+                0 => Blocks::Dispenser { facing: Direction::Down },
+                1 => Blocks::Dispenser { facing: Direction::Up },
+                2 => Blocks::Dispenser { facing: Direction::North },
+                3 => Blocks::Dispenser { facing: Direction::South },
+                4 => Blocks::Dispenser { facing: Direction::West },
+                _ => Blocks::Dispenser { facing: Direction::East },
+            },
             31 => match meta {
                 0 => Blocks::TallGrass,
                 _ => Blocks::Fern,
             },
             33 => match meta {
-                0 => Blocks::Piston { facing: 0, extended: false },
-                1 => Blocks::Piston { facing: 1, extended: false },
-                2 => Blocks::Piston { facing: 2, extended: false },
-                3 => Blocks::Piston { facing: 3, extended: false },
-                4 => Blocks::Piston { facing: 4, extended: false },
-                5 => Blocks::Piston { facing: 5, extended: false },
-                8 => Blocks::Piston { facing: 0, extended: true },
-                9 => Blocks::Piston { facing: 1, extended: true },
-                10 => Blocks::Piston { facing: 2, extended: true },
-                11 => Blocks::Piston { facing: 3, extended: true },
-                12 => Blocks::Piston { facing: 4, extended: true },
-                _ => Blocks::Piston { facing: 5, extended: true },
+                0 => Blocks::Piston { facing: Direction::Down, extended: false },
+                1 => Blocks::Piston { facing: Direction::Up, extended: false },
+                2 => Blocks::Piston { facing: Direction::North, extended: false },
+                3 => Blocks::Piston { facing: Direction::South, extended: false },
+                4 => Blocks::Piston { facing: Direction::West, extended: false },
+                5 => Blocks::Piston { facing: Direction::East, extended: false },
+                8 => Blocks::Piston { facing: Direction::Down, extended: true },
+                9 => Blocks::Piston { facing: Direction::Up, extended: true },
+                10 => Blocks::Piston { facing: Direction::North, extended: true },
+                11 => Blocks::Piston { facing: Direction::South, extended: true },
+                12 => Blocks::Piston { facing: Direction::West, extended: true },
+                _ => Blocks::Piston { facing: Direction::East, extended: true },
             }
             35 => match meta {
                 0 => Blocks::WhiteWool,
@@ -458,7 +468,11 @@ impl Blocks {
                 _ => Blocks::QuartzSlab { top: true },
             },
             50 => match meta {
-                _ => Blocks::Torch { facing: meta },
+                1 => Blocks::Torch { facing: Direction::West },
+                2 => Blocks::Torch { facing: Direction::South },
+                3 => Blocks::Torch { facing: Direction::North },
+                4 => Blocks::Torch { facing: Direction::East },
+                _ => Blocks::Torch { facing: Direction::Up },
             },
             51 => Blocks::Fire,
             85 => Blocks::OakFence,
@@ -491,14 +505,14 @@ impl Blocks {
             101 => Blocks::IronBars,
             103 => Blocks::Melon,
             109 => match meta {
-                0 => Blocks::StoneBrickStairs { facing: 0, half: false },
-                1 => Blocks::StoneBrickStairs { facing: 1, half: false },
-                2 => Blocks::StoneBrickStairs { facing: 2, half: false },
-                3 => Blocks::StoneBrickStairs { facing: 3, half: false },
-                4 => Blocks::StoneBrickStairs { facing: 0, half: true },
-                5 => Blocks::StoneBrickStairs { facing: 1, half: true },
-                6 => Blocks::StoneBrickStairs { facing: 2, half: true },
-                _ => Blocks::StoneBrickStairs { facing: 3, half: true },
+                0 => Blocks::StoneBrickStairs { facing: Direction::East, half: false },
+                1 => Blocks::StoneBrickStairs { facing: Direction::West, half: false },
+                2 => Blocks::StoneBrickStairs { facing: Direction::South, half: false },
+                3 => Blocks::StoneBrickStairs { facing: Direction::North, half: false },
+                4 => Blocks::StoneBrickStairs { facing: Direction::East, half: true },
+                5 => Blocks::StoneBrickStairs { facing: Direction::West, half: true },
+                6 => Blocks::StoneBrickStairs { facing: Direction::South, half: true },
+                _ => Blocks::StoneBrickStairs { facing: Direction::North, half: true },
             },
             112 => Blocks::NetherBrick,
             118 => Blocks::Cauldron,
@@ -523,22 +537,22 @@ impl Blocks {
             },
             140 => Blocks::FlowerPot,
             144 => match meta {
-                0 => Blocks::Skull { facing: 0, nodrop: false },
-                1 => Blocks::Skull { facing: 1, nodrop: false },
-                2 => Blocks::Skull { facing: 2, nodrop: false },
-                3 => Blocks::Skull { facing: 3, nodrop: false },
-                4 => Blocks::Skull { facing: 4, nodrop: false },
-                5 => Blocks::Skull { facing: 5, nodrop: false },
-                6 => Blocks::Skull { facing: 6, nodrop: false },
-                7 => Blocks::Skull { facing: 7, nodrop: false },
-                8 => Blocks::Skull { facing: 0, nodrop: true },
-                9 => Blocks::Skull { facing: 1, nodrop: true },
-                10 => Blocks::Skull { facing: 2, nodrop: true },
-                11 => Blocks::Skull { facing: 3, nodrop: true },
-                12 => Blocks::Skull { facing: 4, nodrop: true },
-                13 => Blocks::Skull { facing: 5, nodrop: true },
-                14 => Blocks::Skull { facing: 6, nodrop: true },
-                _ => Blocks::Skull { facing: 7, nodrop: true },
+                0 => Blocks::Skull { facing: Direction::Down, nodrop: false },
+                1 => Blocks::Skull { facing: Direction::Up, nodrop: false },
+                2 => Blocks::Skull { facing: Direction::North, nodrop: false },
+                3 => Blocks::Skull { facing: Direction::South, nodrop: false },
+                4 => Blocks::Skull { facing: Direction::West, nodrop: false },
+                5 => Blocks::Skull { facing: Direction::East, nodrop: false },
+                6 => Blocks::Skull { facing: Direction::Down, nodrop: false },
+                7 => Blocks::Skull { facing: Direction::Up, nodrop: false },
+                8 => Blocks::Skull { facing: Direction::Down, nodrop: true },
+                9 => Blocks::Skull { facing: Direction::Up, nodrop: true },
+                10 => Blocks::Skull { facing: Direction::North, nodrop: true },
+                11 => Blocks::Skull { facing: Direction::South, nodrop: true },
+                12 => Blocks::Skull { facing: Direction::West, nodrop: true },
+                13 => Blocks::Skull { facing: Direction::East, nodrop: true },
+                14 => Blocks::Skull { facing: Direction::Down, nodrop: true },
+                _ => Blocks::Skull { facing: Direction::Up, nodrop: true },
             },
             152 => Blocks::RedstoneBlock,
             154 => Blocks::Hopper { facing: meta },
@@ -579,14 +593,14 @@ impl Blocks {
                 _ => Blocks::BlackStainedGlassPane,
             },
             164 => match meta {
-                0 => Blocks::DarkOakStairs { facing: 0, half: false },
-                1 => Blocks::DarkOakStairs { facing: 1, half: false },
-                2 => Blocks::DarkOakStairs { facing: 2, half: false },
-                3 => Blocks::DarkOakStairs { facing: 3, half: false },
-                4 => Blocks::DarkOakStairs { facing: 0, half: true },
-                5 => Blocks::DarkOakStairs { facing: 1, half: true },
-                6 => Blocks::DarkOakStairs { facing: 2, half: true },
-                _ => Blocks::DarkOakStairs { facing: 3, half: true },
+                0 => Blocks::DarkOakStairs { facing: Direction::East, half: false },
+                1 => Blocks::DarkOakStairs { facing: Direction::West, half: false },
+                2 => Blocks::DarkOakStairs { facing: Direction::South, half: false },
+                3 => Blocks::DarkOakStairs { facing: Direction::North, half: false },
+                4 => Blocks::DarkOakStairs { facing: Direction::East, half: true },
+                5 => Blocks::DarkOakStairs { facing: Direction::West, half: true },
+                6 => Blocks::DarkOakStairs { facing: Direction::South, half: true },
+                _ => Blocks::DarkOakStairs { facing: Direction::North, half: true },
             },
             169 => Blocks::SeaLantern,
             171 => match meta {

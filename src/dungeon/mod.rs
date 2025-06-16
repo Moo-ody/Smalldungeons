@@ -26,7 +26,8 @@ const DOOR_POSITIONS: [(i32, i32); 60] = [(DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN
 pub struct Dungeon {
     pub rooms: Vec<Room>,
     pub doors: Vec<Door>,
-    // maybe dont use 36 in case of a smaller map ?
+    // The numer in this grid will be 0 if there is no room here, or contain
+    // The index - 1 of the room here from &rooms
     pub index_grid: [usize; 36],
 }
 
@@ -36,11 +37,11 @@ impl Dungeon {
         let mut index_grid = [0; 36];
 
         // populate index grid
-        for (room_id, room) in rooms.iter().enumerate() {
+        for (room_index, room) in rooms.iter().enumerate() {
             for (x, z) in room.segments.iter() {
                 let segment_index = x + z * 6;
 
-                index_grid[segment_index] = room_id + 1;
+                index_grid[segment_index] = room_index + 1;
             }
         }
 
@@ -131,7 +132,8 @@ impl Dungeon {
                 let mut room_data = get_random_data_with_type(
                     room_type,
                     shape,
-                    room_data_storage
+                    room_data_storage,
+                    &rooms
                 );
 
                 room_data.room_type = room_type;
@@ -160,7 +162,8 @@ impl Dungeon {
                 get_random_data_with_type(
                     RoomType::Normal,
                     shape,
-                    room_data_storage
+                    room_data_storage,
+                    &rooms
                 )
             ));
         }
@@ -169,9 +172,14 @@ impl Dungeon {
     }
 
     pub fn get_room_at(&self, x: i32, z: i32) -> Option<&Room> {
+        if x < DUNGEON_ORIGIN.0 || z < DUNGEON_ORIGIN.1 {
+            return None;
+        }
+
         let grid_x = ((x as i32 - DUNGEON_ORIGIN.0) / 32) as usize;
         let grid_z = ((z as i32 - DUNGEON_ORIGIN.1) / 32) as usize;
 
+        // The returned number is 0 if no room here, or will return the index + 1 of the room in the rooms vec
         let entry = self.index_grid.get(grid_x + (grid_z * 6));
 
         if entry.is_none_or(|index| *index == 0) {

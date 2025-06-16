@@ -62,7 +62,7 @@ impl Crusher {
             }
         } else {
             if self.tick % self.tick_per_block == 0 {
-                let (dx, dz) = self.direction.get_offset();
+                let (dx, _, dz) = self.direction.get_offset();
                 
                 if !self.is_reversed {
                     let x = self.block_pos.x + (self.current_length as i32 * dx);
@@ -123,12 +123,14 @@ impl Crusher {
             Direction::East => (0, 0),
             Direction::South => (0, 0),
             Direction::West => (0, 1),
+            _ => unreachable!(),
         };
         let (width, length) = match self.direction {
             Direction::North => (-self.width, 1),
             Direction::East => (1, self.width),
             Direction::South => (self.width, 1),
             Direction::West => (1, -self.width),
+            _ => unreachable!(),
         };
         entity.is_in_box_i32(x + x_offset, y, z + z_offset, width, self.height, length)
     }

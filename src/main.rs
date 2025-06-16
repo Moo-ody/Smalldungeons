@@ -125,16 +125,6 @@ async fn main() -> Result<()> {
         20,
     );
 
-    // let room_to_load = include_str!("room_data/462,-312");
-
-    // let room_data = RoomData::from_raw_json(room_to_load);
-    
-    // let room = Room::new(vec![(0, 0)], room_data);
-    
-    // room.load_into_world(&mut server.world);
-
-    // println!("Room Data: {:?}", room_data);
-
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(
         run_network_thread(

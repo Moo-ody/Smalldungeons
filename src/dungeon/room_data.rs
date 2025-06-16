@@ -101,7 +101,7 @@ impl RoomType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RoomData {
     pub name: String,
     pub shape: RoomShape,
@@ -167,12 +167,17 @@ impl RoomData {
 pub fn get_random_data_with_type(
     room_type: RoomType,
     room_shape: RoomShape,
-    data_storage: &HashMap<usize, RoomData>
+    data_storage: &HashMap<usize, RoomData>,
+    current_rooms: &Vec<Room>,
 ) -> RoomData {
     let mut rng = rand::rng();
     
     data_storage.iter()
-        .filter(|data| data.1.room_type == room_type && data.1.shape == room_shape)
+        .filter(|data| {
+            data.1.room_type == room_type &&
+            data.1.shape == room_shape &&
+            !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
+        })
         .map(|x| x.1)
         .choose(&mut rng)
         .unwrap_or(&RoomData::dummy())

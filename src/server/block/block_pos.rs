@@ -19,6 +19,7 @@ impl BlockPos {
             Direction::East => BlockPos { x: -self.z, y: self.y, z: self.x },
             Direction::South => BlockPos { x: -self.x, y: self.y, z: -self.z },
             Direction::West => BlockPos { x: self.z, y: self.y, z: -self.x },
+            _ => BlockPos { x: self.x, y: self.y, z: self.z },
         }
     }
 }
