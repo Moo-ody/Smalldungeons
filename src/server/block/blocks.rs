@@ -1,4 +1,5 @@
-use crate::server::block::block_parameter::{Axis};
+use crate::server::block::block_parameter::Axis;
+use crate::server::entity::ai::pathfinding::check_collision::CollisionType;
 use crate::Direction;
 
 crate::register_blocks! {
@@ -12,8 +13,7 @@ crate::register_blocks! {
         Diorite => 3,
         PolishedDiorite => 4,
         Andesite => 5,
-        PolishedAndesite => 6, // i assume the _ is just in case its a weird number? this shouldnt be possible in vanilla right? adding support for it would be tricky.
-                               // it was so it doesn't complain about match statement stuff iirc 
+        PolishedAndesite => 6,
     },
     2 => {
         Grass => 0,
@@ -304,6 +304,14 @@ crate::register_blocks! {
 }
 
 impl Blocks {
+    pub const fn collision_type(&self) -> CollisionType {
+        match self {
+            // todo: rest of htis. we could add this into the enum itself too but well see.
+            Self::Air => CollisionType::Clear,
+            _ => CollisionType::Solid,
+        }
+    }
+
     /// write implementation for the [Blocks] enum.
     pub fn from_block_state_id(id: u16) -> Blocks {
         let block_id = id >> 4;
@@ -637,6 +645,7 @@ impl Blocks {
 /// format:
 /// ```
 /// id => {
+///
 ///     blockname => metadata (ex: 1),
 ///     blockname { param1: type, param2: type } => metadata (ex: 0 | param1 << 2)
 /// },

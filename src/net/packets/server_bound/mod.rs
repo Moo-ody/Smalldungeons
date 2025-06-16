@@ -14,3 +14,4 @@ pub mod player_block_placement;
 pub mod player_action;
 pub mod held_item_change;
 pub mod chat_message;
+pub mod click_window;

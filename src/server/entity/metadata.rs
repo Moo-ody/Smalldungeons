@@ -11,6 +11,15 @@ pub struct Metadata {
     pub entity: EntityMetadata,
 }
 
+crate::metadata! {
+    Player,
+    Zombie {
+        is_child: bool = 12,
+        is_villager: bool = 13,
+        is_converting: bool = 14
+    }
+}
+
 impl PacketWrite for Metadata {
     fn write(&self, buf: &mut Vec<u8>) {
         self.base.write_to_buffer(buf);
@@ -21,25 +30,18 @@ impl PacketWrite for Metadata {
 
 #[derive(Clone, Debug)]
 pub struct BaseMetadata {
+    // all metadata is optional but this being like this makes it not optional. Maybe use Option<type> if it becomes an issue?
+    // could be turned into a macro to include the basemetadata write_to_buffer impl...
     pub name: String,
 }
 
 impl BaseMetadata {
+    // this needs to be updated for every entry added to base metadata.
     pub fn write_to_buffer(&self, buf: &mut Vec<u8>) {
         buf.push(((4 << 5 | 2 & 31) & 255) as u8);
         self.name.write(buf)
     }
 }
-
-crate::metadata! {
-    Player,
-    Zombie {
-        is_child: bool = 12,
-        is_villager: bool = 13,
-        is_converting: bool = 14
-    }
-}
-
 
 #[macro_export]
 macro_rules! metadata {

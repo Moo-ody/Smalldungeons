@@ -6,8 +6,8 @@ use crate::server::chunk::chunk_grid::ChunkGrid;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
+use crate::server::utils::player_list::PlayerList;
 use crate::server::utils::vec3f::Vec3f;
-use std::cmp::min;
 use std::collections::HashMap;
 
 pub struct World {
@@ -17,6 +17,8 @@ pub struct World {
     pub server: *mut Server,
 
     pub chunk_grid: ChunkGrid,
+
+    pub player_info: PlayerList,
 
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)
@@ -36,13 +38,14 @@ impl World {
         World {
             server: std::ptr::null_mut(),
             chunk_grid: ChunkGrid::new(14),
+            player_info: PlayerList::new(),
             entities: HashMap::new(),
             next_entity_id: 1 // might have to start at 1
         }
     }
 
     pub fn server_mut<'a>(&self) -> &'a mut Server {
-        unsafe { self.server.as_mut().unwrap() }
+        unsafe { self.server.as_mut().expect("server is null") }
     }
 
     pub fn new_entity_id(&mut self) -> EntityId {
@@ -94,7 +97,7 @@ impl World {
         let x0 = start.0.min(end.0);
         let y0 = start.1.min(end.1);
         let z0 = start.2.min(end.2);
-        
+
         let x1 = start.0.max(end.0);
         let y1 = start.1.max(end.1);
         let z1 = start.2.max(end.2);

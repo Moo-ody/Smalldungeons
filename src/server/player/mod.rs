@@ -6,6 +6,7 @@ use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::server::Server;
+use crate::server::utils::scoreboard::Scoreboard;
 use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
@@ -25,6 +26,8 @@ pub struct Player {
     pub client_id: ClientId,
     pub entity_id: EntityId,
 
+    pub scoreboard: Scoreboard,
+
     pub last_keep_alive: i32,
     pub ping: i32,
 
@@ -42,6 +45,7 @@ impl Player {
             server,
             client_id,
             entity_id,
+            scoreboard: Scoreboard::new("§e§lSKYBLOCK"),
             last_keep_alive: -1,
             ping: -1,
             is_sneaking: false,
@@ -53,7 +57,7 @@ impl Player {
 
     // potentially unsafe
     pub fn server_mut<'a>(&self) -> &'a mut Server {
-        unsafe { self.server.as_mut().unwrap() }
+        unsafe { self.server.as_mut().expect("Server is null") }
     }
 
     pub fn get_entity<'a>(&self, world: &'a World) -> Result<&'a Entity> {
@@ -89,24 +93,8 @@ impl Player {
         entity.observing_players.remove(&self.client_id);
     }
 
-    // pub fn set_position(
-    //     &mut self,
-    //     network_tx: &UnboundedSender<NetworkMessage>,
-    //     x: f64,
-    //     y: f64,
-    //     z: f64,
-    // ) -> Result<()> {
-    //     self.entity.update_position(x, y, z);
-    //     PositionLook::from_player(&self).send_packet(self.client_id, network_tx)?;
-    //     Ok(())
-    // }
-
-    // todo: allow for changing slots of items,
-    // currently it isn't tracked
     pub fn handle_right_click(&self) {
-        // println!("test {:?}", self.inventory.get_hotbar_slot(self.held_slot as usize));
-        if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
-            // println!("item {:?}", item);
+        if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
     }

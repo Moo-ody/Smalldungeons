@@ -8,10 +8,11 @@ use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
 use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::server::entity::ai::ai_tasks::AiTasks;
-use crate::server::entity::attributes::Attributes;
-use crate::server::entity::entity_type::EntityType;
-use crate::server::entity::look_helper::LookHelper;
+use crate::server::entity::attributes::{Attribute, AttributeTypes, Attributes};
+use crate::server::entity::entity_type::{EntityType, NON_LIVING};
+use crate::server::entity::look_helper::{wrap_to_180, LookHelper};
 use crate::server::entity::metadata::{BaseMetadata, Metadata};
+use crate::server::entity::move_helper::MoveHelper;
 use crate::server::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::vec3f::Vec3f;
@@ -20,6 +21,8 @@ use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::server::block::block_pos::BlockPos;
+use crate::server::entity::entity_move_data::EntityMoveData;
 
 /// type alias for entity ids.
 ///
@@ -33,6 +36,7 @@ pub struct Entity {
     pub entity_type: EntityType,
     // pub entity_type_data: EntityTypeData,
     pub pos: Vec3f,
+    pub on_ground: bool,
     pub motion: Vec3f,
     pub prev_pos: Vec3f,
     pub last_sent_pos: Vec3f,
@@ -41,6 +45,9 @@ pub struct Entity {
     pub yaw: f32,
     pub pitch: f32,
     pub head_yaw: f32,
+
+    pub entity_move_data: EntityMoveData,
+    
     pub aabb: AABB,
     pub height: f32,
     pub width: f32,
@@ -53,18 +60,23 @@ pub struct Entity {
 
     pub ai_tasks: Option<AiTasks>,
     pub ai_target: Option<EntityId>,
+    pub path: Option<Vec<BlockPos>>,
 
     pub look_helper: LookHelper,
+    pub move_helper: MoveHelper,
 
     pub observing_players: HashSet<ClientId>
 }
 
 impl Entity {
     pub fn create_at(entity_type: EntityType, pos: Vec3f, id: EntityId) -> Entity {
+        let width = entity_type.get_width();
+        let height = entity_type.get_height();
         Entity {
             entity_id: id,
             entity_type,
             pos,
+            on_ground: true,
             motion: Vec3f::new_empty(),
             prev_pos: pos,
             last_sent_pos: pos,
@@ -73,29 +85,48 @@ impl Entity {
             yaw: 0.0,
             pitch: 0.0,
             head_yaw: 0.0,
-            aabb: AABB::new_empty(), // aabb should be determined by height and width, which are determined by entity type and certain entity properties like size.
+
+            entity_move_data: EntityMoveData::new(),
+            
+            aabb: AABB::from_height_width(width as f64, height as f64),
             health: 20.0, // todo: replace by using max health attribute, add requirement for attributes. could also make max health a normal param instead since its required but well see how i want to implement that in the attribute packet.
-            height: 0.0,
-            width: 0.0,
+            height,
+            width,
             ticks_existed: 0,
 
             metadata: Metadata {
                 base: BaseMetadata {
-                    name: stringify!(entity_type).to_owned()
+                    name: entity_type.to_string(),
                 },
                 entity: entity_type.metadata(),
             },
 
-            attributes: Attributes::new(),
+            attributes: Attributes::from([
+                (AttributeTypes::MovementSpeed, Attribute::new(10.0))
+            ]),
 
             ai_tasks: entity_type.get_tasks(),
             ai_target: None,
+            path: None,
 
             look_helper: LookHelper::from_pos(pos, 10.0, 10.0),
+            move_helper: MoveHelper::from_pos(pos),
 
             observing_players: HashSet::new()
         }
     }
+
+    pub fn positioned_aabb(&self) -> AABB {
+        AABB {
+            min_x: self.pos.x - self.width as f64 / 2.0,
+            min_y: self.pos.y,
+            min_z: self.pos.z - self.width as f64 / 2.0,
+            max_x: self.pos.x + self.width as f64 / 2.0,
+            max_y: self.pos.y + self.height as f64,
+            max_z: self.pos.z + self.width as f64 / 2.0,
+        }
+    }
+    
     pub fn update_position(&mut self, x: f64, y: f64, z: f64) {
         self.prev_pos = self.pos;
         self.pos.x = x;
@@ -110,23 +141,33 @@ impl Entity {
     pub fn update(mut self, world: &mut World, network_tx: &UnboundedSender<NetworkMessage>) -> Self {
         // i dont know where in vanilla this happens but its necessary for vanilla to handle the packet properly and it isnt in the packet handling section.
         // living update mods yaw/pitch stuff if it got an update but that doesnt happen via at least the watchclosest ai and it wouldnt even work for this.
-        self.head_yaw = LookHelper::wrap_to_180(self.head_yaw);
-        let mut current = self.update_state(world);
-
+        self.head_yaw = wrap_to_180(self.head_yaw);
+        if !NON_LIVING.contains(&self.entity_type) {
+            self.update_state(world);
+        }
+        
         // this has not been checked to see if its in the right order, its just here because it needs to be here for now.
         // world should probably have its own network tx clone so we dont need to pass it through here maybe? not sure.
-        if let Some(packet) = current.get_pos_packet() {
-            for player in current.observing_players.iter() {
+        if let Some(packet) = self.get_pos_packet() {
+            for player in self.observing_players.iter() {
                 packet.clone().send_packet(*player, network_tx).unwrap_or_else(|err| println!("error updating entity position for client {player}: {err:?}"));
-                EntityHeadLook::from_entity(&current).send_packet(*player, network_tx).unwrap_or_else(|err| println!("error updating entity head yaw for client {player}: {err:?}"));
+                EntityHeadLook::from_entity(&self).send_packet(*player, network_tx).unwrap_or_else(|err| println!("error updating entity head yaw for client {player}: {err:?}"));
             }
         }
 
-        current.last_sent_pos = current.pos;
-        current.last_sent_yaw = current.yaw;
-        current.last_sent_pitch = current.pitch;
+        self.last_sent_pos = self.pos;
+        self.last_sent_yaw = self.yaw;
+        self.last_sent_pitch = self.pitch;
 
-        current
+        self
+    }
+
+    pub fn get_attribute(&self, attribute: AttributeTypes) -> Option<f64> {
+        self.attributes.get(&attribute).map(|attr| attr.calc_final())
+    }
+
+    pub fn move_speed(&self) -> f64 {
+        self.get_attribute(AttributeTypes::MovementSpeed).unwrap_or(1.0)
     }
 
     pub fn load_for_player(&mut self, player: &Player, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()> {
@@ -137,24 +178,23 @@ impl Entity {
         SpawnMob::from_entity(self)?.send_packet(player.client_id, network_tx)
     }
 
-    pub fn update_state(mut self, world: &mut World) -> Self {
+    pub fn update_state(&mut self, world: &mut World) {
         // check despawn
         // sensing cache clear
 
         // target ai update
 
         if let Some(mut tasks) = take(&mut self.ai_tasks) {
-            tasks.update(&mut self, world).unwrap_or_else(|err| println!("error updating entity ai tasks: {:?}", err));
+            tasks.update(self, world).unwrap_or_else(|err| println!("error updating entity ai tasks: {:?}", err));
             self.ai_tasks = Some(tasks);
         }
         // path navigation update
 
         // generic task update?
 
-        // move helper update
-        LookHelper::on_update_look(&mut self);
+        MoveHelper::update(self);
+        LookHelper::on_update_look(self);
         // jump helper update
-        self
     }
 
     pub fn get_pos_packet(&self) -> Option<ClientBoundPacket> {

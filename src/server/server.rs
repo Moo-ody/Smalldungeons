@@ -1,17 +1,19 @@
 use crate::net::client_event::ClientEvent;
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
 use crate::net::packets::client_bound::join_game::JoinGame;
+use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
+use crate::net::packets::client_bound::player_list_item::PlayerListItem;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
-use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
-use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
-use crate::server::utils::nbt::{NBTNode, NBT};
+use crate::server::utils::player_list::footer::footer;
+use crate::server::utils::player_list::header::header;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
@@ -27,7 +29,6 @@ pub struct Server {
     // im not sure about having players in server directly.
     pub players: HashMap<ClientId, Player>,
 }
-
 impl Server {
     pub fn initialize(network_tx: UnboundedSender<NetworkMessage>) -> Server {
         Server {
@@ -64,34 +65,58 @@ impl Server {
                     if entity.entity_id == player.entity_id { continue }
                     player.observe_entity(entity, &self.network_tx)?
                 }
+
+                PlayerListItem::init_packet(self.world.player_info.tab_list()).send_packet(client_id, &self.network_tx)?;
+
+                PlayerListHeaderFooter {
+                    header: header(),
+                    footer: footer(),
+                }.send_packet(player.client_id, &self.network_tx)?;
+
+                player.scoreboard.header_packet().send_packet(player.client_id, &self.network_tx)?;
+
+                for packet in player.scoreboard.get_packets() {
+                    packet.send_packet(player.client_id, &self.network_tx)?;
+                }
+
+                player.scoreboard.display_packet().send_packet(player.client_id, &self.network_tx)?;
+
+                player.scoreboard.add_line("roomid", "§706/14/25 §8m24§87W 730,-420");
+                player.scoreboard.add_line("e1", "");
+                player.scoreboard.add_line("season", "Winter 22nd");
+                player.scoreboard.add_line("ctime", "§73:10pm");
+                player.scoreboard.add_line("zone", " §7⏣ §cThe Catac§combs §7(F7)");
+                player.scoreboard.add_line("e2", "");
+                // boxes stay, red gets ✔ or ✖ depending on blood key and gray increments counter per wither key probably
+                // im not sure if these are the right box symbols but well have to see
+                player.scoreboard.add_line("keys", "Keys: §c■ §c✖ §8§8■ §a0x");
+                player.scoreboard.add_line("etime", "Time Elapsed: §a§a00s");
+                player.scoreboard.add_line("clear", "Cleared: §c0% §8§8(0)");
+                player.scoreboard.add_line("s1", "          ");
+                player.scoreboard.add_line("solo", "§3§lSolo");
+                player.scoreboard.add_line("s2", "          ");
+                player.scoreboard.add_line("footer", "§emc.hypixel.net");
+
+                EntityEffect {
+                    entity_id: player.entity_id,
+                    effect_id: HASTEID,
+                    amplifier: 2,
+                    duration: 200,
+                    hide_particles: true,
+                }.send_packet(player.client_id, &self.network_tx)?;
+
+                // EntityEffect {
+                //     entity_id: player.entity_id,
+                //     effect_id: NIGHTVISIONID,
+                //     amplifier: 0,
+                //     duration: 400,
+                //     hide_particles: true,
+                // }.send_packet(player.client_id, &self.network_tx)?;
+
+                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
+                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 
-                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe, ItemStack {
-                    item: 278,
-                    stack_size: 1,
-                    metadata: 0,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::list("ench", TAG_COMPOUND_ID, vec![
-                            NBTNode::Compound(vec![
-                                NBT::short("id", 32),
-                                NBT::short("lvl", 10),
-                            ])
-                        ])
-                    ])),
-                }), 28);
-
-                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid, ItemStack {
-                    item: 277,
-                    stack_size: 1,
-                    metadata: 0,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::compound("display", vec![
-                            NBT::string("Name", "AOTV")
-                        ])
-                    ])),
-                }), 27);
-
                 player.inventory.sync(&player, &self.network_tx)?;
-
                 self.players.insert(client_id, player);
             },
             ClientEvent::ClientDisconnected { client_id } => {

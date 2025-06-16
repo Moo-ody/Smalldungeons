@@ -1,8 +1,7 @@
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
-use crate::server::block::block_pos::BlockPos;
-use crate::server::block::blocks::Blocks;
+use crate::server::block::blocks::Blocks::Air;
 use crate::server::entity::entity::Entity;
 use crate::server::player::Player;
 use crate::server::utils::vec3f::Vec3f;
@@ -10,7 +9,13 @@ use crate::server::world::World;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
 
-pub fn handle_etherwarp(
+
+enum EtherResult {
+    Valid(i32, i32, i32),
+    Failed,
+}
+
+pub fn handle_ether_warp(
     player: &Player,
     network_tx: &UnboundedSender<NetworkMessage>,
     world: &World,
@@ -26,6 +31,7 @@ pub fn handle_etherwarp(
         let rad_pitch = -pitch.to_radians();
 
         let f2 = -rad_pitch.cos();
+        
         let mut pos = Vec3f {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
@@ -38,7 +44,7 @@ pub fn handle_etherwarp(
 
         pos + start_pos
     };
-
+    
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
         PositionLook {
             x: x as f64 + 0.5,
@@ -46,50 +52,13 @@ pub fn handle_etherwarp(
             z: z as f64 + 0.5,
             yaw: 0.0,
             pitch: 0.0,
-            // flags make x y z absolute, and yaw/pitch relative,
-            // since yaw and pitch is 0, it doesn't rotate the player
+            // these flags make xyz absolute meaning they set directly
+            // while keeping yaw and pitch relative (meaning it is added to players yaw)
+            // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
             flags: 24,
         }.send_packet(player.client_id, network_tx)?;
     }
     Ok(())
-}
-
-enum EtherResult {
-    Valid(i32, i32, i32),
-    Failed,
-}
-
-/// gets the position
-
-fn get_ether_position(
-    world: &World,
-    entity: &Entity,
-) -> Option<BlockPos> {
-    let start_pos = {
-        let mut pos = entity.pos.clone();
-        pos.y += 1.54; // assume always sneaking
-        pos
-    };
-    let end_pos = {
-        let mut pos = get_look(entity.yaw, entity.pitch).normalize();
-        pos.x *= 61.0;
-        pos.y *= 61.0;
-        pos.z *= 61.0;
-        pos + start_pos
-    };
-    if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
-        return Some(BlockPos { x, y, z })
-    }
-    None
-}
-
-fn get_look(yaw: f32, pitch: f32) -> Vec3f {
-    let f2 = -(-pitch * 0.017453292).cos() as f64;
-    Vec3f {
-        x: (-yaw as f64 * 0.017453292 - PI).sin() * f2,
-        y: (-pitch as f64 * 0.017453292).sin(),
-        z: (-yaw as f64 * 0.017453292 - PI).cos() * f2
-    }
 }
 
 fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
@@ -124,10 +93,12 @@ fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
         // Check block at current voxel coordinates
         let current_block = world.get_block_at(x, y, z);
 
-        if current_block != Blocks::Air {
+        if current_block != Air {
             // Check if above blocks are air as in Kotlin code
-            if world.get_block_at(x, y + 1, z) == Blocks::Air && world.get_block_at(x, y + 2, z) == Blocks::Air {
-                return EtherResult::Valid(x, y, z);
+            return if world.get_block_at(x, y + 1, z) == Air && world.get_block_at(x, y + 2, z) == Air {
+                EtherResult::Valid(x, y, z)
+            } else {
+                EtherResult::Failed
             }
         }
 

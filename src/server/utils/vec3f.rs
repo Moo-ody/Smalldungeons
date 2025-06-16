@@ -1,3 +1,4 @@
+use crate::server::block::block_pos::BlockPos;
 use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -8,6 +9,14 @@ pub struct Vec3f {
 }
 
 impl Vec3f {
+    pub fn new(x: f64, y: f64, z: f64) -> Vec3f {
+        Vec3f {
+            x,
+            y,
+            z,
+        }
+    }
+    
     pub fn new_empty() -> Vec3f {
         Vec3f {
             x: 0.0,
@@ -118,5 +127,11 @@ impl Mul for Vec3f {
             y: self.y * rhs.y,
             z: self.z * rhs.z,
         }
+    }
+}
+
+impl From<&BlockPos> for Vec3f {
+    fn from(pos: &BlockPos) -> Self {
+        Self::new(pos.x as f64, pos.y as f64, pos.z as f64)
     }
 }

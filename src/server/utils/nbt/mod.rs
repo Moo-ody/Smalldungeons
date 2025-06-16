@@ -1,3 +1,5 @@
+use crate::server::utils::nbt::encode::TAG_STRING_ID;
+
 pub mod encode;
 pub mod decode;
 
@@ -53,6 +55,16 @@ impl NBT {
 
     pub fn long(name: &str, value: i64) -> (String, NBTNode) {
         (name.to_string(), NBTNode::Long(value))
+    }
+    
+    /// takes a string,
+    /// splits it into lines and creates a list nbt node representing strings.
+    pub fn list_from_string(name: &str, string: &str) -> (String, NBTNode) {
+        let list = string
+            .lines()
+            .map(|line| NBTNode::String(line.to_string()))
+            .collect();
+        (name.to_string(), NBTNode::List { type_id: TAG_STRING_ID, children: list })
     }
 }
 

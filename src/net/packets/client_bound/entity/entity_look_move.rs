@@ -24,7 +24,7 @@ impl EntityLookMove {
             pos_z: ((entity.last_sent_pos.z - entity.pos.z) * 32.0) as i8,
             yaw: ((entity.last_sent_yaw - entity.yaw) * 256.0 / 360.0) as i8,
             pitch: ((entity.last_sent_pitch - entity.pitch) * 256.0 / 360.0) as i8,
-            on_ground: true,
+            on_ground: entity.on_ground,
         }
     }
 }

@@ -1,16 +1,70 @@
 use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
+use crate::server::utils::vec3f::Vec3f;
 use bytes::{Buf, BytesMut};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct BlockPos {
     pub x: i32,
     pub y: i32,
     pub z: i32,
 }
 
+impl From<Vec3f> for BlockPos {
+    fn from(vec: Vec3f) -> Self {
+        Self {
+            x: vec.x as i32,
+            y: vec.y as i32,
+            z: vec.z as i32,
+        }
+    }
+}
+
 impl BlockPos {
-    pub fn is_invalid(&self) -> bool {
+    pub const fn is_invalid(&self) -> bool {
         self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
+    }
+
+    pub const fn distance_squared(&self, other: &BlockPos) -> i32 {
+        let x = self.x - other.x;
+        let y = self.y - other.y;
+        let z = self.z - other.z;
+        x * x + y * y + z * z
+    }
+
+    pub fn distance_to(&self, other: &BlockPos) -> f32 {
+        (self.distance_squared(self) as f32).sqrt()
+    }
+
+    pub fn replace_y(&self, y: i32) -> Self {
+        Self {
+            x: self.x,
+            y,
+            z: self.z,
+        }
+    }
+
+    pub fn add_x(&self, x: i32) -> Self {
+        Self {
+            x: self.x + x,
+            y: self.y,
+            z: self.z,
+        }
+    }
+
+    pub fn add_y(&self, y: i32) -> Self {
+        Self {
+            x: self.x,
+            y: self.y + y,
+            z: self.z,
+        }
+    }
+
+    pub fn add_z(&self, z: i32) -> Self {
+        Self {
+            x: self.x,
+            y: self.y,
+            z: self.z + z,
+        }
     }
 
     pub fn rotate(&self, rotation: &Direction) -> BlockPos {

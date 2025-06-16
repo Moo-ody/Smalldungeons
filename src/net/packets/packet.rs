@@ -5,6 +5,7 @@ use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::net::var_int::write_var_int;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
@@ -134,13 +135,6 @@ macro_rules! register_serverbound_packets {
         }
 
         pub async fn parse_packet(buf: &mut BytesMut, client: &Client) -> anyhow::Result<ServerBoundPackets> {
-            let hex_string: String = buf.iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<String>>()
-                .join(" ");
-
-            // println!("Raw bytes [{}]: {}", buf.len(), hex_string);
-
             let _packet_len = read_var_int(buf).unwrap_or(0);
             let packet_id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
 
@@ -202,4 +196,21 @@ macro_rules! build_packet {
 
         buf
     }};
+}
+
+#[macro_export]
+macro_rules! partial_packet {
+    ($buf:expr => $($value:expr),* $(,)?) => {{
+        $(
+            $crate::net::packets::packet_write::PacketWrite::write(&$value, &mut $buf);
+        )*
+    }}
+}
+
+/// appends the length of the payload and then the payload to the returned buffer.
+pub fn finish_packet(payload: Vec<u8>) -> Vec<u8> {
+    let mut buf = Vec::new();
+    write_var_int(&mut buf, payload.len() as i32);
+    buf.extend_from_slice(&payload);
+    buf
 }

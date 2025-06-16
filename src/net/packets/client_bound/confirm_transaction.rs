@@ -9,12 +9,15 @@ pub struct ConfirmTransaction {
     pub accepted: bool,
 }
 
+// hypixel sends this every tick, adding -1 each tick to action_number
+// and has vanilla impl.
+// vanilla impl is for preventing de-sync between inventory and probably should be done
 impl ConfirmTransaction {
     pub fn new() -> ConfirmTransaction { // maybe this has actual logic but idk what hypixel does so well see
         ConfirmTransaction {
-            window_id: 0i8,
-            action_number: 0i16,
-            accepted: false,
+            window_id: 0,
+            action_number: -1,
+            accepted: true,
         }
     }
 }

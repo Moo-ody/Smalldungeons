@@ -12,10 +12,18 @@ impl AttributesImpl for Attributes {
     fn add(&mut self, attribute_type: AttributeTypes, base_value: f64) {
         self.insert(attribute_type, Attribute::new(base_value));
     }
+
+    fn add_modifier(&mut self, attribute_type: AttributeTypes, value: f64, operation: Operation) {
+        if let Some(attribute) = self.get_mut(&attribute_type) {
+            attribute.modifiers.push(Modifier::new(value, operation));
+        }
+    }
 }
 
 pub trait AttributesImpl {
     fn add(&mut self, attribute_type: AttributeTypes, base_value: f64);
+
+    fn add_modifier(&mut self, attribute_type: AttributeTypes, value: f64, operation: Operation);
 }
 
 impl PacketWrite for Attributes {
