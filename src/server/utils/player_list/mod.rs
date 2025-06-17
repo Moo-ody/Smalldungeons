@@ -2,14 +2,14 @@ pub mod player_profile;
 pub mod header;
 pub mod footer;
 
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use crate::net::packets::client_bound::player_list_item::{PlayerListAction, PlayerListItem};
-use crate::net::packets::server_bound::player_action::Action;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
 use crate::server::utils::player_list::player_profile::PlayerData;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 // we may want a way to send lines without needing to populate them, otherwise we can just use a vec instead of hashmap probably.
+// this should be per player maybe? not sure.
+// this could also just use like 90% of the scoreboard backend without the teams packet nonsense, since it functions very similarly.
 pub struct PlayerList {
     tab_list: HashMap<i32, PlayerData>,
 }

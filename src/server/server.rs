@@ -50,6 +50,7 @@ impl Server {
                 };
 
                 let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
+                println!("player entity id: {}", player_entity.entity_id);
                 let mut player = Player::new(self, client_id, player_entity.entity_id);
 
                 JoinGame::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
@@ -63,6 +64,7 @@ impl Server {
 
                 for entity in self.world.entities.values_mut() {
                     if entity.entity_id == player.entity_id { continue }
+                    println!("entity_id: {}, name: {:?}", entity.entity_id, entity.entity_type);
                     player.observe_entity(entity, &self.network_tx)?
                 }
 

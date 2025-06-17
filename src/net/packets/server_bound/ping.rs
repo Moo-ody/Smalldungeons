@@ -20,12 +20,12 @@ impl ServerBoundPacket for Ping {
         Ok(Self { client_time })
     }
 
-    async fn process(&self, context: PacketContext) -> Result<()> {
+    async fn process<'a>(&self, context: PacketContext<'a>) -> Result<()> {
         println!("Received ping: {}", self.client_time);
 
         Pong {
             client_time: self.client_time,
-        }.send_packet(context.client_id, &context.network_tx)?;
+        }.send_packet(context.client.client_id(), &context.network_tx)?;
 
         Ok(())
     }
