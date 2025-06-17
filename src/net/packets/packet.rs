@@ -1,11 +1,11 @@
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet_context::PacketContext;
+use crate::net::var_int::write_var_int;
 use crate::server::player::ClientId;
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::net::var_int::write_var_int;
 
 #[macro_export]
 macro_rules! register_clientbound_packets {
@@ -113,7 +113,7 @@ macro_rules! register_serverbound_packets {
                 unimplemented!("Use parse_packet instead");
             }
 
-            async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
+            async fn process<'a> (&self, context: PacketContext<'a>) -> anyhow::Result<()> {
                 match self {
                     $(
                         $(
@@ -134,10 +134,9 @@ macro_rules! register_serverbound_packets {
             }
         }
 
-        pub async fn parse_packet(buf: &mut BytesMut, client: &Client) -> anyhow::Result<ServerBoundPackets> {
-            let _packet_len = read_var_int(buf).unwrap_or(0);
+        pub async fn parse_packet(buf: &mut BytesMut, client: &mut Client) -> anyhow::Result<ServerBoundPackets> {
+            let _packet_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet length"))?;
             let packet_id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
-
             match client.connection_state {
                 $(
                     $state => match packet_id {
@@ -170,7 +169,7 @@ macro_rules! print_bytes_hex {
 pub trait ServerBoundPacket: Send + Sync {
     async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
 
-    async fn process(&self, _: PacketContext) -> Result<()> {
+    async fn process<'a>(&self, _: PacketContext<'a>) -> Result<()> {
         Ok(())
     }
 

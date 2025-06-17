@@ -1,14 +1,11 @@
+use crate::net::packets::client_bound::chat::{Chat, CHAT};
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::read_string_from_buf;
 use crate::server::player::Player;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
 use bytes::BytesMut;
-use crate::net::packets::client_bound::chat::{Chat, CHAT};
-use crate::server::block::block_pos::BlockPos;
-use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
-use crate::server::entity::entity::EntityId;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 
 #[derive(Debug)]
 pub struct ChatMessage {
@@ -23,7 +20,7 @@ impl ServerBoundPacket for ChatMessage {
         })
     }
 
-    async fn process(&self, context: PacketContext) -> anyhow::Result<()> {
+    async fn process<'a>(&self, context: PacketContext<'a>) -> anyhow::Result<()> {
         // idrk if this is handled on tick or not but
         // if self.message.starts_with("/") {
         //     if self.message == "/updatezombie" {

@@ -9,9 +9,10 @@ impl PacketWrite for VarInt {
     }
 }
 
-pub fn read_var_int(buf: &mut BytesMut) -> Option<i32> {
+/// this does NOT advance the buffer, strictly reads from it.
+pub fn read_var_int_with_len(buf: &BytesMut) -> Option<(i32, usize)> {
     let mut num_read = 0;
-    let mut result = 0i32;
+    let mut result = 0;
 
     loop {
         if num_read >= 5 || num_read >= buf.len() {
@@ -28,8 +29,13 @@ pub fn read_var_int(buf: &mut BytesMut) -> Option<i32> {
         }
     }
 
-    buf.advance(num_read);
-    Some(result)
+    Some((result, num_read))
+}
+
+pub fn read_var_int(buf: &mut BytesMut) -> Option<i32> {
+    let (int, len) = read_var_int_with_len(buf)?;
+    buf.advance(len);
+    Some(int)
 }
 
 pub fn write_var_int(buf: &mut Vec<u8>, mut value: i32) {

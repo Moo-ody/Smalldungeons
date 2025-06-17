@@ -1,5 +1,4 @@
 use crate::net::connection_state::ConnectionState;
-use crate::net::network_message::NetworkMessage;
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::var_int::read_var_int;
@@ -39,16 +38,10 @@ impl ServerBoundPacket for Handshake {
             next_state,
         })
     }
-    async fn process(&self, context: PacketContext) -> Result<()> {
+    async fn process<'a>(&self, context: PacketContext<'a>) -> Result<()> {
         println!("Received handshake packet");
 
-        let new_state = ConnectionState::from_id(self.next_state)?;
-
-        context.network_tx.send(NetworkMessage::UpdateConnectionState {
-            client_id: context.client_id,
-            new_state,
-        })?;
-
+        context.client.connection_state = ConnectionState::from_id(self.next_state)?;
         Ok(())
     }
 }

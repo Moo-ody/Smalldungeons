@@ -45,14 +45,18 @@ impl ChunkData {
             }
         }
         
-        let section_count = bitmask.count_ones() as usize;
+        // idk if this fixes lighting issue. 
+        // I think client checks if lighting is invalid, if it is it calculates it itself
+        let section_count = if !new { bitmask.count_ones() as usize } else { 16 };
         let data_size: usize = section_count * 12288 + if new { 256 } else { 0 };
         
         let mut data = vec![0u8; data_size];
         let mut offset = 0;
 
         for section in chunk.chunk_sections.iter().flatten() {
-            if section.is_empty() { continue }
+            if section.is_empty() && !new {
+                continue
+            }
             for block in section.data {
                 data[offset] = (block & 0xFF) as u8;
                 data[offset + 1] = ((block >> 8) & 0xFF) as u8;
@@ -69,9 +73,11 @@ impl ChunkData {
                 offset += 1;
             }
         }
-        for _ in 0..256 {
-            data[offset] = 1;
-            offset += 1;
+        if new {
+            for _ in 0..256 {
+                data[offset] = 1;
+                offset += 1;
+            }
         }
         
         ChunkData {

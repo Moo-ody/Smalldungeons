@@ -41,11 +41,13 @@ use crate::net::packets::server_bound::login_start::LoginStart;
 use crate::net::packets::server_bound::ping::Ping;
 use crate::net::packets::server_bound::player_action::PlayerAction;
 use crate::net::packets::server_bound::player_block_placement::PlayerBlockPlacement;
+use crate::net::packets::server_bound::player_digging::PlayerDigging;
 use crate::net::packets::server_bound::player_look::PlayerLook;
 use crate::net::packets::server_bound::player_pos_look::PlayerPosLook;
 use crate::net::packets::server_bound::player_position::PlayerPosition;
 use crate::net::packets::server_bound::player_update::PlayerUpdate;
 use crate::net::packets::server_bound::status_request::StatusRequest;
+use crate::net::packets::server_bound::swing_animation::SwingAnimation;
 use crate::{register_clientbound_packets, register_serverbound_packets};
 
 register_clientbound_packets! {
@@ -98,9 +100,11 @@ register_serverbound_packets! {
         0x05 => PlayerLook,
         0x06 => PlayerPosLook,
         0x0B => PlayerAction,
+        0x0A => SwingAnimation,
         0x08 => PlayerBlockPlacement,
         0x09 => HeldItemChange,
         0x0e => ClickWindow,
+        0x07 => PlayerDigging,
         0x15 => ClientSettings,
         0x0F => SBConfirmTransaction,
     },
