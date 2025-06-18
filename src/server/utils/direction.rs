@@ -1,3 +1,4 @@
+use crate::server::block::metadata::BlockMetadata;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -10,7 +11,33 @@ pub enum Direction {
     Down,
 }
 
+impl BlockMetadata for Direction {
+    fn meta_size() -> u8 {
+        2
+    }
+    fn get_meta(&self) -> u8 {
+        *self as u8
+    }
+
+    fn from_meta(meta: u8) -> Self {
+        match meta {
+            0 => Direction::Down,
+            1 => Direction::Up,
+            2 => Direction::North,
+            3 => Direction::South,
+            4 => Direction::West,
+            _ => Direction::East,
+        }
+    }
+}
+
 impl Direction {
+    
+    // example
+    pub fn rotate(&self) {
+        println!("rotated direction {:?}", self);
+    }
+    
     /// Index is just the degrees / 90
     /// 
     /// Eg 0 = 0 degrees, 1 = 90 deg, 2 = 180 deg, 3 = 270 deg

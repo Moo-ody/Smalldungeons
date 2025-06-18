@@ -86,7 +86,7 @@ impl World {
         for (client_id, _) in server.players.iter() {
             BlockChange {
                 block_pos: BlockPos { x, y, z },
-                block_state: block.block_state_id()
+                block_state: block.get_blockstate_id()
             }.send_packet(*client_id, &server.network_tx).unwrap();
         }
         self.chunk_grid.set_block_at(block, x, y, z);

@@ -1,9 +1,7 @@
-use std::{cmp::min, collections::HashSet};
+use std::collections::HashSet;
 
-use include_dir::Dir;
-use serde_json::json;
-
-use crate::{dungeon::{door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
+use crate::server::block::blocks::Blocks;
+use crate::{dungeon::{door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::block_pos::BlockPos, utils::direction::Direction, world::World}};
 
 pub struct Room {
     pub segments: Vec<(usize, usize)>,
@@ -182,14 +180,14 @@ impl Room {
             
             // Temporary for room colors, will be changed later on to paste saved room block states
             let block = match self.room_data.room_type {
-                RoomType::Normal => Blocks::BrownWool,
-                RoomType::Blood => Blocks::RedWool,
-                RoomType::Entrance => Blocks::GreenWool,
-                RoomType::Fairy => Blocks::PinkWool,
-                RoomType::Trap => Blocks::OrangeWool,
-                RoomType::Yellow => Blocks::YellowWool,
-                RoomType::Puzzle => Blocks::PurpleWool,
-                RoomType::Rare => Blocks::YellowWool,
+                RoomType::Normal => Blocks::Stone { variant: 0 },
+                RoomType::Blood => Blocks::Stone { variant: 0 },
+                RoomType::Entrance => Blocks::Stone { variant: 0 },
+                RoomType::Fairy => Blocks::Stone { variant: 0 },
+                RoomType::Trap => Blocks::Stone { variant: 0 },
+                RoomType::Yellow => Blocks::Stone { variant: 0 },
+                RoomType::Puzzle => Blocks::Stone { variant: 0 },
+                RoomType::Rare => Blocks::Stone { variant: 0 },
             };
 
             world.fill_blocks(

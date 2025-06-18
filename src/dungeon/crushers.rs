@@ -68,7 +68,7 @@ impl Crusher {
                     let x = self.block_pos.x + (self.current_length as i32 * dx);
                     let y = self.block_pos.y;
                     let z = self.block_pos.z + (self.current_length as i32 * dz);
-                    self.set_blocks(world, Blocks::PolishedGranite, x, y, z, dx, dz);
+                    self.set_blocks(world, Blocks::Stone { variant: 2 }, x, y, z, dx, dz);
 
                     for (id, player) in &server.players {
                         let entity = player.get_entity_mut(world).unwrap();
