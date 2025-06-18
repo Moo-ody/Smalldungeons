@@ -133,20 +133,17 @@ fn build_get_blockstate_id(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<Token
                         let type_indent = type_path.path.get_ident().unwrap();
 
                         match type_indent.to_string().as_str() {
-                            "Direction" | "u2" => quote! {
-                                meta |= #ident.get_meta() << offset;
-                                offset += #type_indent::meta_size();
-                            },
                             "u8" => quote! {
                                 meta |= (#ident & 0x0F) << offset;
                                 offset += 4;
                             },
                             "bool" => quote! {
-                                meta |= (#ident as u8) << offset;
+                                meta |= (u8::from(*#ident)) << offset;
                                 offset += 1;
                             },
                             _ => quote! {
-                                compile_error!("Unsupported metadata field type");
+                                meta |= #ident.get_meta() << offset;
+                                offset += #type_indent::meta_size();
                             }
                         }
                     } else {

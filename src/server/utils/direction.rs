@@ -1,19 +1,19 @@
 use crate::server::block::metadata::BlockMetadata;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
-    North, // -Z
-    East, // // +X
-    South, // +Z
-    West, // -X
-    Up,
-    Down,
+    Down = 0,
+    Up = 1,
+    North = 2,
+    South = 3,
+    West = 4,
+    East = 5,
 }
 
 impl BlockMetadata for Direction {
     fn meta_size() -> u8 {
-        2
+        3
     }
     fn get_meta(&self) -> u8 {
         *self as u8
@@ -130,5 +130,61 @@ impl Direction {
             _ => 0,
         }
         
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HorizontalDirection {
+    North, // -Z
+    East, // // +X
+    South, // +Z
+    West, // -X
+}
+
+impl BlockMetadata for HorizontalDirection {
+    fn meta_size() -> u8 {
+        2
+    }
+    fn get_meta(&self) -> u8 {
+        *self as u8
+    }
+
+    fn from_meta(meta: u8) -> Self {
+        match meta & 0b11 {
+            0 => HorizontalDirection::North,
+            1 => HorizontalDirection::East,
+            2 => HorizontalDirection::South,
+            _ => HorizontalDirection::West,
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TorchDirection {
+    East, // // +X
+    West, // -X
+    South, // +Z
+    North, // -Z
+    Up,
+}
+
+impl BlockMetadata for TorchDirection {
+    fn meta_size() -> u8 {
+        3
+    }
+    fn get_meta(&self) -> u8 {
+        (*self as u8) + 1
+    }
+
+    fn from_meta(meta: u8) -> Self {
+        match meta {
+            1 => TorchDirection::East,
+            2 => TorchDirection::West,
+            3 => TorchDirection::South,
+            4 => TorchDirection::North,
+            _ => TorchDirection::Up,
+        }
     }
 }
