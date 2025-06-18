@@ -112,6 +112,7 @@ pub struct RoomData {
     pub length: i32,
     pub height: i32,
     pub block_data: Vec<Blocks>,
+    pub crusher_data: Vec<Value>, // Needs to be parsed when rooms are generated
 }
 
 impl RoomData {
@@ -125,6 +126,8 @@ impl RoomData {
         let width = json_data["width"].as_number().unwrap().as_u64().unwrap() as i32;
         let length = json_data["length"].as_number().unwrap().as_u64().unwrap() as i32;
         let height = json_data["height"].as_number().unwrap().as_u64().unwrap() as i32;
+
+        let crusher_data: Vec<Value> = json_data["crushers"].as_array().unwrap_or(&Vec::new()).to_vec();
 
         let hex_data = json_data["block_data"].as_str().unwrap();
 
@@ -148,6 +151,7 @@ impl RoomData {
             length,
             height,
             block_data,
+            crusher_data,
         }
     }
 
@@ -160,7 +164,8 @@ impl RoomData {
             width: 31,
             length: 31,
             height: 30,
-            block_data: vec![]
+            block_data: vec![],
+            crusher_data: vec![],
         }
     }
 }

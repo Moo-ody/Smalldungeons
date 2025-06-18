@@ -1,5 +1,5 @@
-use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use crate::server::utils::vec3f::Vec3f;
+use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
@@ -74,6 +74,14 @@ impl BlockPos {
             Direction::South => BlockPos { x: -self.x, y: self.y, z: -self.z },
             Direction::West => BlockPos { x: self.z, y: self.y, z: -self.x },
             _ => BlockPos { x: self.x, y: self.y, z: self.z },
+        }
+    }
+
+    pub fn add(&self, other: BlockPos) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z
         }
     }
 }

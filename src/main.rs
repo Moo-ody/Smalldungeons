@@ -17,10 +17,8 @@ use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
-use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
-use crate::dungeon::crushers::Crusher;
 use anyhow::Result;
 use include_dir::include_dir;
 use rand::seq::IndexedRandom;
@@ -52,12 +50,6 @@ async fn main() -> Result<()> {
         )
     );
 
-    let spawn_pos = Vec3f {
-        x: 25.0,
-        y: 69.0,
-        z: 25.0,
-    };
-
     let rooms_dir = include_dir!("src/room_data/");
 
     let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
@@ -81,34 +73,10 @@ async fn main() -> Result<()> {
 
     let mut rng = rand::rng();
     let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
-    // let dungeon_str = "080909090900080310021104081010121304081415121600041718180100171705190600999999291999901099991999990999919009190001999993999009999909";
+    // let dungeon_str = "030808091000051111021004121311141004151515150100161617181804161606181800291999991999991009999990910009199999399090999099099099999999";
     println!("Dungeon String: {}", dungeon_str);
 
-    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
-    // let doors = vec![Door { x: 0, z: 0, direction: Axis::X, door_type: DoorType::NORMAL}];
-    // let dungeon = Dungeon::with_rooms_and_doors(
-    //     vec![
-    //         Room::new(
-    //             vec![(2, 2), (3, 2), (3, 1)],
-    //             &doors,
-    //             get_random_data_with_type(RoomType::Normal, RoomShape::L, &room_data_storage)
-    //         ),
-    //         Room::new(
-    //             vec![(0, 0), (1, 0), (2, 0), (3, 0)],
-    //             &doors,
-    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByFour, &room_data_storage)
-    //         ),
-    //         Room::new(
-    //             vec![(1, 1), (2, 1)],
-    //             &doors,
-    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByTwo, &room_data_storage)
-    //         ),
-    //         Room::new(
-    //             vec![(4, 2)],
-    //             &doors,
-    //             get_random_data_with_type(RoomType::Normal, RoomShape::OneByOne, &room_data_storage)
-    //         ),
-    //     ], doors);
+    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
 
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
@@ -119,31 +87,13 @@ async fn main() -> Result<()> {
         dungeon.load_door(door, &mut server.world);
     }
 
-    let mut crusher = Crusher::new(
-        BlockPos {
-            x: 30,
-            y: 69,
-            z: 20,
-        },
-        Direction::North,
-        5,
-        5,
-        10,
-        10,
-        20,
-    );
-
-    // let room_to_load = include_str!("room_data/462,-312");
-
-    // let room_data = RoomData::from_raw_json(room_to_load);
-
-    // let room = Room::new(vec![(0, 0)], room_data);
-
-    // room.load_into_world(&mut server.world);
-
-    // println!("Room Data: {:?}", room_data);
-
-    let zombie = Entity::create_at(EntityType::Zombie, spawn_pos, server.world.new_entity_id());
+    let zombie_spawn_pos = Vec3f {
+        x: 25.0,
+        y: 69.0,
+        z: 25.0,
+    };
+    
+    let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
     let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
 
     server.world.entities.insert(zombie.entity_id, zombie);
@@ -251,6 +201,10 @@ async fn main() -> Result<()> {
 
         // if  {  }
 
-        crusher.tick(&mut server);
+        for room in dungeon.rooms.iter_mut() {
+            for crusher in room.crushers.iter_mut() {
+                crusher.tick(&mut server);
+            }
+        }
     }
 }

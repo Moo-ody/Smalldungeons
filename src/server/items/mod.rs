@@ -65,6 +65,9 @@ impl Item {
                             §6§l§kU§r§6§l LEGENDARY SWORD §kU
                         "#})
                     ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "ASPECT_OF_THE_VOID"),
+                    ]),
                 ])),
             },
             Item::DiamondPickaxe => ItemStack {

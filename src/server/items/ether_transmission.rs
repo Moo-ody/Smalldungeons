@@ -1,7 +1,6 @@
 use crate::net::network_message::NetworkMessage;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
-use crate::server::block::block_pos::BlockPos;
 use crate::server::entity::entity::Entity;
 use crate::server::player::Player;
 use crate::server::utils::vec3f::Vec3f;
@@ -31,9 +30,9 @@ pub fn handle_teleport(
             z: rad_yaw.cos() * f2,
         }.normalize();
 
-        pos.x *= 20.0;
-        pos.y *= 20.0;
-        pos.z *= 20.0;
+        pos.x *= 10.0;
+        pos.y *= 10.0;
+        pos.z *= 10.0;
 
         pos + start_pos
     };

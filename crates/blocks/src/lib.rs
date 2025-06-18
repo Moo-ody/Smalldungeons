@@ -31,11 +31,11 @@ pub fn block_macro(input: TokenStream) -> TokenStream {
                     #(#build_from),*
                 }
             }
-            pub fn rotate(&self) {
-                match self {
-                    #(#build_rotate),*
-                }
-            }
+            // pub fn rotate(&self) {
+            //     match self {
+            //         #(#build_rotate),*
+            //     }
+            // }
             pub fn is_rotatable(&self) -> bool {
                 match self {
                     #(#build_is_rotatable),*

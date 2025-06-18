@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::block_pos::BlockPos;
@@ -49,8 +51,32 @@ impl Crusher {
         }
     }
 
+    pub fn from_json(json_entry: &Value) -> Crusher {
+
+        let pos_vec = json_entry["position"].as_array().unwrap().iter().map(|x| {
+            x.as_i64().unwrap() as i32
+        }).collect::<Vec<i32>>();
+
+        let direction = json_entry["direction"].as_number().unwrap().as_i64().unwrap() as usize;
+        let width = json_entry["width"].as_number().unwrap().as_i64().unwrap() as i32;
+        let height = json_entry["height"].as_number().unwrap().as_i64().unwrap() as i32;
+        let max_length = json_entry["max_length"].as_number().unwrap().as_i64().unwrap() as u16;
+        let tick_per_block = json_entry["tick_per_block"].as_number().unwrap().as_i64().unwrap() as u16;
+        let pause_duration = json_entry["pause_duration"].as_number().unwrap().as_i64().unwrap() as u16;
+
+        let direction = Direction::from_index(direction);
+        let block_pos = BlockPos {
+            x: pos_vec[0],
+            y: pos_vec[1],
+            z: pos_vec[2]
+        };
+
+        Crusher::new(block_pos, direction, width, height, max_length, tick_per_block, pause_duration)
+    }
+
     pub fn tick(&mut self, server: &mut Server) {
         self.tick += 1;
+        server.world.set_block_at(Blocks::RedstoneBlock, self.block_pos.x, self.block_pos.y - 1, self.block_pos.z);
 
         let world = &mut server.world;
 
@@ -91,8 +117,8 @@ impl Crusher {
                     self.set_blocks(world, Blocks::Air, x, y, z, dx, dz)
                 }
                 self.current_length += 1;
-            }
-            if self.current_length == self.max_length {
+            }   
+            if self.is_reversed && self.current_length == self.max_length || !self.is_reversed && self.current_length > self.max_length {
                 if self.pause_duration != 0 {
                     self.is_paused = true
                 } else {
