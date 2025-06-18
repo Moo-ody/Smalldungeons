@@ -3,7 +3,7 @@ use std::{cmp::min, collections::HashSet};
 use include_dir::Dir;
 use serde_json::json;
 
-use crate::{dungeon::{door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
+use crate::{dungeon::{crushers::Crusher, door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, server::Server, utils::direction::Direction, world::World}};
 
 pub struct Room {
     pub segments: Vec<(usize, usize)>,
@@ -11,6 +11,7 @@ pub struct Room {
     pub rotation: Direction,
 
     pub tick_amount: u32,
+    pub crushers: Vec<Crusher>,
 }
 
 impl Room {
@@ -25,30 +26,61 @@ impl Room {
         segments.sort_by(|a, b| a.0.cmp(&b.0));
 
         let rotation = Room::get_rotation_from_segments(&segments, dungeon_doors);
+        let corner_pos = Room::get_corner_pos_from(&segments, &rotation, &room_data);
+
+        let crushers = room_data.crusher_data.iter().map(|data| {
+            let mut crusher = Crusher::from_json(data);
+            crusher.direction = crusher.direction.rotate(rotation);
+
+            let mut pos = crusher.block_pos.rotate(&rotation);
+
+            // This is fucking aids
+            pos = match rotation {
+                Direction::North => match crusher.direction {
+                    Direction::East | Direction::West => pos.add_z(crusher.width - 1),
+                    _ => pos.add_x(crusher.width - 1),
+                },
+                Direction::South => match crusher.direction {
+                    Direction::East | Direction::West => pos.add_z(-crusher.width + 1),
+                    _ => pos.add_x(-crusher.width + 1),
+                }
+                _ => crusher.block_pos,
+            };
+
+            crusher.block_pos = pos
+                .add_x(corner_pos.x)
+                .add_z(corner_pos.z);
+
+            crusher
+        }).collect::<Vec<Crusher>>();
         
         Room {
             segments,
             room_data,
             rotation,
             tick_amount: 0,
+            crushers,
         }
     }
 
     pub fn get_corner_pos(&self) -> BlockPos {
-        // let first_segment = self.segments[0];
-        let min_x = self.segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
-        let min_y = self.segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
+        Room::get_corner_pos_from(&self.segments, &self.rotation, &self.room_data)
+    }
+
+    pub fn get_corner_pos_from(segments: &Vec<(usize, usize)>, rotation: &Direction, room_data: &RoomData) -> BlockPos {
+        let min_x = segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
+        let min_y = segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
 
         let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
         let y = 68;
         let z = min_y as i32 * 32 + DUNGEON_ORIGIN.1;
 
         // BlockPos { x, y, z }
-        match self.rotation {
+        match rotation {
             Direction::North => BlockPos { x, y, z },
-            Direction::East => BlockPos { x: x + self.room_data.length - 1, y, z },
-            Direction::South => BlockPos { x: x + self.room_data.length - 1, y, z: z + self.room_data.width - 1 },
-            Direction::West => BlockPos { x: x, y, z: z + self.room_data.width - 1 },
+            Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
+            Direction::South => BlockPos { x: x + room_data.length - 1, y, z: z + room_data.width - 1 },
+            Direction::West => BlockPos { x: x, y, z: z + room_data.width - 1 },
             _ => unreachable!(),
         }
     }

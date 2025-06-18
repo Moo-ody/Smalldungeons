@@ -31,9 +31,9 @@ pub fn handle_teleport(
             z: rad_yaw.cos() * f2,
         }.normalize();
 
-        pos.x *= 20.0;
-        pos.y *= 20.0;
-        pos.z *= 20.0;
+        pos.x *= 10.0;
+        pos.y *= 10.0;
+        pos.z *= 10.0;
 
         pos + start_pos
     };
