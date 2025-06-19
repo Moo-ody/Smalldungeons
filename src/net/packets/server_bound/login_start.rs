@@ -28,7 +28,7 @@ impl ServerBoundPacket for LoginStart {
         LoginSuccess {
             uuid: "d74cb748-b23b-4a99-b41e-b85f73d41999".to_string(), // dummy uuid because we dont need auth for local
             name: self.username.clone(),
-        }.send_packet(context.client.client_id(), &context.network_tx)?;
+        }.send_packet(context.client.client_id(), context.network_tx)?;
 
         context.client.connection_state = ConnectionState::Play;
 

@@ -5,6 +5,6 @@ use tokio::sync::mpsc::UnboundedSender;
 
 pub struct PacketContext<'a> {
     pub client: &'a mut Client,
-    pub network_tx: UnboundedSender<NetworkMessage>,
-    pub event_tx: UnboundedSender<ClientEvent>,
+    pub network_tx: &'a UnboundedSender<NetworkMessage>,
+    pub event_tx: &'a UnboundedSender<ClientEvent>,
 }

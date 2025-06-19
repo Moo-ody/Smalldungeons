@@ -59,7 +59,10 @@ impl Scoreboard {
     }
 
     pub fn remove_line(&mut self, key: impl Into<String>) {
-        self.to_remove.insert(key.into());
+        let key = key.into();
+        if self.lines.contains_key(&key) {
+            self.to_remove.insert(key);
+        }
     }
 
     pub fn remove_line_at(&mut self, line: usize) {

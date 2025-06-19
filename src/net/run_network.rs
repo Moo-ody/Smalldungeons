@@ -26,19 +26,19 @@ pub async fn run_network_thread(
                 client_id_counter += 1;
 
                 let (client_tx, client_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-                let event_tx_clone = event_tx.clone();
+                // let event_tx_clone = event_tx.clone();
                 //let client_clone = client.clone();
 
-                clients.insert(client_id, client_tx.clone());
+                clients.insert(client_id, client_tx);
                 //event_tx_clone.send(ClientEvent::NewClient { client_id }).unwrap();
 
-                tokio::spawn(handle_client(client_id, socket, client_rx, event_tx_clone, network_tx.clone()));
+                tokio::spawn(handle_client(client_id, socket, client_rx, event_tx.clone(), network_tx.clone()));
             }
 
             Some(msg) = network_rx.recv() => {
                 match msg {
                     NetworkMessage::SendPacket { client_id, packet } => {
-                        if let Some((client_tx)) = clients.get(&client_id) {
+                        if let Some(client_tx) = clients.get(&client_id) {
                             //println!("sending packet to client {}: {:?}", client_id, packet);
                             match packet.encode().await {
                                 Ok(bytes) => {

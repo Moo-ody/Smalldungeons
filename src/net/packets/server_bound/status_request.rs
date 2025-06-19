@@ -17,7 +17,7 @@ impl ServerBoundPacket for StatusRequest {
     async fn process<'a>(&self, context: PacketContext<'a>) -> Result<()> {
         ServerInfo {
             status: STATUS_RESPONSE_JSON.parse()?,
-        }.send_packet(context.client.client_id(), &context.network_tx)?;
+        }.send_packet(context.client.client_id(), context.network_tx)?;
         Ok(())
     }
 }

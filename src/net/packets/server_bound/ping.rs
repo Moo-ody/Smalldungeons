@@ -25,7 +25,7 @@ impl ServerBoundPacket for Ping {
 
         Pong {
             client_time: self.client_time,
-        }.send_packet(context.client.client_id(), &context.network_tx)?;
+        }.send_packet(context.client.client_id(), context.network_tx)?;
 
         Ok(())
     }

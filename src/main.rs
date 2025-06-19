@@ -2,7 +2,6 @@ mod net;
 mod server;
 mod dungeon;
 
-use crate::dungeon::room::Room;
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::client_event::ClientEvent;
@@ -21,7 +20,6 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
-use crate::dungeon::crushers::Crusher;
 use anyhow::Result;
 use include_dir::include_dir;
 use rand::seq::IndexedRandom;
@@ -49,7 +47,7 @@ async fn main() -> Result<()> {
         run_network_thread(
             network_rx,
             server.network_tx.clone(),
-            event_tx.clone(),
+            event_tx,
         )
     );
 

@@ -6,7 +6,7 @@ use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
 use crate::net::var_int::read_var_int_with_len;
 use crate::server::player::ClientId;
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -38,25 +38,21 @@ pub async fn handle_client(
     network_tx: UnboundedSender<NetworkMessage>,
 ) {
     let mut client = Client::new(client_id);
-
     let mut bytes = BytesMut::new();
 
     loop {
         tokio::select! {
             result = socket.read_buf(&mut bytes) => {
                 match result {
-                    Ok(0) => {
-                        println!("Client {} disconnected.", client_id);
-                        break
-                    },
+                    Ok(0) => { break },
                     Ok(_) => {
                         while let Some(mut packet) = read_whole_packet(&mut bytes).await {
                             match parse_packet(&mut packet, &mut client).await {
                                 Ok(parsed) => {
                                     if let Err(e) = parsed.process(PacketContext {
                                         client: &mut client,
-                                        network_tx: network_tx.clone(),
-                                        event_tx: event_tx.clone(),
+                                        network_tx: &network_tx,
+                                        event_tx: &event_tx,
                                     }).await
                                     {
                                         eprintln!("Failed to process packet for {client_id}: {e}");
@@ -101,10 +97,11 @@ pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
     }
     let (packet_len, varint_len) = read_var_int_with_len(buf)?;
 
-    let total_len = packet_len as usize + varint_len;
-    if buf.len() < total_len {
+    let packet_len = packet_len as usize;
+    if buf.len() < packet_len + varint_len {
         return None;
     }
 
-    Some(buf.split_to(total_len))
+    buf.advance(varint_len);
+    Some(buf.split_to(packet_len))
 }
