@@ -1,4 +1,4 @@
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::packet::SendPacket;
@@ -74,7 +74,7 @@ impl Inventory {
         &mut self,
         packet: &ClickWindow,
         client: &ClientId,
-        network_tx: &UnboundedSender<NetworkMessage>
+        network_tx: &UnboundedSender<NetworkThreadMessage>
     ) -> anyhow::Result<()> {
         match packet.mode {
             0 => {
@@ -157,7 +157,7 @@ impl Inventory {
     pub fn sync(
         &self,
         player: &Player,
-        network_tx: &UnboundedSender<NetworkMessage>
+        network_tx: &UnboundedSender<NetworkThreadMessage>
     ) -> anyhow::Result<()> {
         let mut window_items: Vec<Option<ItemStack>> = Vec::with_capacity(45);
         for item in &self.items {

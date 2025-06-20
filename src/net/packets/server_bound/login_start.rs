@@ -1,5 +1,5 @@
-use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
+use crate::net::internal_packets::MainThreadMessage;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
@@ -32,7 +32,7 @@ impl ServerBoundPacket for LoginStart {
 
         context.client.connection_state = ConnectionState::Play;
 
-        context.event_tx.send(ClientEvent::NewPlayer {
+        context.main_tx.send(MainThreadMessage::NewPlayer {
             client_id: context.client.client_id(),
         })?;
 

@@ -1,6 +1,5 @@
-use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
@@ -33,9 +32,9 @@ impl Client {
 pub async fn handle_client(
     client_id: ClientId,
     mut socket: TcpStream,
-    mut rx: UnboundedReceiver<Vec<u8>>,
-    event_tx: UnboundedSender<ClientEvent>,
-    network_tx: UnboundedSender<NetworkMessage>,
+    mut rx: UnboundedReceiver<ClientHandlerMessage>,
+    main_tx: UnboundedSender<MainThreadMessage>,
+    network_tx: UnboundedSender<NetworkThreadMessage>,
 ) {
     let mut client = Client::new(client_id);
     let mut bytes = BytesMut::new();
@@ -52,15 +51,15 @@ pub async fn handle_client(
                                     if let Err(e) = parsed.process(PacketContext {
                                         client: &mut client,
                                         network_tx: &network_tx,
-                                        event_tx: &event_tx,
+                                        main_tx: &main_tx,
                                     }).await
                                     {
                                         eprintln!("Failed to process packet for {client_id}: {e}");
-                                        break;
+                                        continue;
                                     }
 
                                     if client.connection_state == ConnectionState::Play {
-                                        event_tx.send(ClientEvent::PacketReceived { client_id, packet: parsed })
+                                        main_tx.send(MainThreadMessage::PacketReceived { client_id, packet: parsed })
                                             .unwrap_or_else(|e| eprintln!("Failed to send packet to main thread from {client_id}: {e}"));
                                     }
                                 }
@@ -77,18 +76,25 @@ pub async fn handle_client(
                 }
             }
 
-            Some(data) = rx.recv() => {
-                if let Err(e) = socket.write_all(&data).await {
-                    eprintln!("write error: {e}");
-                    break
+            Some(message) = rx.recv() => {
+                match message {
+                    ClientHandlerMessage::Send(data) => {
+                        if let Err(e) = socket.write_all(&data).await {
+                            eprintln!("write error: {e}");
+                            break
+                        }
+                    }
+
+                    ClientHandlerMessage::CloseHandler => {
+                        break
+                    }
                 }
             }
         }
     }
 
-
+    network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id }).unwrap();
     println!("handle client for {client_id} closed.");
-    event_tx.send(ClientEvent::ClientDisconnected { client_id }).unwrap();
 }
 
 pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {

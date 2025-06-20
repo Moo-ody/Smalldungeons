@@ -4,8 +4,7 @@ mod dungeon;
 
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
-use crate::net::client_event::ClientEvent;
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
 use crate::net::packets::client_bound::particles::Particles;
@@ -35,8 +34,8 @@ const STATUS_RESPONSE_JSON: &str = r#"{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let (network_tx, network_rx) = unbounded_channel::<NetworkMessage>();
-    let (event_tx, mut event_rx) = unbounded_channel::<ClientEvent>();
+    let (network_tx, network_rx) = unbounded_channel::<NetworkThreadMessage>();
+    let (main_tx, mut main_rx) = unbounded_channel::<MainThreadMessage>();
 
 
     let mut server = Server::initialize(network_tx);
@@ -47,7 +46,7 @@ async fn main() -> Result<()> {
         run_network_thread(
             network_rx,
             server.network_tx.clone(),
-            event_tx,
+            main_tx,
         )
     );
 
@@ -104,7 +103,7 @@ async fn main() -> Result<()> {
     loop {
         tick_interval.tick().await;
 
-        while let Ok(message) = event_rx.try_recv() {
+        while let Ok(message) = main_rx.try_recv() {
             server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
         }
 
