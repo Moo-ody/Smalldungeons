@@ -1,4 +1,4 @@
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::blocks::Blocks::Air;
@@ -9,7 +9,6 @@ use crate::server::world::World;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
 
-
 enum EtherResult {
     Valid(i32, i32, i32),
     Failed,
@@ -17,7 +16,7 @@ enum EtherResult {
 
 pub fn handle_ether_warp(
     player: &Player,
-    network_tx: &UnboundedSender<NetworkMessage>,
+    network_tx: &UnboundedSender<NetworkThreadMessage>,
     world: &World,
     entity: &Entity
 ) -> anyhow::Result<()> {

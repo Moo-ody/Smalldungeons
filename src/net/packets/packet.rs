@@ -1,4 +1,4 @@
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::var_int::write_var_int;
 use crate::server::player::ClientId;
@@ -26,7 +26,7 @@ macro_rules! register_clientbound_packets {
             }
         
             impl crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
-                fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
+                fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
                     // println!("Sending packet {:?} to client {}", self, client_id);
                     ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
                     
@@ -54,8 +54,8 @@ macro_rules! register_clientbound_packets {
         }
 
         impl ClientBoundPacket {
-            pub fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::network_message::NetworkMessage>) -> anyhow::Result<()> {
-                network_tx.send(crate::net::network_message::NetworkMessage::SendPacket {
+            pub fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
+                network_tx.send(crate::net::internal_packets::NetworkThreadMessage::SendPacket {
                     client_id,
                     packet: self
                 })?;
@@ -66,7 +66,7 @@ macro_rules! register_clientbound_packets {
 }
 
 pub trait SendPacket<T> where T: Sized {
-    fn send_packet(self, client_id: ClientId, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()>;
+    fn send_packet(self, client_id: ClientId, network_tx: &UnboundedSender<NetworkThreadMessage>) -> anyhow::Result<()>;
 }
 
 #[async_trait::async_trait]
@@ -135,7 +135,7 @@ macro_rules! register_serverbound_packets {
         }
 
         pub async fn parse_packet(buf: &mut BytesMut, client: &mut Client) -> anyhow::Result<ServerBoundPackets> {
-            let _packet_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet length"))?;
+            //let _packet_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet length"))?; this gets consumed by the read_whole_packet call
             let packet_id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
             match client.connection_state {
                 $(

@@ -1,4 +1,4 @@
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
 use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
@@ -7,8 +7,10 @@ use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
 use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::entity::ai::ai_tasks::AiTasks;
 use crate::server::entity::attributes::{Attribute, AttributeTypes, Attributes};
+use crate::server::entity::entity_move_data::EntityMoveData;
 use crate::server::entity::entity_type::{EntityType, NON_LIVING};
 use crate::server::entity::look_helper::{wrap_to_180, LookHelper};
 use crate::server::entity::metadata::{BaseMetadata, Metadata};
@@ -21,8 +23,6 @@ use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::server::block::block_pos::BlockPos;
-use crate::server::entity::entity_move_data::EntityMoveData;
 
 /// type alias for entity ids.
 ///
@@ -138,7 +138,7 @@ impl Entity {
         !self.health.is_nan() && self.health > 0.0
     }
 
-    pub fn update(mut self, world: &mut World, network_tx: &UnboundedSender<NetworkMessage>) -> Self {
+    pub fn update(mut self, world: &mut World, network_tx: &UnboundedSender<NetworkThreadMessage>) -> Self {
         // i dont know where in vanilla this happens but its necessary for vanilla to handle the packet properly and it isnt in the packet handling section.
         // living update mods yaw/pitch stuff if it got an update but that doesnt happen via at least the watchclosest ai and it wouldnt even work for this.
         self.head_yaw = wrap_to_180(self.head_yaw);
@@ -170,7 +170,7 @@ impl Entity {
         self.get_attribute(AttributeTypes::MovementSpeed).unwrap_or(1.0)
     }
 
-    pub fn load_for_player(&mut self, player: &Player, network_tx: &UnboundedSender<NetworkMessage>) -> anyhow::Result<()> {
+    pub fn load_for_player(&mut self, player: &Player, network_tx: &UnboundedSender<NetworkThreadMessage>) -> anyhow::Result<()> {
         if self.entity_id == player.entity_id { return Ok(()); }
         self.observing_players.insert(player.client_id);
 

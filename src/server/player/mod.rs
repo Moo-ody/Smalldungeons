@@ -1,6 +1,6 @@
 pub mod inventory;
 
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
@@ -73,7 +73,7 @@ impl Player {
     /// presumably to be called when the entity should be loaded for said player.
     /// the player will be added to the entities observing list
     /// and the entity to the players observing list. (the latter is for removing themselves from the entities list if the entity should be unloaded for them)
-    pub fn observe_entity(&mut self, entity: &mut Entity, network_tx: &UnboundedSender<NetworkMessage>) -> Result<()> {
+    pub fn observe_entity(&mut self, entity: &mut Entity, network_tx: &UnboundedSender<NetworkThreadMessage>) -> Result<()> {
         if self.entity_id == entity.entity_id { bail!("Can't observe self") }
         self.observed_entities.insert(entity.entity_id);
         entity.observing_players.insert(self.client_id);

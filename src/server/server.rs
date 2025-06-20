@@ -1,5 +1,4 @@
-use crate::net::client_event::ClientEvent;
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
 use crate::net::packets::client_bound::join_game::JoinGame;
@@ -21,7 +20,7 @@ use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub struct Server {
-    pub network_tx: UnboundedSender<NetworkMessage>,
+    pub network_tx: UnboundedSender<NetworkThreadMessage>,
     /// the main world for this impl.
     /// in minecraft a server can have more than 1 world.
     /// however we don't really need that, so for now only 1 main world will be supported
@@ -30,7 +29,7 @@ pub struct Server {
     pub players: HashMap<ClientId, Player>,
 }
 impl Server {
-    pub fn initialize(network_tx: UnboundedSender<NetworkMessage>) -> Server {
+    pub fn initialize(network_tx: UnboundedSender<NetworkThreadMessage>) -> Server {
         Server {
             world: World::new(),
             network_tx,
@@ -38,9 +37,9 @@ impl Server {
         }
     }
 
-    pub fn process_event(&mut self, event: ClientEvent) -> Result<()> {
+    pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {
         match event {
-            ClientEvent::NewPlayer { client_id } => {
+            MainThreadMessage::NewPlayer { client_id } => {
                 println!("added player with id {client_id}");
 
                 let spawn_point = Vec3f {
@@ -121,7 +120,7 @@ impl Server {
                 player.inventory.sync(&player, &self.network_tx)?;
                 self.players.insert(client_id, player);
             },
-            ClientEvent::ClientDisconnected { client_id } => {
+            MainThreadMessage::ClientDisconnected { client_id } => {
                 if let Some(player) = self.players.remove(&client_id) {
                     for entity_id in player.observed_entities {
                         if let Some(entity) = self.world.entities.get_mut(&entity_id) {
@@ -135,7 +134,7 @@ impl Server {
                 }
                 println!("Client {} disconnected", client_id);
             },
-            ClientEvent::PacketReceived { client_id, packet  }  => {
+            MainThreadMessage::PacketReceived { client_id, packet } => {
                 // println!("Packet received from client {}: {:?}", client_id, packet);
                 packet.main_process(&mut self.world, self.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?)?;
                 // update to match if/when its needed

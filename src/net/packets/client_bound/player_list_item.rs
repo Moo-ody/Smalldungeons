@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use crate::{id_enum, print_bytes_hex};
 use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
-use crate::net::var_int::{write_var_int, VarInt};
+use crate::net::var_int::VarInt;
 use crate::server::utils::player_list::player_profile::PlayerData;
+use crate::id_enum;
+use std::collections::HashMap;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug, Clone)]
 pub struct PlayerListItem {
@@ -43,7 +43,17 @@ impl ClientBoundPacketImpl for PlayerListItem {
                 PlayerListAction::AddPlayer => {
                     player.profile.id.write(&mut payload);
                     player.profile.name.write(&mut payload);
-                    VarInt(0).write(&mut payload);
+                    VarInt(player.profile.properties.len() as i32).write(&mut payload);
+                    for (key, property) in player.profile.properties.iter() {
+                        key.write(&mut payload);
+                        property.value.write(&mut payload);
+                        if let Some(signature) = &property.signature {
+                            true.write(&mut payload);
+                            signature.write(&mut payload);
+                        } else {
+                            false.write(&mut payload);
+                        }
+                    }
 
                     VarInt(player.game_mode.id()).write(&mut payload);
                     VarInt(player.ping).write(&mut payload);
