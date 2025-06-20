@@ -20,12 +20,12 @@ impl ChunkSection {
     }
 
     pub fn get_block(&self, index: usize) -> Blocks {
-        Blocks::from_block_state_id(self.data[index])
+        Blocks::from(self.data[index])
     }
     
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
         let index = (y << 8) | (z << 4) | x;
-        Blocks::from_block_state_id(self.data[index as usize])
+        Blocks::from(self.data[index as usize])
     }
     
 
@@ -36,7 +36,7 @@ impl ChunkSection {
         if block != Blocks::Air {
             self.solid_block_amount += 1;
         }
-        let block_state_id = block.block_state_id();
+        let block_state_id = block.get_block_state_id();
         self.data[index] = block_state_id;
     }
 

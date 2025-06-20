@@ -1,4 +1,5 @@
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::check_collision::CollisionType;
 use crate::server::entity::ai::pathfinding::entity_context::EntityContext;
 use crate::server::world::World;
@@ -38,7 +39,7 @@ pub fn is_valid(pos: &BlockPos, entity: &EntityContext, world: &World) -> bool {
         for y in pos.y..pos.y + height {
             for z in pos.z..pos.z + width {
                 let block = world.get_block_at(x, y, z);
-                let path_type = block.collision_type();
+                let path_type = if block == Blocks::Air { CollisionType::Clear } else { CollisionType::Solid };
                 if path_type != CollisionType::Clear { // todo rest of this
                     return false;
                 }
@@ -50,7 +51,8 @@ pub fn is_valid(pos: &BlockPos, entity: &EntityContext, world: &World) -> bool {
 
 pub fn is_valid_position(pos: &BlockPos, entity: &EntityContext, world: &World) -> bool {
     let below = pos.add_y(-1);
-    let collision = world.get_block_at(below.x, below.y, below.z).collision_type();
+    let block = world.get_block_at(below.x, below.y, below.z);
+    let collision = if block == Blocks::Air { CollisionType::Clear } else { CollisionType::Solid };
     let valid = is_valid(pos, entity, world);
     collision == CollisionType::Solid && valid
 }

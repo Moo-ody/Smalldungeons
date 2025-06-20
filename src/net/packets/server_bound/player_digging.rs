@@ -59,7 +59,7 @@ impl ServerBoundPacket for PlayerDigging {
                     let block = world.get_block_at(bp.x, bp.y, bp.z);
                     BlockChange {
                         block_pos: bp,
-                        block_state: block.block_state_id(),
+                        block_state: block.get_block_state_id(),
                     }.send_packet(player.client_id, &player.server_mut().network_tx)?;
                 }
             }
@@ -68,7 +68,7 @@ impl ServerBoundPacket for PlayerDigging {
                 let block = world.get_block_at(bp.x, bp.y, bp.z);
                 BlockChange {
                     block_pos: bp,
-                    block_state: block.block_state_id(),
+                    block_state: block.get_block_state_id(),
                 }.send_packet(player.client_id, &player.server_mut().network_tx)?;
             }
             _ => {}

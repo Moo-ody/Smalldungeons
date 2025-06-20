@@ -1,5 +1,5 @@
-use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use crate::server::utils::vec3f::Vec3f;
+use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]

@@ -1,9 +1,10 @@
-use std::{collections::{HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
 
-use rand::seq::{IteratorRandom};
-use serde_json::{Value};
+use rand::seq::IteratorRandom;
+use serde_json::Value;
 
-use crate::{dungeon::{door::Door, room::Room}, server::block::blocks::Blocks};
+use crate::dungeon::{door::Door, room::Room};
+use crate::server::block::blocks::Blocks;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
@@ -136,7 +137,7 @@ impl RoomData {
             let hex_str = hex_data.get(i..i+4).unwrap();
     
             let num = u16::from_str_radix(hex_str, 16).unwrap();
-            let block = Blocks::from_block_state_id(num);
+            let block = Blocks::from(num);
             
             block_data.push(block)
         }

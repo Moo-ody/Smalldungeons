@@ -16,7 +16,6 @@ use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
-use crate::server::utils::direction::Direction;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;

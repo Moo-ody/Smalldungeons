@@ -1,0 +1,12 @@
+[package]
+name = "blocks"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }         # For parsing Rust code
+quote = "1"       # For generating Rust code
+proc-macro2 = "1" # Needed for compatibility
