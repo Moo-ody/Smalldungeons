@@ -23,3 +23,4 @@ pub mod display_scoreboard;
 pub mod update_score;
 pub mod scoreboard_objective;
 pub mod teams;
+pub mod sound_effect;

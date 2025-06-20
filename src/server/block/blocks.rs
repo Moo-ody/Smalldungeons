@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::server::block::block_parameter::{Axis, HorizontalDirection, LeverOrientation, StairDirection, TorchDirection, TrapdoorDirection, VineMetadata};
+use crate::server::block::block_parameter::{Axis, ButtonDirection, HorizontalDirection, LeverOrientation, StairDirection, TorchDirection, TrapdoorDirection, VineMetadata};
 use crate::server::block::metadata::{u2, u3};
 use crate::server::utils::direction::Direction;
 use blocks::block_macro;
@@ -210,7 +210,7 @@ block_macro! {
             direction: TorchDirection,
         },
         StoneButton {
-            direction: Direction,
+            direction: ButtonDirection,
             powered: bool,
         },
         SnowLayer {
@@ -382,7 +382,7 @@ block_macro! {
         Carrots,
         Potatoes,
         WoodenButton {
-            direction: Direction,
+            direction: ButtonDirection,
             powered: bool,
         },
         Skull {

@@ -186,3 +186,41 @@ impl Rotatable for StairDirection {
         }
     }
 }
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ButtonDirection(Direction);
+
+
+// todo: fix rotation, its still broken even with fixed direction values
+impl Rotatable for ButtonDirection {
+    fn rotate(&self, direction: Direction) -> Self {
+        ButtonDirection(self.0.rotate(direction))
+    }
+}
+
+impl BlockMetadata for ButtonDirection {
+    fn meta_size() -> u8 {
+        3
+    }
+    fn get_meta(&self) -> u8 {
+        match self.0 {
+            Direction::Down => 0,
+            Direction::East => 1,
+            Direction::West => 2,
+            Direction::South => 3,
+            Direction::North => 4,
+            Direction::Up => 5,
+        }
+    }
+    fn from_meta(meta: u8) -> Self {
+        ButtonDirection(match meta & 0b111 {
+            0 => Direction::Down,
+            1 => Direction::East,
+            2 => Direction::West,
+            3 => Direction::South,
+            4 => Direction::North,
+            _ => Direction::Up, // 5–7 fall back to Up
+        })
+    }
+}

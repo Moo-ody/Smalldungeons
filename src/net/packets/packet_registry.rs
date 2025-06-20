@@ -26,6 +26,7 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::scoreboard_objective::ScoreboardObjective;
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::client_bound::set_slot::SetSlot;
+use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
 use crate::net::packets::client_bound::teams::Teams;
 use crate::net::packets::client_bound::update_score::UpdateScore;
@@ -77,6 +78,7 @@ register_clientbound_packets! {
     EntityTeleport,
     EntityEffect,
     
+    SoundEffect,
     Particles,
     
     PlayerListItem,

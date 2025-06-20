@@ -1,13 +1,22 @@
 use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::position_look::PositionLook;
+use crate::net::packets::client_bound::sound_effect::{SoundEffect, Sounds};
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::blocks::Blocks::Air;
 use crate::server::entity::entity::Entity;
 use crate::server::player::Player;
+use crate::server::utils::particles::ParticleTypes::SpellWitch;
 use crate::server::utils::vec3f::Vec3f;
 use crate::server::world::World;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
+
+const VALID_ETHER_WARP_BLOCK_IDS: &[u16] = &[
+    0, 6, 9, 11, 30, 31, 32, 36, 37, 38, 39, 40, 50, 51, 55, 59, 65, 66, 69, 76, 77, 78,
+    93, 94, 104, 105, 106, 111, 115, 131, 132, 140, 141, 142, 143, 144, 149, 150, 157, 171, 175
+];
+
 
 enum EtherResult {
     Valid(i32, i32, i32),
@@ -30,7 +39,7 @@ pub fn handle_ether_warp(
         let rad_pitch = -pitch.to_radians();
 
         let f2 = -rad_pitch.cos();
-        
+
         let mut pos = Vec3f {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
@@ -43,8 +52,21 @@ pub fn handle_ether_warp(
 
         pos + start_pos
     };
-    
+
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
+
+        if let Ok(packet) = Particles::new(
+            SpellWitch,
+            entity.pos,
+            Vec3f::new(0.25, 1.0, 0.25),
+            0.0,
+            25,
+            true,
+            None,
+        ) {
+            packet.send_packet(player.client_id, network_tx)?;
+        }
+
         PositionLook {
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
@@ -55,6 +77,15 @@ pub fn handle_ether_warp(
             // while keeping yaw and pitch relative (meaning it is added to players yaw)
             // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
             flags: 24,
+        }.send_packet(player.client_id, network_tx)?;
+
+        SoundEffect {
+            sounds: Sounds::EnderDragonHit,
+            volume: 1.0,
+            pitch: 0.53968257,
+            x: x as f64 + 0.5,
+            y: y as f64 + 1.05,
+            z: z as f64 + 0.5,
         }.send_packet(player.client_id, network_tx)?;
     }
     Ok(())
@@ -93,8 +124,13 @@ fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
         let current_block = world.get_block_at(x, y, z);
 
         if current_block != Air {
-            // Check if above blocks are air as in Kotlin code
-            return if world.get_block_at(x, y + 1, z) == Air && world.get_block_at(x, y + 2, z) == Air {
+            if VALID_ETHER_WARP_BLOCK_IDS.contains(&(current_block.get_block_state_id() >> 4)) {
+                return EtherResult::Failed;
+            }
+            let block_up1 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
+            let block_up2 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
+
+            return if VALID_ETHER_WARP_BLOCK_IDS.contains(&block_up1) && VALID_ETHER_WARP_BLOCK_IDS.contains(&block_up2) {
                 EtherResult::Valid(x, y, z)
             } else {
                 EtherResult::Failed

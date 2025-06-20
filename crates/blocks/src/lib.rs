@@ -7,10 +7,12 @@ type TokenStream2 = proc_macro2::TokenStream;
 ///
 /// An array of rotatable_types, since it isn't possible to infer if something implements a trait.
 /// 
-const ROTATABLE_TYPES: &'static [&str] = &[
+const ROTATABLE_TYPES: &[&str] = &[
     "HorizontalDirection",
+    "ButtonDirection",
     "StairDirection", 
-    "Direction", "Axis"
+    "Direction",
+    "Axis"
 ];
 
 #[proc_macro]
@@ -177,11 +179,10 @@ fn build_rotate(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
         .variants
         .iter()
         .map(|variant| {
-            let name = &enum_name; // e.g. Blocks
-            let vname = &variant.ident; // e.g. SomeVariant
+            let name = &enum_name;
+            let vname = &variant.ident;
             match &variant.fields {
                 Fields::Named(fields_named) => {
-                    // Collect rotatable fields
                     let rot_fields: Vec<_> = fields_named
                         .named
                         .iter()
@@ -196,10 +197,8 @@ fn build_rotate(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
                         })
                         .collect();
                     if rot_fields.is_empty() {
-                        // No rotatable fields => empty arm (ignore other fields)
                         quote! { #name::#vname { .. } => {} }
                     } else {
-                        // Generate code for each rotatable field
                         let rotates = rot_fields.iter().map(|f| {
                             quote! { *#f = #f.rotate(new_direction); }
                         });
@@ -211,7 +210,6 @@ fn build_rotate(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
                     }
                 }
                 _ => {
-                    // Unnamed or unit variant with no rotatable fields
                     quote! { #name::#vname => {} }
                 }
             }
