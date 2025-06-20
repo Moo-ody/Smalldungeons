@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::server::block::rotatable::Rotatable;
 use crate::{dungeon::{crushers::Crusher, door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
 
 pub struct Room {
@@ -285,6 +286,10 @@ impl Room {
             if *block == Blocks::Air {
                 continue;
             }
+            // not sure if editing room data might ruin something,
+            // so to be safe im just cloning it
+            let mut block = block.clone();
+            block.rotate(self.rotation);
 
             let ind = i as i32;
 
@@ -294,7 +299,7 @@ impl Room {
 
             let bp = BlockPos { x, y, z }.rotate(&self.rotation);
 
-            world.set_block_at(*block, corner.x + bp.x, y, corner.z + bp.z);
+            world.set_block_at(block, corner.x + bp.x, y, corner.z + bp.z);
         }
 
     }

@@ -1,55 +1,42 @@
 use crate::server::block::metadata::BlockMetadata;
+use crate::server::block::rotatable::Rotatable;
 use crate::server::utils::direction::Direction;
+use blocks::BlockMetadata;
 
-
+/// This type of rotation is used in blocks like Logs, etc
+// TODO: This needs Correct rotation
 #[repr(u8)]
-#[derive(PartialEq, Debug, Copy, Clone, Eq)]
+#[derive(PartialEq, Debug, Copy, Clone, Eq, BlockMetadata)]
 pub enum Axis {
-    Y, // y is first for whatever reason
+    Y,
     X,
     Z,
     None
 }
 
-impl Axis {
-    pub fn rotate(&self, direction: Direction) -> Axis {
-        match self {
-            Axis::X => match direction {
-                Direction::South | Direction::North => Axis::Z,
-                _ => Axis::X,
-            },
-            Axis::Z => match direction {
-                Direction::East | Direction::West => Axis::X,
-                _ => Axis::Z,
-            },
-            Axis::Y => Axis::Y,
-            Axis::None => Axis::None,
+impl Rotatable for Axis {
+    fn rotate(&self, other: Direction) -> Self {
+        match other {
+            Direction::North | Direction::South => {
+                *self
+            }
+            Direction::East | Direction::West => {
+                match self {
+                    Axis::Y => Axis::Y,
+                    Axis::X => Axis::Z,
+                    Axis::Z => Axis::X,
+                    Axis::None => Axis::None,
+                }
+            }
+            _ => unreachable!()
         }
     }
 }
 
-impl BlockMetadata for Axis {
-    fn meta_size() -> u8 {
-        2
-    }
-
-    fn get_meta(&self) -> u8 {
-        *self as u8
-    }
-
-    fn from_meta(meta: u8) -> Self {
-        match meta & 0b11 {
-            0 => Axis::Y,
-            1 => Axis::X,
-            2 => Axis::Z,
-            _ => Axis::None,
-        }
-    }
-}
-
-// TODO, ROTATABLE
+// TODO: This needs rotation
+/// Used for exclusively lever.
 #[repr(u8)]
-#[derive(PartialEq, Debug, Copy, Clone, Eq)]
+#[derive(PartialEq, Debug, Copy, Clone, Eq, BlockMetadata)]
 pub enum LeverOrientation {
     DownX,
     East,
@@ -61,34 +48,9 @@ pub enum LeverOrientation {
     DownZ
 }
 
-impl BlockMetadata for LeverOrientation {
-    fn meta_size() -> u8 {
-        3
-    }
-
-    fn get_meta(&self) -> u8 {
-        *self as u8
-    }
-
-    fn from_meta(meta: u8) -> Self {
-        match meta & 0x7 {
-            0 => LeverOrientation::DownX,
-            1 => LeverOrientation::East,
-            2 => LeverOrientation::West,
-            3 => LeverOrientation::South,
-            4 => LeverOrientation::North,
-            5 => LeverOrientation::UpZ,
-            6 => LeverOrientation::UpX,
-            _ => LeverOrientation::DownZ,
-        }
-    }
-}
-
-// why couldn't mojang re-use their code ever???
-// this is essentially same as HorizontalDirection,
-// but slightly reordered
+// TODO: Rotate, or maybe wrap around a different direction and just have different Blockmetadata impl
 #[repr(u8)]
-#[derive(PartialEq, Debug, Copy, Clone, Eq)]
+#[derive(PartialEq, Debug, Copy, Clone, Eq, BlockMetadata)]
 pub enum TrapdoorDirection {
     North,
     South,
@@ -96,26 +58,7 @@ pub enum TrapdoorDirection {
     East
 }
 
-impl BlockMetadata for TrapdoorDirection {
-    fn meta_size() -> u8 {
-        2
-    }
-
-    fn get_meta(&self) -> u8 {
-        *self as u8
-    }
-
-    fn from_meta(meta: u8) -> Self {
-        match meta & 0b11 {
-            0 => TrapdoorDirection::North,
-            1 => TrapdoorDirection::South,
-            2 => TrapdoorDirection::West,
-            _ => TrapdoorDirection::East
-        }
-    }
-}
-
-// needs to be here so it can rotate
+// TODO: This needs rotation
 #[repr(transparent)]
 #[derive(PartialEq, Debug, Copy, Clone, Eq)]
 pub struct VineMetadata(u8);
@@ -132,31 +75,114 @@ impl VineMetadata {
     }
 }
 
-
-// pmo
-
+/// custom direction for Torch blocks, since they used a slightly modified version of direction.
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HayAxis {
-    Y = 0,
-    X = 4,
-    Z = 8,
-    None = 12
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BlockMetadata)]
+pub enum TorchDirection {
+    East = 1,
+    West = 2,
+    South = 3,
+    North = 4,
+    Up = 5,
 }
 
-impl BlockMetadata for HayAxis {
-    fn meta_size() -> u8 {
-        4
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BlockMetadata)]
+pub enum HorizontalDirection {
+    South,
+    West,
+    North,
+    East,
+}
+
+impl Rotatable for HorizontalDirection {
+    fn rotate(&self, other: Direction) -> Self {
+        match other {
+            Direction::North => {
+                match self {
+                    HorizontalDirection::North => HorizontalDirection::North,
+                    HorizontalDirection::East => HorizontalDirection::East,
+                    HorizontalDirection::South => HorizontalDirection::South,
+                    HorizontalDirection::West => HorizontalDirection::West,
+                }
+            },
+            Direction::East => {
+                match self {
+                    HorizontalDirection::North => HorizontalDirection::East,
+                    HorizontalDirection::East => HorizontalDirection::South,
+                    HorizontalDirection::South => HorizontalDirection::West,
+                    HorizontalDirection::West => HorizontalDirection::North,
+                }
+            }
+            Direction::South => {
+                match self {
+                    HorizontalDirection::North => HorizontalDirection::South,
+                    HorizontalDirection::East => HorizontalDirection::West,
+                    HorizontalDirection::South => HorizontalDirection::North,
+                    HorizontalDirection::West => HorizontalDirection::East,
+                }
+            }
+            Direction::West => {
+                match self {
+                    HorizontalDirection::North => HorizontalDirection::West,
+                    HorizontalDirection::East => HorizontalDirection::North,
+                    HorizontalDirection::South => HorizontalDirection::East,
+                    HorizontalDirection::West => HorizontalDirection::South,
+                }
+            }
+            _ => unreachable!()
+
+        }
     }
-    fn get_meta(&self) -> u8 {
-        *self as u8
-    }
-    fn from_meta(meta: u8) -> Self {
-        match meta & 0b1100 {
-            0 => HayAxis::Y,
-            4 => HayAxis::X,
-            8 => HayAxis::Z,
-            _ => HayAxis::None,
+}
+
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BlockMetadata)]
+pub enum StairDirection {
+    East,
+    West,
+    South,
+    North,
+}
+
+impl Rotatable for StairDirection {
+    fn rotate(&self, other: Direction) -> Self {
+        match other {
+            Direction::North => {
+                match self {
+                    StairDirection::North => StairDirection::North,
+                    StairDirection::East => StairDirection::East,
+                    StairDirection::South => StairDirection::South,
+                    StairDirection::West => StairDirection::West,
+                }
+            },
+            Direction::East => {
+                match self {
+                    StairDirection::North => StairDirection::East,
+                    StairDirection::East => StairDirection::South,
+                    StairDirection::South => StairDirection::West,
+                    StairDirection::West => StairDirection::North,
+                }
+            }
+            Direction::South => {
+                match self {
+                    StairDirection::North => StairDirection::South,
+                    StairDirection::East => StairDirection::West,
+                    StairDirection::South => StairDirection::North,
+                    StairDirection::West => StairDirection::East,
+                }
+            }
+            Direction::West => {
+                match self {
+                    StairDirection::North => StairDirection::West,
+                    StairDirection::East => StairDirection::North,
+                    StairDirection::South => StairDirection::East,
+                    StairDirection::West => StairDirection::South,
+                }
+            }
+            _ => unreachable!()
+
         }
     }
 }

@@ -44,7 +44,7 @@ impl ServerBoundPacket for PlayerBlockPlacement {
             let block = world.get_block_at(bp.x, bp.y, bp.z);
             BlockChange {
                 block_pos: bp,
-                block_state: block.get_blockstate_id(),
+                block_state: block.get_block_state_id(),
             }.send_packet(player.client_id, &player.server_mut().network_tx)?;
         }
         if self.item_stack.is_some() {

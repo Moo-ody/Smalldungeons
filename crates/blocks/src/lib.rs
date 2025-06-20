@@ -1,233 +1,282 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Fields, Ident, ItemEnum};
+use syn::{parse_macro_input, DeriveInput, Fields, Ident, ItemEnum};
 
 type TokenStream2 = proc_macro2::TokenStream;
 
+///
+/// An array of rotatable_types, since it isn't possible to infer if something implements a trait.
+/// 
+const ROTATABLE_TYPES: &'static [&str] = &[
+    "HorizontalDirection",
+    "StairDirection", 
+    "Direction", "Axis"
+];
+
 #[proc_macro]
 pub fn block_macro(input: TokenStream) -> TokenStream {
-    let mut input_enum = parse_macro_input!(input as ItemEnum);
+    let input_enum = parse_macro_input!(input as ItemEnum);
     let enum_name = &input_enum.ident;
 
-    let build_get = build_get_blockstate_id(enum_name, &input_enum);
-    let build_from = build_from_blockstate_id(enum_name, &input_enum);
-    let build_rotate = build_rotate(enum_name, &input_enum);
-    let build_is_rotatable = build_is_rotatable(enum_name, &input_enum);
+    let (get_arms, from_arms) = generate_arms(enum_name, &input_enum);
+    let rotate_arms = build_rotate(enum_name, &input_enum);
 
     let expanded = quote! {
         use crate::server::block::metadata::BlockMetadata;
+        use crate::server::block::rotatable::Rotatable;
 
         #input_enum
 
         impl #enum_name {
-            pub fn get_blockstate_id(&self) -> u16 {
+            pub fn get_block_state_id(&self) -> u16 {
                 match self {
-                    #(#build_get),*
+                    #(#get_arms),*
                 }
             }
-            pub fn from_blockstate_id(v: u16) -> Self {
-                let index = v >> 4;
-                match index {
-                    #(#build_from),*
-                }
-            }
-            // pub fn rotate(&self) {
-            //     match self {
-            //         #(#build_rotate),*
-            //     }
-            // }
-            pub fn is_rotatable(&self) -> bool {
+
+            pub fn rotate(&mut self, new_direction: Direction) {
                 match self {
-                    #(#build_is_rotatable),*
+                    #(#rotate_arms),*
                 }
             }
         }
-        
-        // impl From<u16> for #enum_name {
-        //     fn from(v: u16) -> Self {
-        //         match v {
-        //             #(#build_from),*
-        //         }
-        //     }
-        // }
+
+        impl From<u16> for #enum_name {
+            fn from(v: u16) -> Self {
+                let index = v >> 4;
+                match index {
+                    #(#from_arms),*
+                }
+            }
+        }
     };
-    
 
     TokenStream::from(expanded)
 }
 
-// TODO: Make it iterate only once over all things
+fn generate_arms(
+    enum_name: &Ident,
+    data_enum: &ItemEnum,
+) -> (Vec<TokenStream2>, Vec<TokenStream2>) {
+    let mut get_arms = Vec::new();
+    let mut from_arms = Vec::new();
 
-fn build_from_blockstate_id(enum_name: &Ident, data_enum: &ItemEnum) -> Vec<TokenStream2> {
-    data_enum.variants.iter().enumerate().map(|(block_id, variant)| {
+    for (block_id, variant) in data_enum.variants.iter().enumerate() {
         let variant_ident = &variant.ident;
         let id_lit = syn::LitInt::new(&block_id.to_string(), proc_macro2::Span::call_site());
 
         match &variant.fields {
             Fields::Named(fields_named) => {
-                let field_snippets: Vec<TokenStream2> = fields_named.named.iter().map(|f| {
-                    let name = f.ident.as_ref().unwrap();
-                    let ty = if let syn::Type::Path(p) = &f.ty {
-                        p.path.segments.last().unwrap().ident.to_string()
-                    } else {
-                        panic!("unsupported field type");
-                    };
+                let field_names: Vec<_> = fields_named
+                    .named
+                    .iter()
+                    .map(|f| f.ident.as_ref().unwrap())
+                    .collect();
 
-                    match ty.as_str() {
-                        "bool" => quote! {
-                            let #name = ((meta >> offset) & 0x01) != 0;
-                            offset += 1;
-                        },
-                        "u8" => quote! {
-                            let #name = ((meta >> offset) & 0x0F) as u8;
-                            offset += 4;
-                        },
-                        other => {
-                            let ty_ident = syn::Ident::new(other, proc_macro2::Span::call_site());
-                            quote! {
-                                let #name = #ty_ident::from_meta(((meta >> offset) & ((1 << #ty_ident::meta_size()) - 1)) as u8);
-                                offset += #ty_ident::meta_size();
-                            }
-                        }
+                let get_fields = fields_named
+                    .named
+                    .iter()
+                    .map(|f| get_field_handler(f))
+                    .collect::<Vec<_>>();
+
+                let from_fields = fields_named
+                    .named
+                    .iter()
+                    .map(|f| from_field_handler(f))
+                    .collect::<Vec<_>>();
+
+                get_arms.push(quote! {
+                    #enum_name::#variant_ident { #(#field_names),* } => {
+                        let mut meta: u8 = 0;
+                        let mut offset: u8 = 0;
+                        #( #get_fields )*
+                        ((#block_id as u16) << 4) | (meta as u16)
                     }
-                }).collect();
+                });
 
-                let field_names: Vec<_> =
-                    fields_named.named.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-
-                quote! {
+                from_arms.push(quote! {
                     #id_lit => {
                         let meta = (v & 0x0F) as u8;
                         let mut offset: u8 = 0;
-                        #( #field_snippets )*
+                        #( #from_fields )*
                         #enum_name::#variant_ident { #(#field_names),* }
                     }
-                }
+                });
             }
+            Fields::Unit => {
+                get_arms.push(quote! {
+                    #enum_name::#variant_ident => ((#block_id as u16) << 4)
+                });
 
-            Fields::Unit => quote! {
-                #id_lit => #enum_name::#variant_ident
-            },
-
+                from_arms.push(quote! {
+                    #id_lit => #enum_name::#variant_ident
+                });
+            }
             _ => panic!("unsupported variant form"),
         }
-    })
-        .chain(std::iter::once(quote! { _ => Blocks::Air }))
+    }
+
+    from_arms.push(quote! { _ => Blocks::Air });
+
+    (get_arms, from_arms)
+}
+
+fn from_field_handler(field: &syn::Field) -> TokenStream2 {
+    let name = field.ident.as_ref().unwrap();
+    if let syn::Type::Path(type_path) = &field.ty {
+        if type_path.path.is_ident("bool") {
+            quote! {
+                let #name = ((meta >> offset) & 0x01) != 0;
+                offset += 1;
+            }
+        } else if type_path.path.is_ident("u8") {
+            quote! {
+                let #name = ((meta >> offset) & 0x0F) as u8;
+                offset += 4;
+            }
+        } else {
+            let ty = &type_path.path;
+            quote! {
+                let #name = <#ty>::from_meta(((meta >> offset) & ((1 << <#ty>::meta_size()) - 1)) as u8);
+                offset += <#ty>::meta_size();
+            }
+        }
+    } else {
+        panic!("unsupported field type");
+    }
+}
+
+fn get_field_handler(field: &syn::Field) -> TokenStream2 {
+    let name = field.ident.as_ref().unwrap();
+    if let syn::Type::Path(type_path) = &field.ty {
+        if type_path.path.is_ident("bool") {
+            quote! {
+                meta |= (u8::from(*#name)) << offset;
+                offset += 1;
+            }
+        } else if type_path.path.is_ident("u8") {
+            quote! {
+                meta |= (#name & 0x0F) << offset;
+                offset += 4;
+            }
+        } else {
+            let ty = &type_path.path;
+            quote! {
+                meta |= #name.get_meta() << offset;
+                offset += <#ty>::meta_size();
+            }
+        }
+    } else {
+        panic!("unsupported field type");
+    }
+}
+
+/// if you need to make a new type rotatable add it to [ROTATABLE_TYPES]
+fn build_rotate(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
+    item_enum
+        .variants
+        .iter()
+        .map(|variant| {
+            let name = &enum_name; // e.g. Blocks
+            let vname = &variant.ident; // e.g. SomeVariant
+            match &variant.fields {
+                Fields::Named(fields_named) => {
+                    // Collect rotatable fields
+                    let rot_fields: Vec<_> = fields_named
+                        .named
+                        .iter()
+                        .filter_map(|f| {
+                            if let syn::Type::Path(type_path) = &f.ty {
+                                let ident = &type_path.path.segments.last().unwrap().ident;
+                                if ROTATABLE_TYPES.contains(&ident.to_string().as_str()) {
+                                    return f.ident.clone();
+                                }
+                            }
+                            None
+                        })
+                        .collect();
+                    if rot_fields.is_empty() {
+                        // No rotatable fields => empty arm (ignore other fields)
+                        quote! { #name::#vname { .. } => {} }
+                    } else {
+                        // Generate code for each rotatable field
+                        let rotates = rot_fields.iter().map(|f| {
+                            quote! { *#f = #f.rotate(new_direction); }
+                        });
+                        quote! {
+                            #name::#vname { #(#rot_fields),*, .. } => {
+                                #(#rotates)*
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Unnamed or unit variant with no rotatable fields
+                    quote! { #name::#vname => {} }
+                }
+            }
+        })
         .collect()
 }
 
+/// This macro is used to generate a BlockMetadata impl for enums.
+#[proc_macro_derive(BlockMetadata)]
+pub fn derive_block_metadata(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
 
-fn build_get_blockstate_id(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
-    item_enum.variants.iter().enumerate().map(|(block_id, variant)| {
-        let variant_name = &variant.ident;
-        match &variant.fields {
-            Fields::Named(fields_named) => {
-                let field_idents: Vec<_> = fields_named.named.iter()
-                    .map(|f| f.ident.as_ref().unwrap())
-                    .collect();
+    let variants = match &input.data {
+        syn::Data::Enum(e) => &e.variants,
+        _ => panic!("BlockMetadata can only be derived for enums"),
+    };
 
-                let field_rotate_calls = fields_named.named.iter().map(|f| {
-                    let ident = f.ident.as_ref().unwrap();
-                    if let syn::Type::Path(type_path) = &f.ty {
+    let mut max_discriminant = 0u64;
+    let mut match_arms = vec![];
 
-                        let type_indent = type_path.path.get_ident().unwrap();
+    for (index, variant) in variants.iter().enumerate() {
+        let ident = &variant.ident;
 
-                        match type_indent.to_string().as_str() {
-                            "u8" => quote! {
-                                meta |= (#ident & 0x0F) << offset;
-                                offset += 4;
-                            },
-                            "bool" => quote! {
-                                meta |= (u8::from(*#ident)) << offset;
-                                offset += 1;
-                            },
-                            _ => quote! {
-                                meta |= #ident.get_meta() << offset;
-                                offset += #type_indent::meta_size();
-                            }
-                        }
-                    } else {
-                        quote! {
-                            compile_error!("Unsupported metadata field syntax");
-                        }
-                    }
-                });
-
-                quote! {
-                    #enum_name::#variant_name { #( #field_idents ),* } => {
-                        let mut meta: u8 = 0;
-                        let mut offset: u8 = 0;
-                        #( #field_rotate_calls )*
-                        ((#block_id as u16) << 4) | (meta as u16)
-                    }
-                }
+        let value = if let Some((_, expr)) = &variant.discriminant {
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(lit_int),
+                ..
+            }) = expr
+            {
+                lit_int.base10_parse::<u64>().unwrap()
+            } else {
+                panic!("Unsupported discriminant expression for {:?}", ident);
             }
-            _ => quote! {
-                #enum_name::#variant_name => ((#block_id as u16) << 4)
-            }
-        }
-    }).collect()
-}
-
-fn build_is_rotatable(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
-    item_enum.variants.iter().map(|variant| {
-        let variant_name = &variant.ident;
-
-        let is_rotatable = match &variant.fields {
-            Fields::Named(fields) => fields.named.iter().any(|f| {
-                matches!(&f.ty, syn::Type::Path(type_path) if type_path.path.is_ident("Direction"))
-            }),
-            _ => false,
+        } else {
+            index as u64
         };
 
-        let pattern = match &variant.fields {
-            Fields::Named(_) => quote! { #enum_name::#variant_name { .. } },
-            _ => quote! { #enum_name::#variant_name }
-        };
+        max_discriminant = max_discriminant.max(value);
+        match_arms.push(quote! {
+            #value => #name::#ident,
+        });
+    }
 
-        quote! {
-            #pattern => #is_rotatable
-        }
-    }).collect()
-}
+    let fallback = &variants.last().unwrap().ident;
+    let meta_size = (max_discriminant + 1).next_power_of_two().trailing_zeros() as u8;
 
+    let expanded = quote! {
+        impl BlockMetadata for #name {
+            fn meta_size() -> u8 {
+                #meta_size
+            }
 
-fn build_rotate(enum_name: &Ident, item_enum: &ItemEnum) -> Vec<TokenStream2> {
-    item_enum.variants.iter().map(|variant| {
-        let variant_name = &variant.ident;
-        match &variant.fields {
-            Fields::Named(fields_named) => {
-                let field_idents: Vec<_> = fields_named.named.iter()
-                    .map(|f| f.ident.as_ref().unwrap())
-                    .collect();
+            fn get_meta(&self) -> u8 {
+                *self as u8
+            }
 
-                let field_rotate_calls = fields_named.named.iter().map(|f| {
-                    let ident = f.ident.as_ref().unwrap();
-                    if let syn::Type::Path(type_path) = &f.ty {
-                        if type_path.path.is_ident("Direction") {
-                            quote! {
-                                #ident.rotate();
-                            }
-                        } else {
-                            quote! {}
-                        }
-                    } else {
-                        quote! {}
-                    }
-                });
-
-                quote! {
-                    #enum_name::#variant_name { #( #field_idents ),* } => {
-                        #( #field_rotate_calls )*
-                    }
+            fn from_meta(meta: u8) -> Self {
+                match meta as u64 {
+                    #(#match_arms)*
+                    _ => #name::#fallback,
                 }
             }
-            _ => quote! {
-                #enum_name::#variant_name => {}
-            }
         }
-    }).collect()
+    };
+
+    TokenStream::from(expanded)
 }
-
-
-

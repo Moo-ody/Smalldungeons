@@ -137,7 +137,7 @@ impl RoomData {
             let hex_str = hex_data.get(i..i+4).unwrap();
     
             let num = u16::from_str_radix(hex_str, 16).unwrap();
-            let block = Blocks::from_blockstate_id(num);
+            let block = Blocks::from(num);
             
             block_data.push(block)
         }

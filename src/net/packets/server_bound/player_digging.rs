@@ -2,7 +2,6 @@ use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::var_int::read_var_int;
 use crate::server::block::block_pos::{read_block_pos, BlockPos};
-use crate::server::block::blocks::Blocks;
 use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::Player;
@@ -58,12 +57,9 @@ impl ServerBoundPacket for PlayerDigging {
                 if let Some(ItemSlot::Filled(Item::DiamondPickaxe)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
                     let bp = self.position.clone();
                     let block = world.get_block_at(bp.x, bp.y, bp.z);
-                    if let Blocks::Skull { .. } = block {
-                        println!("block {:?}", block);
-                    }
                     BlockChange {
                         block_pos: bp,
-                        block_state: block.get_blockstate_id(),
+                        block_state: block.get_block_state_id(),
                     }.send_packet(player.client_id, &player.server_mut().network_tx)?;
                 }
             }
@@ -72,7 +68,7 @@ impl ServerBoundPacket for PlayerDigging {
                 let block = world.get_block_at(bp.x, bp.y, bp.z);
                 BlockChange {
                     block_pos: bp,
-                    block_state: block.get_blockstate_id(),
+                    block_state: block.get_block_state_id(),
                 }.send_packet(player.client_id, &player.server_mut().network_tx)?;
             }
             _ => {}

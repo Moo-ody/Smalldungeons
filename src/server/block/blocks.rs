@@ -1,11 +1,22 @@
 #![allow(unused)]
 
-use crate::server::block::block_parameter::{Axis, HayAxis, LeverOrientation, TrapdoorDirection, VineMetadata};
+use crate::server::block::block_parameter::{Axis, HorizontalDirection, LeverOrientation, StairDirection, TorchDirection, TrapdoorDirection, VineMetadata};
 use crate::server::block::metadata::{u2, u3};
-use crate::server::utils::direction::{Direction, HorizontalDirection, TorchDirection};
+use crate::server::utils::direction::Direction;
 use blocks::block_macro;
 
 block_macro! {
+
+    // In case something needs to be changed,
+    // each field must be either, u8, bool, or implement BlockMetadata
+    // keep in mind field,
+    // order does matter and the macro needs to generate a function that matches vanilla
+
+    /// This is an implementation of every block in minecraft 1.8.9. Including their block states.
+    /// Methods are generated with a proc macro.
+    ///
+    /// Implements [From] to get a block from u16.
+    /// You can also get an u16 using get_block_state_id.
     #[derive(Debug, Eq, PartialEq, Copy, Clone)]
     pub enum Blocks {
         Air,
@@ -130,7 +141,7 @@ block_macro! {
         Fire,
         MobSpawner,
         OakStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         Chest {
@@ -169,7 +180,7 @@ block_macro! {
             shape: u8
         },
         StoneStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         WallSign {
@@ -279,11 +290,11 @@ block_macro! {
             powered: bool,
         },
         BrickStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         StoneBrickStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         Mycelium,
@@ -291,7 +302,7 @@ block_macro! {
         Netherbrick,
         NetherbrickFence,
         NetherbrickStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         Netherwart {
@@ -327,7 +338,7 @@ block_macro! {
             age: u2
         },
         SandstoneStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         EmeraldOre,
@@ -347,15 +358,15 @@ block_macro! {
         },
         EmeraldBlock,
         SpruceStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         BirchStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         JungleStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         CommandBlock {
@@ -414,7 +425,7 @@ block_macro! {
             variant: u8
         },
         QuartzStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         ActivatorRail {
@@ -442,11 +453,11 @@ block_macro! {
             axis: Axis,
         },
         AcaciaStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         DarkOakStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         Slime,
@@ -461,7 +472,7 @@ block_macro! {
         },
         SeaLantern,
         Hay {
-            axis: HayAxis
+            axis: Axis
         },
         Carpet {
             color: u8
@@ -485,7 +496,7 @@ block_macro! {
             variant: u8
         },
         RedSandstoneStairs {
-            direction: HorizontalDirection,
+            direction: StairDirection,
             top_half: bool,
         },
         NewDoubleStoneSlab {
