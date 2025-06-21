@@ -55,11 +55,10 @@ impl ServerBoundPacket for PlayerDigging {
         match self.action {
             PlayerDiggingAction::StartDestroyBlock => {
                 if let Some(ItemSlot::Filled(Item::DiamondPickaxe)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
-                    let bp = self.position.clone();
-                    let block = world.get_block_at(bp.x, bp.y, bp.z);
+                    let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
                     BlockChange {
-                        block_pos: bp,
-                        block_state: block.block_state_id(),
+                        block_pos: *&self.position,
+                        block_state: block.get_block_state_id(),
                     }.send_packet(player.client_id, &player.server_mut().network_tx)?;
                 }
             }
@@ -68,7 +67,7 @@ impl ServerBoundPacket for PlayerDigging {
                 let block = world.get_block_at(bp.x, bp.y, bp.z);
                 BlockChange {
                     block_pos: bp,
-                    block_state: block.block_state_id(),
+                    block_state: block.get_block_state_id(),
                 }.send_packet(player.client_id, &player.server_mut().network_tx)?;
             }
             _ => {}

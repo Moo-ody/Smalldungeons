@@ -203,7 +203,7 @@ impl Dungeon {
         };
 
         world.fill_blocks(
-            Blocks::Bedrock,
+            Blocks::Stone { variant: 0 },
             (door.x - dx, 68, door.z - dz),
             (door.x + dx, 68, door.z + dz)
         );

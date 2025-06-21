@@ -1,9 +1,7 @@
-use std::{cmp::min, collections::HashSet};
+use std::collections::HashSet;
 
-use include_dir::Dir;
-use serde_json::json;
-
-use crate::{dungeon::{crushers::Crusher, door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, server::Server, utils::direction::Direction, world::World}};
+use crate::server::block::rotatable::Rotatable;
+use crate::{dungeon::{crushers::Crusher, door::Door, room_data::{RoomData, RoomShape, RoomType}, DUNGEON_ORIGIN}, server::{block::{block_pos::BlockPos, blocks::Blocks}, utils::direction::Direction, world::World}};
 
 pub struct Room {
     pub segments: Vec<(usize, usize)>,
@@ -53,7 +51,7 @@ impl Room {
 
             crusher
         }).collect::<Vec<Crusher>>();
-        
+
         Room {
             segments,
             room_data,
@@ -214,14 +212,14 @@ impl Room {
             
             // Temporary for room colors, will be changed later on to paste saved room block states
             let block = match self.room_data.room_type {
-                RoomType::Normal => Blocks::BrownWool,
-                RoomType::Blood => Blocks::RedWool,
-                RoomType::Entrance => Blocks::GreenWool,
-                RoomType::Fairy => Blocks::PinkWool,
-                RoomType::Trap => Blocks::OrangeWool,
-                RoomType::Yellow => Blocks::YellowWool,
-                RoomType::Puzzle => Blocks::PurpleWool,
-                RoomType::Rare => Blocks::YellowWool,
+                RoomType::Normal => Blocks::Stone { variant: 0 },
+                RoomType::Blood => Blocks::Stone { variant: 0 },
+                RoomType::Entrance => Blocks::Stone { variant: 0 },
+                RoomType::Fairy => Blocks::Stone { variant: 0 },
+                RoomType::Trap => Blocks::Stone { variant: 0 },
+                RoomType::Yellow => Blocks::Stone { variant: 0 },
+                RoomType::Puzzle => Blocks::Stone { variant: 0 },
+                RoomType::Rare => Blocks::Stone { variant: 0 },
             };
 
             world.fill_blocks(
@@ -288,6 +286,10 @@ impl Room {
             if *block == Blocks::Air {
                 continue;
             }
+            // not sure if editing room data might ruin something,
+            // so to be safe im just cloning it
+            let mut block = block.clone();
+            block.rotate(self.rotation);
 
             let ind = i as i32;
 
@@ -297,7 +299,7 @@ impl Room {
 
             let bp = BlockPos { x, y, z }.rotate(&self.rotation);
 
-            world.set_block_at(*block, corner.x + bp.x, y, corner.z + bp.z);
+            world.set_block_at(block, corner.x + bp.x, y, corner.z + bp.z);
         }
 
     }

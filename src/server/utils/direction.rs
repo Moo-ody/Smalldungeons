@@ -1,17 +1,20 @@
+use crate::server::block::metadata::BlockMetadata;
+use crate::server::block::rotatable::Rotatable;
+use blocks::BlockMetadata;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BlockMetadata)]
 pub enum Direction {
-    North, // -Z
-    East, // // +X
-    South, // +Z
-    West, // -X
-    Up,
-    Down,
+    Down = 0,
+    Up = 1,
+    North = 2, // -z
+    South = 3, // +z
+    West = 4,  // -x
+    East = 5,  // +z
 }
 
-impl Direction {
-    pub fn rotate(&self, other: Direction) -> Direction {
+impl Rotatable for Direction {
+    fn rotate(&self, other: Direction) -> Self {
         match other {
             Direction::North => {
                 match self {
@@ -23,6 +26,7 @@ impl Direction {
                     Direction::Down => Direction::Down,
                 }
             },
+
             Direction::East => {
                 match self {
                     Direction::North => Direction::East,
@@ -54,9 +58,12 @@ impl Direction {
                 }
             }
             _ => unreachable!()
-               
+
         }
     }
+}
+
+impl Direction {
 
     pub fn from_index(index: usize) -> Direction {
         match index {
@@ -77,38 +84,5 @@ impl Direction {
             Direction::Up => (0, 1, 0),
             Direction::Down => (0, -1, 0),
         }
-    }
-
-    /// The stair index is the metadata for which direction the stair is facing. At meta=0, the stair is facing East etc.
-    pub fn get_stair_index(&self) -> u8 {
-        match self {
-            Direction::East => 0,
-            Direction::West => 1,
-            Direction::South => 2,
-            Direction::North => 3,
-            _ => 0,
-        }
-    }
-
-    pub fn get_piston_index(&self) -> u8 {
-        match self {
-            Direction::Down => 0,
-            Direction::Up => 1,
-            Direction::North => 2,
-            Direction::South => 3,
-            Direction::West => 4,
-            Direction::East => 5,
-        }
-    }
-    
-    pub fn get_torch_meta(&self) -> u8 {
-        match self {
-            Direction::West => 1,
-            Direction::South => 2,
-            Direction::North => 3,
-            Direction::East => 4,
-            _ => 0,
-        }
-        
     }
 }

@@ -1,12 +1,11 @@
-use crate::net::client_event::ClientEvent;
 use crate::net::connection_state::ConnectionState;
-use crate::net::network_message::NetworkMessage;
+use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
 use crate::net::var_int::read_var_int_with_len;
 use crate::server::player::ClientId;
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -33,38 +32,34 @@ impl Client {
 pub async fn handle_client(
     client_id: ClientId,
     mut socket: TcpStream,
-    mut rx: UnboundedReceiver<Vec<u8>>,
-    event_tx: UnboundedSender<ClientEvent>,
-    network_tx: UnboundedSender<NetworkMessage>,
+    mut rx: UnboundedReceiver<ClientHandlerMessage>,
+    main_tx: UnboundedSender<MainThreadMessage>,
+    network_tx: UnboundedSender<NetworkThreadMessage>,
 ) {
     let mut client = Client::new(client_id);
-
     let mut bytes = BytesMut::new();
 
     loop {
         tokio::select! {
             result = socket.read_buf(&mut bytes) => {
                 match result {
-                    Ok(0) => {
-                        println!("Client {} disconnected.", client_id);
-                        break
-                    },
+                    Ok(0) => { break },
                     Ok(_) => {
                         while let Some(mut packet) = read_whole_packet(&mut bytes).await {
                             match parse_packet(&mut packet, &mut client).await {
                                 Ok(parsed) => {
                                     if let Err(e) = parsed.process(PacketContext {
                                         client: &mut client,
-                                        network_tx: network_tx.clone(),
-                                        event_tx: event_tx.clone(),
+                                        network_tx: &network_tx,
+                                        main_tx: &main_tx,
                                     }).await
                                     {
                                         eprintln!("Failed to process packet for {client_id}: {e}");
-                                        break;
+                                        continue;
                                     }
 
                                     if client.connection_state == ConnectionState::Play {
-                                        event_tx.send(ClientEvent::PacketReceived { client_id, packet: parsed })
+                                        main_tx.send(MainThreadMessage::PacketReceived { client_id, packet: parsed })
                                             .unwrap_or_else(|e| eprintln!("Failed to send packet to main thread from {client_id}: {e}"));
                                     }
                                 }
@@ -81,18 +76,25 @@ pub async fn handle_client(
                 }
             }
 
-            Some(data) = rx.recv() => {
-                if let Err(e) = socket.write_all(&data).await {
-                    eprintln!("write error: {e}");
-                    break
+            Some(message) = rx.recv() => {
+                match message {
+                    ClientHandlerMessage::Send(data) => {
+                        if let Err(e) = socket.write_all(&data).await {
+                            eprintln!("write error: {e}");
+                            break
+                        }
+                    }
+
+                    ClientHandlerMessage::CloseHandler => {
+                        break
+                    }
                 }
             }
         }
     }
 
-
+    network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id }).unwrap();
     println!("handle client for {client_id} closed.");
-    event_tx.send(ClientEvent::ClientDisconnected { client_id }).unwrap();
 }
 
 pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
@@ -101,10 +103,11 @@ pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
     }
     let (packet_len, varint_len) = read_var_int_with_len(buf)?;
 
-    let total_len = packet_len as usize + varint_len;
-    if buf.len() < total_len {
+    let packet_len = packet_len as usize;
+    if buf.len() < packet_len + varint_len {
         return None;
     }
 
-    Some(buf.split_to(total_len))
+    buf.advance(varint_len);
+    Some(buf.split_to(packet_len))
 }
