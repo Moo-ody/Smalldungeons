@@ -3,7 +3,7 @@ use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, Netw
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
-use crate::net::var_int::read_var_int_with_len;
+use crate::net::var_int::peek_var_int;
 use crate::server::player::ClientId;
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -101,7 +101,7 @@ pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
     if buf.is_empty() {
         return None;
     }
-    let (packet_len, varint_len) = read_var_int_with_len(buf)?;
+    let (packet_len, varint_len) = peek_var_int(buf)?;
 
     let packet_len = packet_len as usize;
     if buf.len() < packet_len + varint_len {

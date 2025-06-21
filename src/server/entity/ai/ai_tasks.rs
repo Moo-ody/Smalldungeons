@@ -35,10 +35,10 @@ impl AiTasks {
         }
     }
 
-    pub fn create_from_entries(task_entries: Vec<TaskEntry>) -> Self {
+    pub fn create_from_entries(task_entries: &[TaskEntry]) -> Self {
         let mut tasks = Self::new();
         for TaskEntry { priority, task_type } in task_entries {
-            tasks.add_task(priority, task_type);
+            tasks.add_task(*priority, *task_type);
         }
         tasks
     }

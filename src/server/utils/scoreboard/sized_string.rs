@@ -3,24 +3,21 @@ use crate::net::packets::packet_write::PacketWrite;
 /// [String] with a character size limit of N.
 /// All characters after that size will be truncated.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct SizedString<const N: usize> {
-    value: String,
-}
+pub struct SizedString<const N: usize>(String);
 
 impl<const N: usize> SizedString<N> {
     pub fn truncated(text: &str) -> Self {
-        let truncated = text.chars().take(N).collect::<String>();
-        Self { value: truncated }
+        Self(text.chars().take(N).collect::<String>())
     }
 
     pub fn as_str(&self) -> &str {
-        &self.value
+        &self.0
     }
 }
 
 impl<const N: usize> PacketWrite for SizedString<N> {
     fn write(&self, writer: &mut Vec<u8>) {
-        self.value.write(writer);
+        self.0.write(writer);
     }
 }
 

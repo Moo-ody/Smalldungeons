@@ -7,7 +7,7 @@ pub const WIDTH: f32 = 0.6;
 pub const HEIGHT: f32 = 1.95;
 
 pub fn ai_tasks() -> Option<AiTasks> {
-    Some(AiTasks::create_from_entries(vec![TaskEntry::new(0, WatchClosest)])) // todo: more of the actual ai stuff
+    Some(AiTasks::create_from_entries(&[TaskEntry::new(0, WatchClosest)])) // todo: more of the actual ai stuff
 }
 
 pub const fn metadata() -> EntityMetadata {

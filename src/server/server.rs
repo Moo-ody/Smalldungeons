@@ -1,6 +1,6 @@
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::player_list_item::PlayerListItem;
@@ -106,13 +106,13 @@ impl Server {
                     hide_particles: true,
                 }.send_packet(player.client_id, &self.network_tx)?;
 
-                // EntityEffect {
-                //     entity_id: player.entity_id,
-                //     effect_id: NIGHTVISIONID,
-                //     amplifier: 0,
-                //     duration: 400,
-                //     hide_particles: true,
-                // }.send_packet(player.client_id, &self.network_tx)?;
+                EntityEffect {
+                    entity_id: player.entity_id,
+                    effect_id: NIGHTVISIONID,
+                    amplifier: 0,
+                    duration: 400,
+                    hide_particles: true,
+                }.send_packet(player.client_id, &self.network_tx)?;
 
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);

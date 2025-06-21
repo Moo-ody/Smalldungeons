@@ -1,12 +1,13 @@
 mod net;
 mod server;
 mod dungeon;
+mod utils;
 
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
+use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
@@ -187,13 +188,13 @@ async fn main() -> Result<()> {
                         hide_particles: true,
                     }.send_packet(player.client_id, &server.network_tx)?;
 
-                    // EntityEffect {
-                    //     entity_id: player.entity_id,
-                    //     effect_id: NIGHTVISIONID,
-                    //     amplifier: 0,
-                    //     duration: 400,
-                    //     hide_particles: true,
-                    // }.send_packet(player.client_id, &server.network_tx)?;
+                    EntityEffect {
+                        entity_id: player.entity_id,
+                        effect_id: NIGHTVISIONID,
+                        amplifier: 0,
+                        duration: 400,
+                        hide_particles: true,
+                    }.send_packet(player.client_id, &server.network_tx)?;
                 }
             }
         }

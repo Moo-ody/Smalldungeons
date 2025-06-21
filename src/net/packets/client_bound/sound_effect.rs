@@ -1,5 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::server::utils::sounds::Sounds;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
@@ -12,26 +13,12 @@ pub struct SoundEffect {
     pub z: f64,
 }
 
-// when you need more sounds, add it to here:
-#[derive(Clone, Debug)]
-pub enum Sounds {
-    EnderDragonHit
-}
-
-impl Sounds {
-    pub fn get_sound_name(&self) -> &str {
-        match self {
-            Sounds::EnderDragonHit => "mob.enderdragon.hit"
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for SoundEffect {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
         let buf = build_packet!(
             0x29,
-            self.sounds.get_sound_name(),
+            self.sounds.id(),
             (self.x * 8.0) as i32,
             (self.y * 8.0) as i32,
             (self.z * 8.0) as i32,

@@ -7,3 +7,4 @@ pub mod direction;
 pub mod particles;
 pub mod player_list;
 pub mod scoreboard;
+pub mod sounds;
