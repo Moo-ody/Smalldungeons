@@ -3,6 +3,7 @@ mod server;
 mod dungeon;
 mod utils;
 
+use crate::dungeon::door::DoorType;
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
@@ -12,6 +13,7 @@ use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
@@ -23,6 +25,7 @@ use anyhow::Result;
 use include_dir::include_dir;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
+use std::env;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -37,6 +40,7 @@ async fn main() -> Result<()> {
     let (network_tx, network_rx) = unbounded_channel::<NetworkThreadMessage>();
     let (main_tx, mut main_rx) = unbounded_channel::<MainThreadMessage>();
 
+    let args: Vec<String> = env::args().collect();
 
     let mut server = Server::initialize(network_tx);
     server.world.server = &mut server;
@@ -66,17 +70,55 @@ async fn main() -> Result<()> {
 
             (room_id, room_data)
         }).collect();
+    
+    // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
+    // But this works for now...
+    let door_data: Vec<Vec<Blocks>> = include_str!("door_data/doors.txt").split("\n").map(|line| {
+        let mut blocks: Vec<Blocks> = Vec::new();
+
+        for i in (0..line.len()-1).step_by(4) {
+            let substr = line.get(i..i+4).unwrap();
+            let state = u16::from_str_radix(substr, 16).unwrap();
+
+            blocks.push(Blocks::from(state));
+        }
+
+        blocks
+    }).collect();
+
+    let door_type_blocks: HashMap<DoorType, Vec<Vec<Blocks>>> = HashMap::from_iter(vec![
+        (DoorType::BLOOD, vec![
+            door_data[0].clone(),
+        ]),
+        (DoorType::ENTRANCE, vec![
+            door_data[1].clone(),
+        ]),
+        (DoorType::NORMAL, vec![
+            door_data[1].clone(),
+            door_data[2].clone(),
+            door_data[3].clone(),
+            door_data[4].clone(),
+            door_data[5].clone(),
+            door_data[6].clone(),
+            door_data[7].clone(),
+        ]),
+    ].into_iter());
 
     let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
         .split("\n")
         .collect::<Vec<&str>>();
+    
+    let dungeon_str = match args.len() {
+        0..=1 => {
+            let mut rng = rand::rng();
+            dungeon_strings.choose(&mut rng).unwrap()
+        },
+        _ => args.get(1).unwrap().as_str()
+    };
 
-    let mut rng = rand::rng();
-    let dungeon_str = dungeon_strings.choose(&mut rng).unwrap();
-    // let dungeon_str = "030808091000051111021004121311141004151515150100161617181804161606181800291999991999991009999990910009199999399090999099099099999999";
     println!("Dungeon String: {}", dungeon_str);
 
-    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage);
+    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage).unwrap();
 
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
@@ -84,7 +126,7 @@ async fn main() -> Result<()> {
     }
 
     for door in &dungeon.doors {
-        dungeon.load_door(door, &mut server.world);
+        dungeon.load_door(door, &mut server.world, &door_type_blocks);
     }
 
     let zombie_spawn_pos = Vec3f {

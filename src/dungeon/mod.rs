@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
+use rand::seq::IndexedRandom;
+
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::room::Room;
 use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
 use crate::server::block::block_parameter::Axis;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -33,7 +36,7 @@ pub struct Dungeon {
 
 impl Dungeon {
 
-    pub fn with_rooms_and_doors(rooms: Vec<Room>, doors: Vec<Door>) -> Dungeon {
+    pub fn with_rooms_and_doors(rooms: Vec<Room>, doors: Vec<Door>) -> Result<Dungeon, Box<dyn std::error::Error>> {
         let mut index_grid = [0; 36];
 
         // populate index grid
@@ -41,24 +44,32 @@ impl Dungeon {
             for (x, z) in room.segments.iter() {
                 let segment_index = x + z * 6;
 
+                if segment_index > index_grid.len() - 1 {
+                    return Err(format!("Segment index for {},{} out of bounds: {}", x, z, segment_index).as_str().into())
+                }
+
+                if index_grid[segment_index] != 0 {
+                    return Err(format!("Segment at {},{} is already occupied by {}!", x, z, index_grid[segment_index]).as_str().into())
+                }
+
                 index_grid[segment_index] = room_index + 1;
             }
         }
 
         // println!("grid {:?}", &index_grid);
 
-        Dungeon {
+        Ok(Dungeon {
             rooms,
             doors,
             index_grid,
-        }
+        })
     }
 
     // Layout String:
     // 36 x room ids, two digits long each. 00 = no room, 01 -> 06 are special rooms like spawn, puzzles etc
     // 07 -> ... are normal rooms, with unique ids to differentiate them and preserve layout
     // Doors are 60x single digit numbers in the order left -> right top -> down for every spot they can possibly spawn
-    pub fn from_string(layout_str: &str, room_data_storage: &HashMap<usize, RoomData>) -> Dungeon {
+    pub fn from_string(layout_str: &str, room_data_storage: &HashMap<usize, RoomData>) -> Result<Dungeon, Box<dyn std::error::Error>> {
         let mut rooms: Vec<Room> = Vec::new();
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
         let mut room_id_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
@@ -196,16 +207,30 @@ impl Dungeon {
         self.get_room_at(entity.pos.x as i32, entity.pos.z as i32)
     }
 
-    pub fn load_door(&self, door: &Door, world: &mut World) {
+    pub fn load_door(
+        &self,
+        door: &Door,
+        world: &mut World,
+        door_blocks: &HashMap<DoorType, Vec<Vec<Blocks>>>
+    ) {
+        // Area to fill with air
         let (dx, dz) = match door.direction {
             Axis::X => (3, 2),
             _ => (2, 3),
         };
 
+        // Doors have a thick bedrock floor usually
+        world.fill_blocks(
+            Blocks::Bedrock,
+            (door.x - dx, 67, door.z - dz),
+            (door.x + dx, 66, door.z + dz)
+        );
+
+        // Might need to replace with a random palette of cobble, stone, gravel etc if we want to mimic hypixel FULLY, but this works fine.
         world.fill_blocks(
             Blocks::Stone { variant: 0 },
-            (door.x - dx, 68, door.z - dz),
-            (door.x + dx, 68, door.z + dz)
+            (door.x - (dz - 2) * 2, 68, door.z - (dx - 2) * 2),
+            (door.x + (dz - 2) * 2, 68, door.z + (dx - 2) * 2)
         );
 
         world.fill_blocks(
@@ -214,7 +239,50 @@ impl Dungeon {
             (door.x + dx, 73, door.z + dz)
         );
 
-        
+        // Pretty much just to get a normal door from a wither one, since wither doors are just normal doors with coal blocks.
+        let door_type = match door.door_type {
+            DoorType::BLOOD => DoorType::BLOOD,
+            DoorType::ENTRANCE => DoorType::ENTRANCE,
+            DoorType::WITHER | DoorType::NORMAL => DoorType::NORMAL,
+        };
+
+        let block_data = door_blocks.get(&door_type).unwrap();
+        let mut rng = rand::rng();
+
+        let chosen = block_data.choose(&mut rng).unwrap();
+        let door_direction = door.direction.get_direction();
+
+        for (i, block) in chosen.iter().enumerate() {
+            let x = (i % 5) as i32;
+            let z = ((i / 5) % 5) as i32;
+            let y = (i / (5 * 5)) as i32;
+
+            let bp = BlockPos { x: x - 2, y, z: z - 2 }.rotate(door_direction);
+
+            let mut block_to_place = block.clone();
+            block_to_place.rotate(door_direction);
+
+            world.set_block_at(block_to_place, door.x + bp.x, 69 + bp.y, door.z + bp.z);
+        }
+
+        // Nothing left to do for normal doors
+        if door.door_type == DoorType::NORMAL {
+            return;
+        }
+
+        // Fill in the blocks for entrance, wither and blood doors
+        let fill_block = match door.door_type {
+            DoorType::BLOOD => Blocks::StainedHardenedClay { color: 14 },
+            DoorType::ENTRANCE => Blocks::SilverfishBlock { variant: 5 },
+            DoorType::WITHER => Blocks::CoalBlock,
+            _ => Blocks::Air
+        };
+
+        world.fill_blocks(
+            fill_block,
+            (door.x - 1, 69, door.z - 1),
+            (door.x + 1, 72, door.z + 1)
+        );
     }
 
 }

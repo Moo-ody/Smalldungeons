@@ -1,6 +1,6 @@
 use crate::server::block::block_parameter::Axis;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum DoorType {
     NORMAL,
     ENTRANCE,
