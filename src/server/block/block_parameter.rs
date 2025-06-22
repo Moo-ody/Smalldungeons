@@ -33,6 +33,16 @@ impl Rotatable for Axis {
     }
 }
 
+impl Axis {
+    pub fn get_direction(&self) -> Direction {
+        match self {
+            Axis::X => Direction::East,
+            Axis::Z => Direction::North,
+            _ => Direction::Up
+        }
+    }
+}
+
 // TODO: This needs rotation
 /// Used for exclusively lever.
 #[repr(u8)]

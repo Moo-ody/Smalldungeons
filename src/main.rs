@@ -2,6 +2,7 @@ mod net;
 mod server;
 mod dungeon;
 
+use crate::dungeon::door::DoorType;
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
@@ -11,6 +12,7 @@ use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
@@ -67,6 +69,39 @@ async fn main() -> Result<()> {
 
             (room_id, room_data)
         }).collect();
+    
+    // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
+    // But this works for now...
+    let door_data: Vec<Vec<Blocks>> = include_str!("door_data/doors.txt").split("\n").map(|line| {
+        let mut blocks: Vec<Blocks> = Vec::new();
+
+        for i in (0..line.len()-1).step_by(4) {
+            let substr = line.get(i..i+4).unwrap();
+            let state = u16::from_str_radix(substr, 16).unwrap();
+
+            blocks.push(Blocks::from(state));
+        }
+
+        blocks
+    }).collect();
+
+    let door_type_blocks: HashMap<DoorType, Vec<Vec<Blocks>>> = HashMap::from_iter(vec![
+        (DoorType::BLOOD, vec![
+            door_data[0].clone(),
+        ]),
+        (DoorType::ENTRANCE, vec![
+            door_data[1].clone(),
+        ]),
+        (DoorType::NORMAL, vec![
+            door_data[1].clone(),
+            door_data[2].clone(),
+            door_data[3].clone(),
+            door_data[4].clone(),
+            door_data[5].clone(),
+            door_data[6].clone(),
+            door_data[7].clone(),
+        ]),
+    ].into_iter());
 
     let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
         .split("\n")
@@ -90,7 +125,7 @@ async fn main() -> Result<()> {
     }
 
     for door in &dungeon.doors {
-        dungeon.load_door(door, &mut server.world);
+        dungeon.load_door(door, &mut server.world, &door_type_blocks);
     }
 
     let zombie_spawn_pos = Vec3f {

@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
+use rand::seq::IndexedRandom;
+
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::room::Room;
 use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
 use crate::server::block::block_parameter::Axis;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::world::World;
@@ -204,16 +207,30 @@ impl Dungeon {
         self.get_room_at(entity.pos.x as i32, entity.pos.z as i32)
     }
 
-    pub fn load_door(&self, door: &Door, world: &mut World) {
+    pub fn load_door(
+        &self,
+        door: &Door,
+        world: &mut World,
+        door_blocks: &HashMap<DoorType, Vec<Vec<Blocks>>>
+    ) {
+        // Area to fill with air
         let (dx, dz) = match door.direction {
             Axis::X => (3, 2),
             _ => (2, 3),
         };
 
+        // Doors have a thick bedrock floor usually
+        world.fill_blocks(
+            Blocks::Bedrock,
+            (door.x - dx, 67, door.z - dz),
+            (door.x + dx, 66, door.z + dz)
+        );
+
+        // Might need to replace with a random palette of cobble, stone, gravel etc if we want to mimic hypixel FULLY, but this works fine.
         world.fill_blocks(
             Blocks::Stone { variant: 0 },
-            (door.x - dx, 68, door.z - dz),
-            (door.x + dx, 68, door.z + dz)
+            (door.x - (dz - 2) * 2, 68, door.z - (dx - 2) * 2),
+            (door.x + (dz - 2) * 2, 68, door.z + (dx - 2) * 2)
         );
 
         world.fill_blocks(
@@ -222,7 +239,50 @@ impl Dungeon {
             (door.x + dx, 73, door.z + dz)
         );
 
-        
+        // Pretty much just to get a normal door from a wither one, since wither doors are just normal doors with coal blocks.
+        let door_type = match door.door_type {
+            DoorType::BLOOD => DoorType::BLOOD,
+            DoorType::ENTRANCE => DoorType::ENTRANCE,
+            DoorType::WITHER | DoorType::NORMAL => DoorType::NORMAL,
+        };
+
+        let block_data = door_blocks.get(&door_type).unwrap();
+        let mut rng = rand::rng();
+
+        let chosen = block_data.choose(&mut rng).unwrap();
+        let door_direction = door.direction.get_direction();
+
+        for (i, block) in chosen.iter().enumerate() {
+            let x = (i % 5) as i32;
+            let z = ((i / 5) % 5) as i32;
+            let y = (i / (5 * 5)) as i32;
+
+            let bp = BlockPos { x: x - 2, y, z: z - 2 }.rotate(door_direction);
+
+            let mut block_to_place = block.clone();
+            block_to_place.rotate(door_direction);
+
+            world.set_block_at(block_to_place, door.x + bp.x, 69 + bp.y, door.z + bp.z);
+        }
+
+        // Nothing left to do for normal doors
+        if door.door_type == DoorType::NORMAL {
+            return;
+        }
+
+        // Fill in the blocks for entrance, wither and blood doors
+        let fill_block = match door.door_type {
+            DoorType::BLOOD => Blocks::StainedHardenedClay { color: 14 },
+            DoorType::ENTRANCE => Blocks::SilverfishBlock { variant: 5 },
+            DoorType::WITHER => Blocks::CoalBlock,
+            _ => Blocks::Air
+        };
+
+        world.fill_blocks(
+            fill_block,
+            (door.x - 1, 69, door.z - 1),
+            (door.x + 1, 72, door.z + 1)
+        );
     }
 
 }
