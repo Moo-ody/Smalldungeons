@@ -131,7 +131,7 @@ fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
                 return EtherResult::Failed;
             }
             let block_up1 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
-            let block_up2 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
+            let block_up2 = world.get_block_at(x, y + 2, z).get_block_state_id() >> 4;
 
             return if VALID_ETHER_WARP_BLOCK_IDS.contains(block_up1 as usize) && VALID_ETHER_WARP_BLOCK_IDS.contains(block_up2 as usize) {
                 EtherResult::Valid(x, y, z)
