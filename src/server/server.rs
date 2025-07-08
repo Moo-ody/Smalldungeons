@@ -42,13 +42,14 @@ impl Server {
             MainThreadMessage::NewPlayer { client_id } => {
                 println!("added player with id {client_id}");
 
-                let spawn_point = Vec3f {
-                    x: 20.0,
-                    y: 69.0,
-                    z: 20.0,
-                };
+                let spawn_pos = self.world.spawn_point.as_vec3f();
 
-                let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
+                let player_entity = Entity::create_at(EntityType::Player, Vec3f {
+                    x: spawn_pos.x + 0.5,
+                    y: spawn_pos.y,
+                    z: spawn_pos.z + 0.5
+                }, self.world.new_entity_id());
+                
                 println!("player entity id: {}", player_entity.entity_id);
                 let mut player = Player::new(self, client_id, player_entity.entity_id);
 
@@ -116,6 +117,7 @@ impl Server {
 
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SpeedBoots), 8);
                 
                 player.inventory.sync(&player, &self.network_tx)?;
                 self.players.insert(client_id, player);

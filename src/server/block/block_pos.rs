@@ -84,6 +84,22 @@ impl BlockPos {
             z: self.z + other.z
         }
     }
+
+    pub fn subtract(&self, other: &BlockPos) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z
+        }
+    }
+
+    pub fn as_vec3f(&self) -> Vec3f {
+            Vec3f {
+                x: self.x as f64,
+                y: self.y as f64,
+                z: self.z as f64
+            }
+    }
 }
 
 impl PacketWrite for BlockPos {

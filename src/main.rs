@@ -3,7 +3,7 @@ mod server;
 mod dungeon;
 
 use crate::dungeon::door::DoorType;
-use crate::dungeon::room_data::RoomData;
+use crate::dungeon::room_data::{RoomData, RoomType};
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
@@ -20,6 +20,7 @@ use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
+use crate::server::world;
 use anyhow::Result;
 use include_dir::include_dir;
 use rand::seq::IndexedRandom;
@@ -107,6 +108,7 @@ async fn main() -> Result<()> {
         .split("\n")
         .collect::<Vec<&str>>();
     
+    // Check if a custom dungeon str has been given via cli args
     let dungeon_str = match args.len() {
         0..=1 => {
             let mut rng = rand::rng();
@@ -122,6 +124,17 @@ async fn main() -> Result<()> {
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
+
+        // Set the spawn point to be inside of the spawn room
+        if room.room_data.room_type == RoomType::Entrance {
+            server.world.set_spawn_point(
+                room.get_world_pos(&BlockPos {
+                    x: 15,
+                    y: 72,
+                    z: 18
+                })
+            );
+        }
     }
 
     for door in &dungeon.doors {

@@ -29,7 +29,8 @@ pub struct World {
 
     // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
     pub entities: HashMap<EntityId, Entity>,
-    next_entity_id: i32
+    next_entity_id: i32,
+    pub spawn_point: BlockPos,
 }
 
 impl World {
@@ -40,7 +41,12 @@ impl World {
             chunk_grid: ChunkGrid::new(14),
             player_info: PlayerList::new(),
             entities: HashMap::new(),
-            next_entity_id: 1 // might have to start at 1
+            next_entity_id: 1, // might have to start at 1
+            spawn_point: BlockPos {
+                x: 20,
+                y: 69,
+                z: 20,
+            },
         }
     }
 
@@ -113,5 +119,9 @@ impl World {
 
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
         self.chunk_grid.get_block_at(x, y, z)
+    }
+
+    pub fn set_spawn_point(&mut self, new_spawn: BlockPos) {
+        self.spawn_point = new_spawn
     }
 }
