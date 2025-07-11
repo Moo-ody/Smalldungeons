@@ -2,6 +2,7 @@ use crate::net::packets::client_bound::chat::{Chat, CHAT};
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::read_string_from_buf;
+use crate::server::player::ui::UI;
 use crate::server::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
@@ -9,7 +10,7 @@ use bytes::BytesMut;
 
 #[derive(Debug)]
 pub struct ChatMessage {
-    message: String,
+    pub message: String,
 }
 
 #[async_trait::async_trait]
@@ -37,7 +38,13 @@ impl ServerBoundPacket for ChatMessage {
             Chat {
                 typ: CHAT,
                 component: ChatComponentTextBuilder::new(r#"{"server":"mini237V","gametype":"SKYBLOCK","mode":"dungeon","map":"Dungeon"}"#).build(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?
+            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+        } else if self.message == "/mort" {
+            Chat {
+                typ: CHAT,
+                component: ChatComponentTextBuilder::new("opening menu").build(),
+            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+            player.open_ui(UI::MortReadyUpMenu)?;
         };
 
         // if self.message.starts_with("/") && self.message == "/updatezombie" {

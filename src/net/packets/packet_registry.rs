@@ -18,6 +18,7 @@ use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
+use crate::net::packets::client_bound::open_window::OpenWindowPacket;
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::player_list_item::PlayerListItem;
@@ -34,6 +35,8 @@ use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::server_bound::chat_message::ChatMessage;
 use crate::net::packets::server_bound::click_window::ClickWindow;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
+use crate::net::packets::server_bound::client_status::ClientStatusPacket;
+use crate::net::packets::server_bound::close_window::CloseWindowPacket;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
 use crate::net::packets::server_bound::handshake::Handshake;
 use crate::net::packets::server_bound::held_item_change::HeldItemChange;
@@ -87,7 +90,7 @@ register_clientbound_packets! {
     UpdateScore,
     DisplayScoreboard,
     Teams,
-    
+    OpenWindowPacket,
 }
 
 register_serverbound_packets! {
@@ -108,7 +111,9 @@ register_serverbound_packets! {
         0x0e => ClickWindow,
         0x07 => PlayerDigging,
         0x15 => ClientSettings,
+        0x16 => ClientStatusPacket,
         0x0F => SBConfirmTransaction,
+        0x0d => CloseWindowPacket,
     },
     ConnectionState::Status {
         0x00 => StatusRequest,

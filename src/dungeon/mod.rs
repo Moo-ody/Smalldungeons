@@ -1,20 +1,25 @@
-use anyhow::bail;
-use rand::seq::IndexedRandom;
-use std::collections::HashMap;
-
 use crate::dungeon::door::{Door, DoorType};
+use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::Room;
 use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::net::packets::client_bound::chat::Chat;
+use crate::net::packets::packet::SendPacket;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
+use crate::server::server::Server;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
+use anyhow::bail;
+use rand::seq::IndexedRandom;
+use std::collections::HashMap;
 
 pub mod room;
 pub mod door;
 pub mod crushers;
 pub mod room_data;
+pub mod dungeon_state;
 
 // The top leftmost corner of the dungeon
 const DUNGEON_ORIGIN: (i32, i32) = (0, 0);
@@ -27,11 +32,13 @@ const DOOR_POSITIONS: [(i32, i32); 60] = [(DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN
 //
 // contains a vec of doors (for generation)
 pub struct Dungeon {
+    pub server: *mut Server,
     pub rooms: Vec<Room>,
     pub doors: Vec<Door>,
     // The numer in this grid will be 0 if there is no room here, or contain
     // The index - 1 of the room here from &rooms
     pub index_grid: [usize; 36],
+    pub state: DungeonState,
 }
 
 impl Dungeon {
@@ -58,10 +65,16 @@ impl Dungeon {
         // println!("grid {:?}", &index_grid);
 
         Ok(Dungeon {
+            server: std::ptr::null_mut(),
             rooms,
             doors,
             index_grid,
+            state: DungeonState::NotReady,
         })
+    }
+
+    pub fn server_mut<'a>(&self) -> &'a mut Server {
+        unsafe { self.server.as_mut().expect("server is null") }
     }
 
     // Layout String:
@@ -181,7 +194,7 @@ impl Dungeon {
         Dungeon::with_rooms_and_doors(rooms, doors)
     }
 
-    pub fn get_room_at(&self, x: i32, z: i32) -> Option<&Room> {
+    pub fn get_room_at(&mut self, x: i32, z: i32) -> Option<&mut Room> {
         if x < DUNGEON_ORIGIN.0 || z < DUNGEON_ORIGIN.1 {
             return None;
         }
@@ -196,10 +209,10 @@ impl Dungeon {
             return None;
         }
 
-        self.rooms.get(*entry.unwrap() - 1)
+        self.rooms.get_mut(*entry.unwrap() - 1)
     }
 
-    pub fn get_player_room(&self, player: &Player) -> Option<&Room> {
+    pub fn get_player_room(&mut self, player: &Player) -> Option<&mut Room> {
         let server = player.server_mut();
         let entity = player.get_entity(&server.world).unwrap();
 
@@ -284,4 +297,38 @@ impl Dungeon {
         );
     }
 
+    // TODO: all ticking happens from here,
+    pub fn tick(&mut self) -> anyhow::Result<()> {
+        let server = self.server_mut();
+        match &mut self.state {
+            // with these 2
+            DungeonState::NotReady | DungeonState::Finished => {}
+            DungeonState::Starting { tick_countdown: tick } => {
+                *tick -= 1;
+                if *tick == 0 {
+                    self.state = DungeonState::Started { current_ticks: 0 };
+                } else if *tick % 20 == 0 {
+                    let seconds_remaining = *tick / 20;
+                    let str = format!("§aStarting in {} second{}.", seconds_remaining, if seconds_remaining == 1 { "" } else { "s" });
+
+                    for (cid, _) in &server.players {
+                        Chat {
+                            component: ChatComponentTextBuilder::new(&str).build(),
+                            typ: 0,
+                        }.send_packet(*cid, &server.network_tx)?;
+                    }
+                }
+            }
+            DungeonState::Started { .. } => {
+                for (_, player) in &server.players  {
+                    if let Some(room) = server.dungeon.get_player_room(player) {
+                        for crusher in room.crushers.iter_mut() {
+                            crusher.tick(player);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }

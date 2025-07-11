@@ -1,13 +1,12 @@
-use serde_json::Value;
-
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::Entity;
-use crate::server::server::Server;
+use crate::server::player::Player;
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
+use serde_json::Value;
 
 pub struct Crusher {
     pub block_pos: BlockPos,
@@ -74,7 +73,8 @@ impl Crusher {
         Crusher::new(block_pos, direction, width, height, max_length, tick_per_block, pause_duration)
     }
 
-    pub fn tick(&mut self, server: &mut Server) {
+    pub fn tick(&mut self, player: &Player/*world: &mut World, network_tx: UnboundedSender<NetworkThreadMessage>*/) {
+        let server = player.server_mut();
         self.tick += 1;
         server.world.set_block_at(Blocks::RedstoneBlock, self.block_pos.x, self.block_pos.y - 1, self.block_pos.z);
 

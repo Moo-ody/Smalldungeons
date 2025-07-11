@@ -1,11 +1,17 @@
 pub mod inventory;
+pub mod ui;
 
 use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::client_bound::open_window::{InventoryType, OpenWindowPacket};
+use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
+use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::player::inventory::{Inventory, ItemSlot};
+use crate::server::player::ui::UI;
 use crate::server::server::Server;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::scoreboard::Scoreboard;
 use crate::server::world::World;
 use anyhow::{bail, Result};
@@ -32,10 +38,21 @@ pub struct Player {
     pub ping: i32,
 
     pub is_sneaking: bool,
+    
+    pub current_window_id: u8,
+    pub current_ui: UI,
 
     pub inventory: Inventory,
     pub held_slot: u8,
+    
+    pub example_variable: String,
 
+    // im assuming this is for sending packets for entities inside of player's render distance.
+    // if so, it'd be better to just loop over every player and check if in distance instead
+    // because:
+    // - there is usually (and should) only be 1 player at a time
+    // - most entities would be in render distance already
+    // obviously this would be better if the render distance was much larger and much more entities
     pub observed_entities: HashSet<EntityId>,
 }
 
@@ -49,13 +66,16 @@ impl Player {
             last_keep_alive: -1,
             ping: -1,
             is_sneaking: false,
+            current_window_id: 1,
+            current_ui: UI::None,
+            
             inventory: Inventory::empty(),
             held_slot: 0,
+            example_variable: "hello".to_string(),
             observed_entities: HashSet::new(),
         }
     }
-
-    // potentially unsafe
+    
     pub fn server_mut<'a>(&self) -> &'a mut Server {
         unsafe { self.server.as_mut().expect("Server is null") }
     }
@@ -93,10 +113,65 @@ impl Player {
         entity.observing_players.remove(&self.client_id);
     }
 
-    pub fn handle_right_click(&self) {
+    /// todo: better interaction
+    pub fn handle_right_click(&mut self) {
         if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
     }
+    
+    pub fn open_ui(&mut self, ui: UI) -> Result<()> {
+        self.current_ui = ui;
+        
+        if let Some(container_data) = ui.get_container_data() {
+            self.current_window_id += 1;
+            
+            OpenWindowPacket {
+                window_id: self.current_window_id,
+                inventory_type: InventoryType::Container,
+                window_title: ChatComponentTextBuilder::new(container_data.title).build(),
+                slot_count: container_data.slot_amount,
+            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+            
+            self.sync_inventory()?;
+        }
+        Ok(()) 
+    }
 
+    
+    pub fn sync_inventory(&mut self) -> Result<()> {
+        let network_tx = &self.server_mut().network_tx;
+        let mut inv_items = Vec::new();
+        
+        for item in &self.inventory.items {
+            inv_items.push(item.get_item_stack())
+        }
+        
+        if let Some(items) = self.current_ui.get_container_contents(self.server_mut())  {
+            WindowItems {
+                window_id: self.current_window_id,
+                items,
+            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+        }
+        
+        WindowItems {
+            window_id: 0,
+            items: inv_items,
+        }.send_packet(self.client_id, network_tx)?;
+        
+        if let UI::Inventory = self.current_ui { 
+            SetSlot {
+                window_id: -1,
+                slot: 0,
+                item_stack: self.inventory.dragged_item.get_item_stack(),
+            }.send_packet(self.client_id, network_tx)?;
+        } else {
+            SetSlot {
+                window_id: -1,
+                slot: 0,
+                item_stack: None,
+            }.send_packet(self.client_id, network_tx)?;
+        }
+        Ok(())
+    }
 }

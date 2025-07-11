@@ -1,3 +1,4 @@
+use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
@@ -25,15 +26,20 @@ pub struct Server {
     /// in minecraft a server can have more than 1 world.
     /// however we don't really need that, so for now only 1 main world will be supported
     pub world: World,
+    pub dungeon: Dungeon,
     // im not sure about having players in server directly.
     pub players: HashMap<ClientId, Player>,
 }
 impl Server {
-    pub fn initialize(network_tx: UnboundedSender<NetworkThreadMessage>) -> Server {
+    pub fn initialize_with_dungeon(
+        network_tx: UnboundedSender<NetworkThreadMessage>,
+        dungeon: Dungeon,
+    ) -> Server {
         Server {
-            world: World::new(),
             network_tx,
-            players: HashMap::new()
+            world: World::new(),
+            dungeon,
+            players: HashMap::new(),
         }
     }
 
@@ -116,8 +122,9 @@ impl Server {
 
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
                 
-                player.inventory.sync(&player, &self.network_tx)?;
+                player.sync_inventory()?;
                 self.players.insert(client_id, player);
             },
             MainThreadMessage::ClientDisconnected { client_id } => {
@@ -135,24 +142,7 @@ impl Server {
                 println!("Client {} disconnected", client_id);
             },
             MainThreadMessage::PacketReceived { client_id, packet } => {
-                // println!("Packet received from client {}: {:?}", client_id, packet);
                 packet.main_process(&mut self.world, self.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?)?;
-                // update to match if/when its needed
-
-                // match packet {
-                //     // test
-                //     // ServerBoundPackets::PlayerBlockPlacement(_) => {
-                //     //     if let Some(player) = &mut self.players.get_mut(&client_id) {
-                //     //         player.set_position(
-                //     //             &self.network_tx,
-                //     //             player.entity.pos.x,
-                //     //             player.entity.pos.y + 10.0,
-                //     //             player.entity.pos.z,
-                //     //         )?;
-                //     //     };
-                //     // }
-                //     _ => {}
-                // }
             }
         }
         Ok(())

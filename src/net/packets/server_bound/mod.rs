@@ -17,3 +17,5 @@ pub mod chat_message;
 pub mod click_window;
 pub mod player_digging;
 pub mod swing_animation;
+pub mod client_status;
+pub mod close_window;

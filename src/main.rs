@@ -42,18 +42,6 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
 
-    let mut server = Server::initialize(network_tx);
-    server.world.server = &mut server;
-
-    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
-    tokio::spawn(
-        run_network_thread(
-            network_rx,
-            server.network_tx.clone(),
-            main_tx,
-        )
-    );
-
     let rooms_dir = include_dir!("src/room_data/");
 
     let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
@@ -70,7 +58,7 @@ async fn main() -> Result<()> {
 
             (room_id, room_data)
         }).collect();
-    
+
     // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
     // But this works for now...
     let door_data: Vec<Vec<Blocks>> = include_str!("door_data/doors.txt").split("\n").map(|line| {
@@ -107,7 +95,7 @@ async fn main() -> Result<()> {
     let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
         .split("\n")
         .collect::<Vec<&str>>();
-    
+
     let dungeon_str = match args.len() {
         0..=1 => {
             let mut rng = rand::rng();
@@ -118,8 +106,22 @@ async fn main() -> Result<()> {
 
     println!("Dungeon String: {}", dungeon_str);
 
-    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage).unwrap();
+    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage)?;
+    let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
+    server.world.server = &mut server;
+    server.dungeon.server = &mut server;
 
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
+    tokio::spawn(
+        run_network_thread(
+            network_rx,
+            server.network_tx.clone(),
+            main_tx,
+        )
+    );
+
+    let dungeon = &server.dungeon;
+    
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
@@ -149,6 +151,8 @@ async fn main() -> Result<()> {
             server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
         }
 
+        server.dungeon.tick()?;
+        
         for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
             if let Some(mut entity) = server.world.entities.remove(&entity_id) {
                 entity.ticks_existed += 1;
@@ -169,8 +173,6 @@ async fn main() -> Result<()> {
             //         EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
             //     }
             // }
-
-            let room = dungeon.get_player_room(player);
 
             if player.scoreboard.header_dirty {
                 player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;
@@ -238,14 +240,6 @@ async fn main() -> Result<()> {
                         hide_particles: true,
                     }.send_packet(player.client_id, &server.network_tx)?;
                 }
-            }
-        }
-
-        // if  {  }
-
-        for room in dungeon.rooms.iter_mut() {
-            for crusher in room.crushers.iter_mut() {
-                crusher.tick(&mut server);
             }
         }
     }

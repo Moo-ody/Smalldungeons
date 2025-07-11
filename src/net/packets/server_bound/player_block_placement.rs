@@ -51,7 +51,8 @@ impl ServerBoundPacket for PlayerBlockPlacement {
             player.handle_right_click()
         }
         // make sure inventory is synced
-        player.inventory.sync(player, &player.server_mut().network_tx)?;
+        player.sync_inventory()?;
+        // player.inventory.sync(player, &player.server_mut().network_tx)?;
         Ok(())
     }
 }
