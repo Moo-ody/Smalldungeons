@@ -4,6 +4,8 @@ use crate::net::var_int::VarInt;
 use crate::server::entity::attributes::Attributes;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
+
+#[derive(Clone, Debug)]
 pub struct EntityProperties {
     pub entity_id: i32,
     pub properties: Attributes,

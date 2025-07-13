@@ -39,6 +39,7 @@ pub enum MainThreadMessage {
 
     NewPlayer {
         client_id: ClientId,
+        username: String,
     },
 
     ClientDisconnected {

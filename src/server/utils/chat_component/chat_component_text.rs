@@ -1,12 +1,12 @@
 use crate::net::packets::packet_write::PacketWrite;
-use crate::server::utils::color::Color;
+use crate::server::utils::color::MCColors;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ChatComponentText {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    color: Option<Color>,
+    color: Option<MCColors>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bold: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +82,7 @@ impl ChatComponentTextBuilder {
         }
     }
 
-    pub const fn color(mut self, color: Color) -> Self {
+    pub const fn color(mut self, color: MCColors) -> Self {
         self.component.color = Some(color);
         self
     }

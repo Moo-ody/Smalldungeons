@@ -47,9 +47,8 @@ impl ServerBoundPacket for PlayerBlockPlacement {
                 block_state: block.get_block_state_id(),
             }.send_packet(player.client_id, &player.server_mut().network_tx)?;
         }
-        if self.item_stack.is_some() {
-            player.handle_right_click()
-        }
+        // println!("packet {:?}", self);
+        player.handle_right_click();
         // make sure inventory is synced
         player.sync_inventory()?;
         // player.inventory.sync(player, &player.server_mut().network_tx)?;

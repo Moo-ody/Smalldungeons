@@ -1,7 +1,9 @@
 pub mod inventory;
 pub mod ui;
+pub mod scoreboard;
 
 use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::client_bound::close_window::CloseWindowPacket;
 use crate::net::packets::client_bound::open_window::{InventoryType, OpenWindowPacket};
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::spawn_mob::SpawnMob;
@@ -9,10 +11,10 @@ use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::player::inventory::{Inventory, ItemSlot};
+use crate::server::player::scoreboard::Scoreboard;
 use crate::server::player::ui::UI;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
-use crate::server::utils::scoreboard::Scoreboard;
 use crate::server::world::World;
 use anyhow::{bail, Result};
 use std::collections::HashSet;
@@ -28,7 +30,7 @@ pub type ClientId = u32;
 #[derive(Debug)]
 pub struct Player {
     pub server: *mut Server,
-
+    pub username: String,
     pub client_id: ClientId,
     pub entity_id: EntityId,
 
@@ -44,8 +46,6 @@ pub struct Player {
 
     pub inventory: Inventory,
     pub held_slot: u8,
-    
-    pub example_variable: String,
 
     // im assuming this is for sending packets for entities inside of player's render distance.
     // if so, it'd be better to just loop over every player and check if in distance instead
@@ -56,13 +56,15 @@ pub struct Player {
     pub observed_entities: HashSet<EntityId>,
 }
 
-impl Player {
-    pub fn new(server: &mut Server, client_id: ClientId, entity_id: EntityId) -> Self {
+impl Player{
+    
+    pub fn new(server: &mut Server, username: String, client_id: ClientId, entity_id: EntityId) -> Self {
         Self {
             server,
+            username,
             client_id,
             entity_id,
-            scoreboard: Scoreboard::new("§e§lSKYBLOCK"),
+            scoreboard: Scoreboard::new(),
             last_keep_alive: -1,
             ping: -1,
             is_sneaking: false,
@@ -71,7 +73,6 @@ impl Player {
             
             inventory: Inventory::empty(),
             held_slot: 0,
-            example_variable: "hello".to_string(),
             observed_entities: HashSet::new(),
         }
     }
@@ -113,7 +114,11 @@ impl Player {
         entity.observing_players.remove(&self.client_id);
     }
 
-    /// todo: better interaction
+    pub fn handle_left_click(&mut self) {
+        
+    }
+    
+    /// todo: better interaction, maybe?
     pub fn handle_right_click(&mut self) {
         if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
@@ -137,6 +142,14 @@ impl Player {
         }
         Ok(()) 
     }
+    
+    pub fn close_ui(&mut self) -> Result<()> {
+        self.current_ui = UI::None;
+        CloseWindowPacket {
+            window_id: self.current_window_id as i8,
+        }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+        Ok(())
+    }
 
     
     pub fn sync_inventory(&mut self) -> Result<()> {
@@ -147,7 +160,7 @@ impl Player {
             inv_items.push(item.get_item_stack())
         }
         
-        if let Some(items) = self.current_ui.get_container_contents(self.server_mut())  {
+        if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
             WindowItems {
                 window_id: self.current_window_id,
                 items,

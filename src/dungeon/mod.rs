@@ -319,7 +319,8 @@ impl Dungeon {
                     }
                 }
             }
-            DungeonState::Started { .. } => {
+            DungeonState::Started { current_ticks } => {
+                *current_ticks += 1;
                 for (_, player) in &server.players  {
                     if let Some(room) = server.dungeon.get_player_room(player) {
                         for crusher in room.crushers.iter_mut() {

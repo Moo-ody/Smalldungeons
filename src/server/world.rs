@@ -29,7 +29,7 @@ pub struct World {
 
     // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
     pub entities: HashMap<EntityId, Entity>,
-    next_entity_id: i32
+    pub next_entity_id: i32
 }
 
 impl World {

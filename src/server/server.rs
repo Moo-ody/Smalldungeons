@@ -2,11 +2,14 @@ use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
+use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::player_list_item::PlayerListItem;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
+use crate::server::entity::attributes::Attribute;
+use crate::server::entity::attributes::AttributeTypes::MovementSpeed;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
 use crate::server::items::Item;
@@ -45,7 +48,7 @@ impl Server {
 
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {
         match event {
-            MainThreadMessage::NewPlayer { client_id } => {
+            MainThreadMessage::NewPlayer { client_id, username } => {
                 println!("added player with id {client_id}");
 
                 let spawn_point = Vec3f {
@@ -56,7 +59,12 @@ impl Server {
 
                 let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
                 println!("player entity id: {}", player_entity.entity_id);
-                let mut player = Player::new(self, client_id, player_entity.entity_id);
+                let mut player = Player::new(
+                    self, 
+                    username,
+                    client_id,
+                    player_entity.entity_id
+                );
 
                 JoinGame::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
                 PositionLook::from_entity(&player_entity).send_packet(client_id, &self.network_tx)?;
@@ -80,29 +88,10 @@ impl Server {
                     footer: footer(),
                 }.send_packet(player.client_id, &self.network_tx)?;
 
-                player.scoreboard.header_packet().send_packet(player.client_id, &self.network_tx)?;
-
-                for packet in player.scoreboard.get_packets() {
-                    packet.send_packet(player.client_id, &self.network_tx)?;
+                let scoreboard = player.scoreboard.packets_to_init();
+                for packet in scoreboard {
+                    packet.send_packet(client_id, &self.network_tx)?;
                 }
-
-                player.scoreboard.display_packet().send_packet(player.client_id, &self.network_tx)?;
-
-                player.scoreboard.add_line("roomid", "§706/14/25 §8m24§87W 730,-420");
-                player.scoreboard.add_line("e1", "");
-                player.scoreboard.add_line("season", "Winter 22nd");
-                player.scoreboard.add_line("ctime", "§73:10pm");
-                player.scoreboard.add_line("zone", " §7⏣ §cThe Catac§combs §7(F7)");
-                player.scoreboard.add_line("e2", "");
-                // boxes stay, red gets ✔ or ✖ depending on blood key and gray increments counter per wither key probably
-                // im not sure if these are the right box symbols but well have to see
-                player.scoreboard.add_line("keys", "Keys: §c■ §c✖ §8§8■ §a0x");
-                player.scoreboard.add_line("etime", "Time Elapsed: §a§a00s");
-                player.scoreboard.add_line("clear", "Cleared: §c0% §8§8(0)");
-                player.scoreboard.add_line("s1", "          ");
-                player.scoreboard.add_line("solo", "§3§lSolo");
-                player.scoreboard.add_line("s2", "          ");
-                player.scoreboard.add_line("footer", "§emc.hypixel.net");
 
                 EntityEffect {
                     entity_id: player.entity_id,
@@ -124,6 +113,14 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
                 
+                let mut properties = HashMap::new();
+                properties.insert(MovementSpeed, Attribute::new(0.4));
+                
+                EntityProperties {
+                    entity_id: player.entity_id,
+                    properties,
+                }.send_packet(player.client_id, &self.network_tx)?;
+
                 player.sync_inventory()?;
                 self.players.insert(client_id, player);
             },

@@ -4,6 +4,7 @@ mod dungeon;
 mod utils;
 
 use crate::dungeon::door::DoorType;
+use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
@@ -17,12 +18,14 @@ use crate::server::block::blocks::Blocks;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
+use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3f::Vec3f;
 use anyhow::Result;
 use include_dir::include_dir;
+use indoc::formatdoc;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
@@ -174,36 +177,72 @@ async fn main() -> Result<()> {
             //     }
             // }
 
-            if player.scoreboard.header_dirty {
-                player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;
+            let mut scoreboard_lines = ScoreboardLines(Vec::new());
+
+            // TODO: correctly handle date based on clock, handle room id according to current room
+            scoreboard_lines.push(formatdoc! {r#"
+                §e§lSKYBLOCK
+                §7{date} §8m24§87W {room_id}
+
+                Winter 22nd
+                §73:10pm
+                 §7⏣ §cThe Catacombs §7(F7)
+
+            "#,
+            date = "06/14/25",
+            room_id = "730,-420",
+            });
+
+            match server.dungeon.state {
+                DungeonState::NotReady => {
+                    for (_, p) in &player.server_mut().players {
+                        scoreboard_lines.push(format!("§c[M] §7{}", p.username))
+                    }
+                    scoreboard_lines.new_line();
+                }
+                DungeonState::Starting { tick_countdown } => {
+                    for (_, p) in &player.server_mut().players {
+                        scoreboard_lines.push(format!("§c[M] §7{}", p.username))
+                    }
+                    scoreboard_lines.new_line();
+                    scoreboard_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
+                    scoreboard_lines.new_line();
+                }
+                DungeonState::Started { current_ticks } => {
+                    // this is scuffed but it works
+                    let seconds = current_ticks / 20;
+                    let time = if seconds >= 60 {
+                        let minutes = seconds / 60;
+                        let seconds = seconds % 60;
+                        format!("{}{}m{}{}s", if minutes < 10 { "0" } else { "" }, minutes, if seconds < 10 { "0" } else { "" }, seconds)
+                    } else {
+                        let seconds = seconds % 60;
+                        format!("{}{}s", if seconds < 10 { "0" } else { "" }, seconds)
+                    };
+                    // TODO: display correct keys, and cleared percentage
+                    // clear percentage is based on amount of tiles that are cleared.
+                    scoreboard_lines.push(formatdoc! {r#"
+                        Keys: §c■ §c✖ §8§8■ §a0x
+                        Time elapsed: §a§a{time}
+                        Cleared: §c{clear_percent}% §8§8({score})
+
+                        §3§lSolo
+
+                    "#,
+                    clear_percent = "0",
+                    score = "0",
+                    });
+                }
+                DungeonState::Finished => {}
             }
 
-            // maybe another value if any lines are updated? this will just not pull any packets if nothing is updated but it will still iterate...
-            for packet in player.scoreboard.get_packets() {
+            scoreboard_lines.push_str("§emc.hypixel.net");
+
+            for packet in player.scoreboard.update(scoreboard_lines) {
                 packet.send_packet(player.client_id, &server.network_tx)?;
             }
-
-            if !player.scoreboard.displaying {
-                player.scoreboard.display_packet().send_packet(player.client_id, &server.network_tx)?;
-            }
-
+            
             if let Some(player_entity) = server.world.entities.get(&player.entity_id) {
-                if player_entity.ticks_existed % 20 == 0 {
-                    let seconds = player_entity.ticks_existed / 20;
-                    player.scoreboard.update_line("etime", format!("Time Elapsed: §a§a{seconds}s")); // this isnt accurate to hypixel atm but its ok!
-                }
-
-                if player_entity.ticks_existed % 150 == 0 {
-                    //player.scoreboard.add_line_at(0, "resize", "amazing");
-
-                    // player.scoreboard.update_header("NEW HEADER WOWOWOW");
-                }
-
-                if player_entity.ticks_existed % 250 == 0 {
-                    player.scoreboard.remove_line("etime");
-
-                    // player.scoreboard.update_header("old header :(");
-                }
 
                 if player_entity.ticks_existed % 5 == 0 {
                     let mut current_index = 1;

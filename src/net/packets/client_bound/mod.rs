@@ -25,3 +25,4 @@ pub mod scoreboard_objective;
 pub mod teams;
 pub mod sound_effect;
 pub mod open_window;
+pub mod close_window;

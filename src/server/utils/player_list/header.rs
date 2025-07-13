@@ -1,14 +1,14 @@
 use crate::server::utils::chat_component::chat_component_text::{ChatComponentText, ChatComponentTextBuilder, HoverAction};
-use crate::server::utils::color::Color;
+use crate::server::utils::color::MCColors;
 
 pub fn header() -> ChatComponentText {
     ChatComponentTextBuilder::new("")
         .append(
             ChatComponentTextBuilder::new("You are playing on ")
-                .color(Color::Aqua)
+                .color(MCColors::Aqua)
                 .append(
                     ChatComponentTextBuilder::new("MC.HYPIXEL.NET")
-                        .color(Color::Yellow)
+                        .color(MCColors::Yellow)
                         .bold()
                         .on_hover(
                             HoverAction::ShowText,

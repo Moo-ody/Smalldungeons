@@ -1,9 +1,10 @@
 use crate::dungeon::dungeon_state::DungeonState;
+use crate::dungeon::dungeon_state::DungeonState::{NotReady, Starting};
 use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::packet::SendPacket;
 use crate::net::packets::server_bound::click_window::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::player::Player;
+use crate::server::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::nbt::NBT;
@@ -79,17 +80,17 @@ impl UI {
                 }
             }
             UI::MortReadyUpMenu => {
-                if packet.slot_id == 13 {
-                    let dung = &mut player.server_mut().dungeon;
-                    match dung.state {
-                        DungeonState::NotReady => {
-                            dung.state = DungeonState::Starting { tick_countdown: 120 }
+                match packet.slot_id { 
+                    4 | 13 => {
+                        let dung = &mut player.server_mut().dungeon;
+                        match dung.state {
+                            NotReady => dung.state = Starting { tick_countdown: 100 },
+                            Starting { .. } => dung.state = NotReady,
+                            _ => {}
                         }
-                        DungeonState::Starting { .. } => {
-                            dung.state = DungeonState::NotReady
-                        }
-                        _ => {}
                     }
+                    49 => player.close_ui()?,
+                    _ => {}
                 }
                 player.sync_inventory()?;
             }
@@ -98,7 +99,8 @@ impl UI {
     }
 
     /// returns a list of items to send to client 
-    pub fn get_container_contents(&self, server: &Server) -> Option<Vec<Option<ItemStack>>> {
+    pub fn get_container_contents(&self, server: &Server, client_id: &ClientId) -> Option<Vec<Option<ItemStack>>> {
+        let player = server.players.get(client_id)?;
         match self {
             UI::SkyblockMenu => {
                 let content = default_container_content(54);
@@ -112,6 +114,18 @@ impl UI {
                 } else {
                     ("§aReady", 13)
                 };
+                content.insert(4, Some(ItemStack {
+                    item: 397,
+                    stack_size: 1,
+                    metadata: 3,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", &format!("§7{}", player.username)),
+                            NBT::list_from_string("Lore", &format!("{}", item_name))
+                        ]),
+                        NBT::string("SkullOwner", &player.username),
+                    ])),
+                }));
                 content.insert(13, Some(ItemStack {
                     item: 95,
                     stack_size: 1,
@@ -119,6 +133,16 @@ impl UI {
                     tag_compound: Some(NBT::with_nodes(vec![
                         NBT::compound("display", vec![
                             NBT::string("Name", item_name)
+                        ])
+                    ])),
+                }));
+                content.insert(49, Some(ItemStack {
+                    item: 166,
+                    stack_size: 1,
+                    metadata: 0,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", "§cClose")
                         ])
                     ])),
                 }));

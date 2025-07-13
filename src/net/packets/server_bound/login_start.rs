@@ -34,6 +34,7 @@ impl ServerBoundPacket for LoginStart {
 
         context.main_tx.send(MainThreadMessage::NewPlayer {
             client_id: context.client.client_id(),
+            username: self.username.clone(),
         })?;
 
         Ok(())
