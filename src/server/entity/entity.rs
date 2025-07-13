@@ -77,7 +77,7 @@ impl Entity {
             entity_type,
             pos,
             on_ground: true,
-            motion: DVec3::new(0.0, 0.0, 0.0),
+            motion: DVec3::ZERO,
             prev_pos: pos,
             last_sent_pos: pos,
             last_sent_yaw: 0.0,
@@ -117,14 +117,10 @@ impl Entity {
     }
 
     pub fn positioned_aabb(&self) -> AABB {
-        AABB {
-            min_x: self.pos.x - self.width as f64 / 2.0,
-            min_y: self.pos.y,
-            min_z: self.pos.z - self.width as f64 / 2.0,
-            max_x: self.pos.x + self.width as f64 / 2.0,
-            max_y: self.pos.y + self.height as f64,
-            max_z: self.pos.z + self.width as f64 / 2.0,
-        }
+        AABB::new(
+            self.pos + self.aabb.min,
+            self.pos + self.aabb.max
+        )
     }
     
     pub fn update_position(&mut self, x: f64, y: f64, z: f64) {

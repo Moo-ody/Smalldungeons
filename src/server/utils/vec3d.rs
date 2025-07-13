@@ -10,7 +10,13 @@ pub struct DVec3 {
 }
 
 impl DVec3 {
-    
+
+    pub const ZERO: DVec3 = DVec3 {
+        x: 0.0, 
+        y: 0.0,
+        z: 0.0
+    };
+
     pub fn new(x: f64, y: f64, z: f64) -> DVec3 {
         DVec3 {
             x,
@@ -18,7 +24,7 @@ impl DVec3 {
             z,
         }
     }
-    
+
     pub fn from_x(x: f64) -> DVec3 {
         DVec3 {
             x,

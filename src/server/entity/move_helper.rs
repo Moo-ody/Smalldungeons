@@ -32,7 +32,7 @@ impl MoveHelper {
         entity.move_helper.update = false;
         let x = entity.move_helper.pos.x - entity.pos.x;
         let z = entity.move_helper.pos.z - entity.pos.z;
-        let y = entity.move_helper.pos.y - entity.aabb.min_y.round();;
+        let y = entity.move_helper.pos.y - entity.aabb.min.y.round();
 
         let g = z.mul_add(z, x.mul_add(x, y * y));
 
