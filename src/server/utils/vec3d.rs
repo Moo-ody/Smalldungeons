@@ -1,48 +1,42 @@
 use crate::server::block::block_pos::BlockPos;
 use std::ops::{Add, Div, Mul, Sub};
 
+/// Double (f64) Vec3
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Vec3f {
+pub struct DVec3 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
 }
 
-impl Vec3f {
-    pub fn new(x: f64, y: f64, z: f64) -> Vec3f {
-        Vec3f {
+impl DVec3 {
+    
+    pub fn new(x: f64, y: f64, z: f64) -> DVec3 {
+        DVec3 {
             x,
             y,
             z,
         }
     }
     
-    pub fn new_empty() -> Vec3f {
-        Vec3f {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        }
-    }
-    
-    pub fn from_x(x: f64) -> Vec3f {
-        Vec3f {
+    pub fn from_x(x: f64) -> DVec3 {
+        DVec3 {
             x,
             y: 0.0,
             z: 0.0,
         }
     }
     
-    pub fn from_y(y: f64) -> Vec3f {
-        Vec3f {
+    pub fn from_y(y: f64) -> DVec3 {
+        DVec3 {
             x: 0.0,
             y,
             z: 0.0,
         }
     }
     
-    pub fn from_z(z: f64) -> Vec3f {
-        Vec3f {
+    pub fn from_z(z: f64) -> DVec3 {
+        DVec3 {
             x: 0.0,
             y: 0.0,
             z,
@@ -61,20 +55,20 @@ impl Vec3f {
         self.z += amount
     }
 
-    pub fn normalize(&self) -> Vec3f {
+    pub fn normalize(&self) -> DVec3 {
         let len = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
         if len < 1.0e-4 {
-            Vec3f { x: 0.0, y: 0.0, z: 0.0 }
+            DVec3 { x: 0.0, y: 0.0, z: 0.0 }
         } else {
-            Vec3f { x: self.x / len, y: self.y / len, z: self.z / len }
+            DVec3 { x: self.x / len, y: self.y / len, z: self.z / len }
         }
     }
 
-    pub fn distance_to(&self, other: &Vec3f) -> f64 {
+    pub fn distance_to(&self, other: &DVec3) -> f64 {
         self.distance_squared(other).sqrt()
     }
 
-    pub fn distance_squared(&self, other: &Vec3f) -> f64 {
+    pub fn distance_squared(&self, other: &DVec3) -> f64 {
         let x = self.x - other.x;
         let y = self.y - other.y;
         let z = self.z - other.z;
@@ -82,8 +76,8 @@ impl Vec3f {
     }
 }
 
-impl Add for Vec3f {
-    type Output = Vec3f;
+impl Add for DVec3 {
+    type Output = DVec3;
     
     fn add(self, rhs: Self) -> Self {
         Self {
@@ -94,8 +88,8 @@ impl Add for Vec3f {
     }
 }
 
-impl Sub for Vec3f {
-    type Output = Vec3f;
+impl Sub for DVec3 {
+    type Output = DVec3;
 
     fn sub(self, rhs: Self) -> Self {
         Self {
@@ -106,8 +100,8 @@ impl Sub for Vec3f {
     }
 }
 
-impl Div for Vec3f {
-    type Output = Vec3f;
+impl Div for DVec3 {
+    type Output = DVec3;
     
     fn div(self, rhs: Self) -> Self {
         Self {
@@ -118,8 +112,8 @@ impl Div for Vec3f {
     }
 }
 
-impl Mul for Vec3f {
-    type Output = Vec3f;
+impl Mul for DVec3 {
+    type Output = DVec3;
     
     fn mul(self, rhs: Self) -> Self {
         Self {
@@ -130,7 +124,7 @@ impl Mul for Vec3f {
     }
 }
 
-impl From<&BlockPos> for Vec3f {
+impl From<&BlockPos> for DVec3 {
     fn from(pos: &BlockPos) -> Self {
         Self::new(pos.x as f64, pos.y as f64, pos.z as f64)
     }

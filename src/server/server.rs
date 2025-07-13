@@ -17,7 +17,7 @@ use crate::server::player::inventory::ItemSlot;
 use crate::server::player::{ClientId, Player};
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -51,7 +51,7 @@ impl Server {
             MainThreadMessage::NewPlayer { client_id, username } => {
                 println!("added player with id {client_id}");
 
-                let spawn_point = Vec3f {
+                let spawn_point = DVec3 {
                     x: 20.0,
                     y: 69.0,
                     z: 20.0,

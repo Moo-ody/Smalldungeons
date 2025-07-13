@@ -17,7 +17,7 @@ use crate::server::entity::metadata::{BaseMetadata, Metadata};
 use crate::server::entity::move_helper::MoveHelper;
 use crate::server::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use std::cmp::{max, min};
 use std::collections::HashSet;
@@ -35,11 +35,11 @@ pub struct Entity {
     pub entity_id: EntityId,
     pub entity_type: EntityType,
     // pub entity_type_data: EntityTypeData,
-    pub pos: Vec3f,
+    pub pos: DVec3,
     pub on_ground: bool,
-    pub motion: Vec3f,
-    pub prev_pos: Vec3f,
-    pub last_sent_pos: Vec3f,
+    pub motion: DVec3,
+    pub prev_pos: DVec3,
+    pub last_sent_pos: DVec3,
     pub last_sent_yaw: f32,
     pub last_sent_pitch: f32,
     pub yaw: f32,
@@ -69,7 +69,7 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn create_at(entity_type: EntityType, pos: Vec3f, id: EntityId) -> Entity {
+    pub fn create_at(entity_type: EntityType, pos: DVec3, id: EntityId) -> Entity {
         let width = entity_type.get_width();
         let height = entity_type.get_height();
         Entity {
@@ -77,7 +77,7 @@ impl Entity {
             entity_type,
             pos,
             on_ground: true,
-            motion: Vec3f::new_empty(),
+            motion: DVec3::new(0.0, 0.0, 0.0),
             prev_pos: pos,
             last_sent_pos: pos,
             last_sent_yaw: 0.0,

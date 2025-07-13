@@ -1,7 +1,7 @@
 use crate::server::block::block_pos::BlockPos;
 use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
 use crate::server::entity::entity::Entity;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 
 pub struct Navigator {
@@ -9,7 +9,7 @@ pub struct Navigator {
     pub ticks_following: i32,
     pub ticks_at_last_pos: i32,
 
-    pub last_pos: Option<Vec3f>,
+    pub last_pos: Option<DVec3>,
     // pub path_finder: PathFinder,
 }
 

@@ -1,17 +1,16 @@
-use crate::server::entity::attributes::Attribute;
 use crate::server::entity::entity::Entity;
 use crate::server::entity::look_helper::wrap_to_180;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 
 #[derive(Clone, Debug)]
 pub struct MoveHelper {
-    pub pos: Vec3f,
+    pub pos: DVec3,
     pub speed: f64,
     update: bool,
 }
 
 impl MoveHelper {
-    pub fn from_pos(pos: Vec3f) -> Self {
+    pub fn from_pos(pos: DVec3) -> Self {
         Self {
             pos,
             speed: 0.0,
@@ -19,7 +18,7 @@ impl MoveHelper {
         }
     }
 
-    pub fn set_move_to(&mut self, pos: Vec3f, speed: f64) {
+    pub fn set_move_to(&mut self, pos: DVec3, speed: f64) {
         self.pos = pos;
         self.speed = speed;
         self.update = true;

@@ -1,4 +1,4 @@
-pub mod vec3f;
+pub mod vec3d;
 pub mod aabb;
 pub mod nbt;
 pub mod chat_component;

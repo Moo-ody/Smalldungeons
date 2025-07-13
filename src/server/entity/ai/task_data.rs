@@ -1,7 +1,7 @@
 use crate::server::entity::ai::{TaskData, TaskType};
 use crate::server::entity::entity::Entity;
 use crate::server::entity::entity_type::EntityType;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use rand::random_range;
 
@@ -83,7 +83,7 @@ impl TaskData {
                 watched_entity_type: _,
             } => {
                 if let Some(target) = closest.and_then(|target_id| { world.entities.get(&target_id) }) {
-                    executing.look_helper.set_pos(target.pos + Vec3f::from_y(1.64), 10.0, 10.0)
+                    executing.look_helper.set_pos(target.pos + DVec3::from_y(1.64), 10.0, 10.0)
                 }
                 *look_time -= 1;
             }

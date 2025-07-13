@@ -1,17 +1,17 @@
 use crate::server::entity::entity::Entity;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 
 /// this is weird and probably bad, but ill worry about moving and fixing it later
 #[derive(Clone, Debug)]
 pub struct LookHelper {
-    pos: Vec3f,
+    pos: DVec3,
     delta_yaw: f32,
     delta_pitch: f32,
     rotating: bool,
 }
 
 impl LookHelper {
-    pub fn from_pos(pos: Vec3f, delta_yaw: f32, delta_pitch: f32) -> Self {
+    pub fn from_pos(pos: DVec3, delta_yaw: f32, delta_pitch: f32) -> Self {
         Self {
             pos,
             delta_yaw,
@@ -20,7 +20,7 @@ impl LookHelper {
         }
     }
 
-    pub fn set_pos(&mut self, pos: Vec3f, delta_yaw: f32, delta_pitch: f32) {
+    pub fn set_pos(&mut self, pos: DVec3, delta_yaw: f32, delta_pitch: f32) {
         self.pos = pos;
         self.delta_yaw = delta_yaw;
         self.delta_pitch = delta_pitch;

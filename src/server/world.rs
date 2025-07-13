@@ -7,7 +7,7 @@ use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::entity::entity_type::EntityType;
 use crate::server::server::Server;
 use crate::server::utils::player_list::PlayerList;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use std::collections::HashMap;
 
 pub struct World {
@@ -57,7 +57,7 @@ impl World {
     /// im not sure if functions like these should be here or somewhere else. maybe player impl?
     ///
     /// this can ignore distance if max distance is less than 0.0
-    pub fn get_closest_player(&self, pos: &Vec3f, max_distance: f32) -> Option<&Entity> {
+    pub fn get_closest_player(&self, pos: &DVec3, max_distance: f32) -> Option<&Entity> {
         let max_distance_squared = if max_distance > 0.0 { Some(max_distance * max_distance) } else { None };
 
         // honest i think this looks really bad maybe it should be changed
@@ -77,7 +77,7 @@ impl World {
             .map(|(e, _)| e)
     }
 
-    pub fn get_closest_in_aabb(&self, _: &Vec3f) -> Option<&Entity> {
+    pub fn get_closest_in_aabb(&self, _: &DVec3) -> Option<&Entity> {
         None
     }
 

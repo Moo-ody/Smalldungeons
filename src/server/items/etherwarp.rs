@@ -8,7 +8,7 @@ use crate::server::entity::entity::Entity;
 use crate::server::player::Player;
 use crate::server::utils::particles::ParticleTypes::SpellWitch;
 use crate::server::utils::sounds::Sounds;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use crate::utils::bitset::BitSet;
 use std::f64::consts::PI;
@@ -43,7 +43,7 @@ pub fn handle_ether_warp(
 
         let f2 = -rad_pitch.cos();
 
-        let mut pos = Vec3f {
+        let mut pos = DVec3 {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
             z: rad_yaw.cos() * f2,
@@ -61,7 +61,7 @@ pub fn handle_ether_warp(
         if let Ok(packet) = Particles::new(
             SpellWitch,
             entity.pos,
-            Vec3f::new(0.25, 1.0, 0.25),
+            DVec3::new(0.25, 1.0, 0.25),
             0.0,
             25,
             true,
@@ -94,7 +94,7 @@ pub fn handle_ether_warp(
     Ok(())
 }
 
-fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
+fn traverse_voxels(world: &World, start: DVec3, end: DVec3) -> EtherResult {
     let (x0, y0, z0) = (start.x, start.y, start.z);
     let (x1, y1, z1) = (end.x, end.y, end.z);
 

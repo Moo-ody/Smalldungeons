@@ -22,7 +22,7 @@ use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::particles::ParticleTypes;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use anyhow::Result;
 use include_dir::include_dir;
 use indoc::formatdoc;
@@ -134,7 +134,7 @@ async fn main() -> Result<()> {
         dungeon.load_door(door, &mut server.world, &door_type_blocks);
     }
 
-    let zombie_spawn_pos = Vec3f {
+    let zombie_spawn_pos = DVec3 {
         x: 25.0,
         y: 69.0,
         z: 25.0,
@@ -249,8 +249,8 @@ async fn main() -> Result<()> {
                     for pos in path.iter() {
                         let particle = Particles::new(
                             ParticleTypes::Crit,
-                            Vec3f::from(pos),
-                            Vec3f::new(0.1, 0.1, 0.1),
+                            DVec3::from(pos),
+                            DVec3::new(0.1, 0.1, 0.1),
                             0.0,
                             current_index,
                             true,

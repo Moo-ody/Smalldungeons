@@ -1,8 +1,8 @@
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 
 #[derive(Clone, Debug)]
 pub struct EntityMoveData {
-    pub new_pos: Vec3f,
+    pub new_pos: DVec3,
     pub new_yaw: f32,
     pub new_pitch: f32,
 
@@ -13,7 +13,7 @@ pub struct EntityMoveData {
 impl EntityMoveData {
     pub fn new() -> Self {
         Self {
-            new_pos: Vec3f::new_empty(),
+            new_pos: DVec3::new(0.0, 0.0, 0.0),
             new_yaw: 0.0,
             new_pitch: 0.0,
 

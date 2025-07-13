@@ -1,4 +1,4 @@
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
@@ -9,8 +9,8 @@ pub struct BlockPos {
     pub z: i32,
 }
 
-impl From<Vec3f> for BlockPos {
-    fn from(vec: Vec3f) -> Self {
+impl From<DVec3> for BlockPos {
+    fn from(vec: DVec3) -> Self {
         Self {
             x: vec.x as i32,
             y: vec.y as i32,

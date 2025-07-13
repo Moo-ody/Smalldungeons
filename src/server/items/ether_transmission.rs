@@ -3,7 +3,7 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::server::entity::entity::Entity;
 use crate::server::player::Player;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
@@ -24,7 +24,7 @@ pub fn handle_teleport(
         let rad_pitch = -pitch.to_radians();
 
         let f2 = -rad_pitch.cos();
-        let mut pos = Vec3f {
+        let mut pos = DVec3 {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
             z: rad_yaw.cos() * f2,

@@ -1,5 +1,4 @@
 use crate::server::entity::entity::Entity;
-use crate::server::utils::vec3f::Vec3f;
 
 /// impl for the movement of entities to keep entity file clean.
 impl Entity {

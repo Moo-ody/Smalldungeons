@@ -2,11 +2,11 @@ use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
 use crate::net::var_int::{write_var_int, VarInt};
 use crate::server::utils::particles::ParticleTypes;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::vec3d::DVec3;
+use crate::partial_packet;
 use anyhow::bail;
 use std::io::{Error, ErrorKind};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use crate::{partial_packet, print_bytes_hex};
 
 #[derive(Debug, Clone)]
 pub struct Particles {
@@ -24,7 +24,7 @@ pub struct Particles {
 }
 
 impl Particles {
-    pub fn new(typ: ParticleTypes, pos: Vec3f, offset: Vec3f, speed: f32, count: i32, long_distance: bool, args: Option<Vec<i32>>) -> anyhow::Result<Self> {
+    pub fn new(typ: ParticleTypes, pos: DVec3, offset: DVec3, speed: f32, count: i32, long_distance: bool, args: Option<Vec<i32>>) -> anyhow::Result<Self> {
         let count_is_some = typ.get_arg_count().is_some();
         if count_is_some && args.is_none() || !count_is_some && args.is_some() {
             bail!("Invalid arguments for particle type: type: {:?}, args: {:?}", typ, args);
