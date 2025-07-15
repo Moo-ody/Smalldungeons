@@ -1,12 +1,8 @@
-use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::dungeon_state::DungeonState::{NotReady, Starting};
-use crate::net::packets::client_bound::chat::Chat;
-use crate::net::packets::packet::SendPacket;
 use crate::net::packets::server_bound::click_window::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::{ClientId, Player};
 use crate::server::server::Server;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::nbt::NBT;
 
 
@@ -53,9 +49,10 @@ impl UI {
         packet: &ClickWindow,
         player: &mut Player,
     ) -> anyhow::Result<()> {
+        
         // todo in wd branch, track active windows with transaction packet sync and stuff
         // to make sure client doesnt send packets for a different gui when it hasn't recieved new 1
-        let network_tx = &player.server_mut().network_tx;
+        
         match self {
             // maybe flag, since should never be possible
             UI::None => player.sync_inventory()?,
@@ -64,7 +61,7 @@ impl UI {
                     player.open_ui(UI::SkyblockMenu)?;
                     return Ok(())
                 }
-                if player.inventory.click_slot(&packet, &player.client_id, network_tx)? { 
+                if player.inventory.click_slot(&packet, &player.client_id, &player.network_tx)? { 
                     // needs re-syncing
                     player.sync_inventory()?;
                 }
@@ -72,12 +69,6 @@ impl UI {
             
             UI::SkyblockMenu => {
                 player.sync_inventory()?;
-                if packet.slot_id == 0 { 
-                    Chat {
-                        component: ChatComponentTextBuilder::new("clicked hello").build(),
-                        typ: 0,
-                    }.send_packet(player.client_id, network_tx)?
-                }
             }
             UI::MortReadyUpMenu => {
                 match packet.slot_id { 
@@ -109,7 +100,7 @@ impl UI {
             UI::MortReadyUpMenu => {
                 let mut content = default_container_content(54);
                 
-                let (item_name, color) = if let DungeonState::NotReady = server.dungeon.state {
+                let (item_name, color) = if let NotReady = server.dungeon.state {
                     ("§cNot Ready", 14)
                 } else {
                     ("§aReady", 13)

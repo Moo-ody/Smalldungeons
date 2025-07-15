@@ -1,5 +1,6 @@
 use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::packet::SendPacket;
+use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_grid::ChunkGrid;
@@ -17,6 +18,7 @@ pub struct World {
     pub server: *mut Server,
 
     pub chunk_grid: ChunkGrid,
+    pub interactable_blocks: HashMap<BlockPos, BlockInteractAction>,
 
     pub player_info: PlayerList,
 
@@ -29,7 +31,7 @@ pub struct World {
 
     // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
     pub entities: HashMap<EntityId, Entity>,
-    pub next_entity_id: i32
+    pub next_entity_id: i32,
 }
 
 impl World {
@@ -38,9 +40,10 @@ impl World {
         World {
             server: std::ptr::null_mut(),
             chunk_grid: ChunkGrid::new(14),
+            interactable_blocks: HashMap::new(),
             player_info: PlayerList::new(),
             entities: HashMap::new(),
-            next_entity_id: 1 // might have to start at 1
+            next_entity_id: 1, // might have to start at 1
         }
     }
 

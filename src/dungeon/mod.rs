@@ -2,14 +2,13 @@ use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::Room;
 use crate::dungeon::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
-use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::packet::SendPacket;
+use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::Player;
 use crate::server::server::Server;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
 use anyhow::bail;
 use rand::seq::IndexedRandom;
@@ -39,6 +38,15 @@ pub struct Dungeon {
     // The index - 1 of the room here from &rooms
     pub index_grid: [usize; 36],
     pub state: DungeonState,
+    pub test: Vec<OpenDoorTask>
+}
+
+// Better name?
+// maybe have a global tick queue 
+// currently, what it does is: when ticks left reaches 0 it clears the blocks the door has
+pub struct OpenDoorTask {
+    pub ticks_left: usize,
+    pub door_index: usize,
 }
 
 impl Dungeon {
@@ -70,6 +78,7 @@ impl Dungeon {
             doors,
             index_grid,
             state: DungeonState::NotReady,
+            test: Vec::new(),
         })
     }
 
@@ -215,7 +224,6 @@ impl Dungeon {
     pub fn get_player_room(&mut self, player: &Player) -> Option<&mut Room> {
         let server = player.server_mut();
         let entity = player.get_entity(&server.world).unwrap();
-
         self.get_room_at(entity.pos.x as i32, entity.pos.z as i32)
     }
 
@@ -296,31 +304,82 @@ impl Dungeon {
             (door.x + 1, 72, door.z + 1)
         );
     }
+    
+    pub fn start_dungeon(&mut self) {
+        for (index, door) in self.doors.iter().enumerate() {
+            if door.door_type == DoorType::ENTRANCE {
+                self.server_mut().world.fill_blocks(
+                    Blocks::Barrier,
+                    (door.x - 1, 69, door.z - 1),
+                    (door.x + 1, 72, door.z + 1)
+                );
+                self.test.push(OpenDoorTask {
+                    ticks_left: 40,
+                    door_index: index,
+                });
+                continue;
+            }
+            if door.door_type == DoorType::NORMAL { 
+                continue;
+            }
+
+            let start = (door.x - 1, 69, door.z - 1);
+            let end = (door.x + 1, 72, door.z + 1);
+            
+            let x0 = start.0.min(end.0);
+            let y0 = start.1.min(end.1);
+            let z0 = start.2.min(end.2);
+
+            let x1 = start.0.max(end.0);
+            let y1 = start.1.max(end.1);
+            let z1 = start.2.max(end.2);
+
+            let world = &mut self.server_mut().world;
+            
+            for x in x0..=x1 {
+                for z in z0..=z1 {
+                    for y in y0..=y1 {
+                        world.interactable_blocks.insert(
+                            BlockPos::new(x, y, z),
+                            match door.door_type {
+                                DoorType::WITHER => BlockInteractAction::WitherDoor { door_index: index },
+                                DoorType::BLOOD => BlockInteractAction::BloodDoor { door_index: index },
+                                _ => unreachable!()
+                            }
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     // TODO: all ticking happens from here,
     pub fn tick(&mut self) -> anyhow::Result<()> {
         let server = self.server_mut();
+        
         match &mut self.state {
-            // with these 2
             DungeonState::NotReady | DungeonState::Finished => {}
+            
             DungeonState::Starting { tick_countdown: tick } => {
                 *tick -= 1;
                 if *tick == 0 {
                     self.state = DungeonState::Started { current_ticks: 0 };
+                    self.start_dungeon();
                 } else if *tick % 20 == 0 {
+                    
                     let seconds_remaining = *tick / 20;
-                    let str = format!("§aStarting in {} second{}.", seconds_remaining, if seconds_remaining == 1 { "" } else { "s" });
+                    let s = if seconds_remaining == 1 { "" } else { "s" };
+                    let str = format!("§aStarting in {} second{}.", seconds_remaining, s);
 
-                    for (cid, _) in &server.players {
-                        Chat {
-                            component: ChatComponentTextBuilder::new(&str).build(),
-                            typ: 0,
-                        }.send_packet(*cid, &server.network_tx)?;
+                    for (_, player) in &server.players {
+                        player.send_msg(&str)?;
                     }
                 }
             }
+            
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
+                
                 for (_, player) in &server.players  {
                     if let Some(room) = server.dungeon.get_player_room(player) {
                         for crusher in room.crushers.iter_mut() {
@@ -328,6 +387,21 @@ impl Dungeon {
                         }
                     }
                 }
+                
+                self.test.retain_mut(|test| {
+                    test.ticks_left -= 1;
+                    if test.ticks_left == 0 {
+                        let door = &server.dungeon.doors[test.door_index];
+                        server.world.fill_blocks(
+                            Blocks::Air,
+                            (door.x - 1, 69, door.z - 1),
+                            (door.x + 1, 72, door.z + 1)
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                });
             }
         }
         Ok(())

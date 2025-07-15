@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
                 }
                 DungeonState::Starting { tick_countdown } => {
                     for (_, p) in &player.server_mut().players {
-                        scoreboard_lines.push(format!("§c[M] §7{}", p.username))
+                        scoreboard_lines.push(format!("§a[M] §7{}", p.username))
                     }
                     scoreboard_lines.new_line();
                     scoreboard_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));

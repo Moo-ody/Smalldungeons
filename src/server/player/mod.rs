@@ -3,6 +3,7 @@ pub mod ui;
 pub mod scoreboard;
 
 use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::close_window::CloseWindowPacket;
 use crate::net::packets::client_bound::open_window::{InventoryType, OpenWindowPacket};
 use crate::net::packets::client_bound::set_slot::SetSlot;
@@ -30,6 +31,8 @@ pub type ClientId = u32;
 #[derive(Debug)]
 pub struct Player {
     pub server: *mut Server,
+    pub network_tx: UnboundedSender<NetworkThreadMessage>,
+    
     pub username: String,
     pub client_id: ClientId,
     pub entity_id: EntityId,
@@ -61,6 +64,7 @@ impl Player{
     pub fn new(server: &mut Server, username: String, client_id: ClientId, entity_id: EntityId) -> Self {
         Self {
             server,
+            network_tx: server.network_tx.clone(),
             username,
             client_id,
             entity_id,
@@ -186,5 +190,12 @@ impl Player{
             }.send_packet(self.client_id, network_tx)?;
         }
         Ok(())
+    }
+    
+    pub fn send_msg(&self, msg: &str) -> Result<()> {
+        Chat {
+            component: ChatComponentTextBuilder::new(msg).build(),
+            typ: 0,
+        }.send_packet(self.client_id, &self.network_tx)
     }
 }
