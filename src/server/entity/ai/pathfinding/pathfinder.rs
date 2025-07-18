@@ -4,6 +4,7 @@ use crate::server::entity::ai::pathfinding::node::{NodeData, NodeEntry};
 use crate::server::entity::ai::pathfinding::{get_neighbors, heuristic};
 use crate::server::entity::entity::Entity;
 use crate::server::world::World;
+use anyhow::Context;
 use std::collections::{BinaryHeap, HashMap};
 
 /// Pathfinding reimplementation of minecraft's pathfinding.
@@ -50,9 +51,9 @@ impl Pathfinder {
 
             let context = EntityContext::from_entity(entity);
             for neighbor_pos in get_neighbors(&current, &context, world) {
-                let tentative = data.get(&current).ok_or_else(|| anyhow::anyhow!("failed to get data..."))?.tentative_cost + 1.0; // adjust depending on cost?
+                let tentative = data.get(&current).context("failed to get data...")?.tentative_cost + 1.0; // adjust depending on cost?
 
-                if data.get(&neighbor_pos).map_or(true, |existing| tentative < existing.tentative_cost) {
+                if data.get(&neighbor_pos).is_none_or(|existing| { tentative < existing.tentative_cost }) {
                     data.insert(neighbor_pos, NodeData {
                         visited: false,
                         tentative_cost: tentative,

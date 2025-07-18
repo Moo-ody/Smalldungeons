@@ -17,7 +17,7 @@ use crate::server::player::ui::UI;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::HashSet;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -86,11 +86,11 @@ impl Player{
     }
 
     pub fn get_entity<'a>(&self, world: &'a World) -> Result<&'a Entity> {
-        world.entities.get(&self.entity_id).ok_or_else(|| anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
+        world.entities.get(&self.entity_id).context("Couldn't find corresponding entity")
     }
 
     pub fn get_entity_mut<'a>(&self, world: &'a mut World) -> Result<&'a mut Entity> {
-        world.entities.get_mut(&self.entity_id).ok_or_else(|| anyhow::anyhow!("Couldn't find corresponding entity for {self:?}"))
+        world.entities.get_mut(&self.entity_id).context("Couldn't find corresponding entity")
     }
 
     /// function to have a player start observing an entity

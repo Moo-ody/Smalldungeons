@@ -43,7 +43,10 @@ pub async fn handle_client(
         tokio::select! {
             result = socket.read_buf(&mut bytes) => {
                 match result {
-                    Ok(0) => { break },
+                    Ok(0) => { 
+                        // Channel closed normally
+                        break 
+                    },
                     Ok(_) => {
                         while let Some(mut packet) = read_whole_packet(&mut bytes).await {
                             match parse_packet(&mut packet, &mut client).await {
@@ -93,7 +96,7 @@ pub async fn handle_client(
         }
     }
 
-    network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id }).unwrap();
+    let _ = network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id });
     println!("handle client for {client_id} closed.");
 }
 

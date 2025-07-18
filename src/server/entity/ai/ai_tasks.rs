@@ -1,6 +1,7 @@
 use crate::server::entity::ai::{TaskData, TaskType};
 use crate::server::entity::entity::Entity;
 use crate::server::world::World;
+use anyhow::Context;
 use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -52,7 +53,7 @@ impl AiTasks {
         self.tick_count += 1;
         if self.tick_count % self.tick_rate == 0 {
             for task in self.tasks.iter() {
-                let data = self.data.get_mut(&task.task_type).ok_or_else(|| anyhow::anyhow!("Task data for {task:?} not found."))?;
+                let data = self.data.get_mut(&task.task_type).with_context(|| format!("Task data for {task:?} not found."))?;
                 if self.executing.contains(&task.task_type) {
                     if Self::can_use(&self.tasks, &self.executing, task, data) && data.keep_executing(executing, world) {
                         continue;
@@ -77,7 +78,7 @@ impl AiTasks {
         }
 
         for task_type in self.executing.iter() {
-            let data = self.data.get_mut(task_type).ok_or_else(|| anyhow::anyhow!("Task data for executing task: {task_type:?} not found."))?;
+            let data = self.data.get_mut(task_type).with_context(|| format!("Task data for executing task: {task_type:?} not found."))?;
             data.update(executing, world);
         }
 

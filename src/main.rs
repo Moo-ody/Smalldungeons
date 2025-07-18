@@ -21,6 +21,7 @@ use crate::server::entity::entity_type::EntityType;
 use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
+use crate::server::utils::color::MCColors;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::vec3d::DVec3;
 use anyhow::Result;
@@ -144,9 +145,16 @@ async fn main() -> Result<()> {
     let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
 
     server.world.entities.insert(zombie.entity_id, zombie);
-    let text = ChatComponentTextBuilder::new("Hello World!").build();
-    server.world.player_info.update_text(1, text);
 
+    let cata_line =
+        ChatComponentTextBuilder::new("")
+            .append(ChatComponentTextBuilder::new("Dungeon: ").color(MCColors::Aqua).bold().build())
+            .append(ChatComponentTextBuilder::new("Catacombs").color(MCColors::Gray).build())
+            .build();
+
+    server.world.player_info.set_line(0, cata_line);
+    
+    
     loop {
         tick_interval.tick().await;
 
@@ -164,6 +172,8 @@ async fn main() -> Result<()> {
                 server.world.entities.insert(entity_id, returned);
             }
         }
+
+        let tab_list_packet = server.world.player_info.get_packet();
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to actually be in a vanilla adjacent way.
@@ -234,6 +244,10 @@ async fn main() -> Result<()> {
                     });
                 }
                 DungeonState::Finished => {}
+            }
+
+            if let Some(tab_list) = &tab_list_packet {
+                tab_list.clone().send_packet(player.client_id, &server.network_tx)?;
             }
 
             scoreboard_lines.push_str("§emc.hypixel.net");

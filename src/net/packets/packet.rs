@@ -95,7 +95,7 @@ macro_rules! register_serverbound_packets {
         use crate::net::client::Client;
         use crate::net::packets::packet::ServerBoundPacket;
         use crate::net::var_int::read_var_int;
-        use anyhow::{bail};
+        use anyhow::{bail, Context};
         use bytes::BytesMut;
 
         #[derive(Debug)]
@@ -136,7 +136,7 @@ macro_rules! register_serverbound_packets {
 
         pub async fn parse_packet(buf: &mut BytesMut, client: &mut Client) -> anyhow::Result<ServerBoundPackets> {
             //let _packet_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet length"))?; this gets consumed by the read_whole_packet call
-            let packet_id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet id"))?;
+            let packet_id = read_var_int(buf).context("Failed to read packet id")?;
             match client.connection_state {
                 $(
                     $state => match packet_id {

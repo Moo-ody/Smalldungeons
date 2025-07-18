@@ -5,7 +5,6 @@ use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HAS
 use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
-use crate::net::packets::client_bound::player_list_item::PlayerListItem;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::entity::attributes::Attribute;
@@ -60,7 +59,7 @@ impl Server {
                 let player_entity = Entity::create_at(EntityType::Player, spawn_point, self.world.new_entity_id());
                 println!("player entity id: {}", player_entity.entity_id);
                 let mut player = Player::new(
-                    self, 
+                    self,
                     username,
                     client_id,
                     player_entity.entity_id
@@ -81,8 +80,6 @@ impl Server {
                     player.observe_entity(entity, &self.network_tx)?
                 }
 
-                PlayerListItem::init_packet(self.world.player_info.tab_list()).send_packet(client_id, &self.network_tx)?;
-
                 PlayerListHeaderFooter {
                     header: header(),
                     footer: footer(),
@@ -90,6 +87,12 @@ impl Server {
 
                 let scoreboard = player.scoreboard.packets_to_init();
                 for packet in scoreboard {
+                    packet.send_packet(client_id, &self.network_tx)?;
+                }
+
+                self.world.player_info.new_packet().send_packet(client_id, &self.network_tx)?;
+
+                for packet in player.scoreboard.packets_to_init() {
                     packet.send_packet(client_id, &self.network_tx)?;
                 }
 
@@ -112,10 +115,10 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
-                
+
                 let mut properties = HashMap::new();
                 properties.insert(MovementSpeed, Attribute::new(0.4));
-                
+
                 EntityProperties {
                     entity_id: player.entity_id,
                     properties,

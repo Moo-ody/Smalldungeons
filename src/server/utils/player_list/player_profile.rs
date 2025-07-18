@@ -1,5 +1,5 @@
 use crate::id_enum;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
+use crate::server::utils::chat_component::chat_component_text::{ChatComponentText, ChatComponentTextBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ impl PlayerData {
             ping: 1,
             game_mode: GameType::Creative,
             profile,
-            display_name: None,
+            display_name: Some(ChatComponentTextBuilder::new("").build()),
         }
     }
 
@@ -34,7 +34,7 @@ impl PlayerData {
         Self {
             ping: 1,
             game_mode: GameType::Creative,
-            profile: GameProfile::new(),
+            profile: GameProfile::new("default"),
             display_name: Some(text),
         }
     }
@@ -48,10 +48,10 @@ pub struct GameProfile {
 }
 
 impl GameProfile {
-    pub fn new() -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
             id: Uuid::new_v4(),
-            name: "ignorefornow".to_owned(),
+            name: name.into(),
             properties: HashMap::from(
                 [(
                     "textures".to_owned(),

@@ -20,7 +20,7 @@ pub struct World {
     pub chunk_grid: ChunkGrid,
     pub interactable_blocks: HashMap<BlockPos, BlockInteractAction>,
 
-    pub player_info: PlayerList,
+    pub player_info: PlayerList, // might need to be per player, not sure.
 
     // im thinking of doing something, where
     // a dungeon are always a square (and isn't that big)

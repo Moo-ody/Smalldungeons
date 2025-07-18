@@ -2,45 +2,59 @@ pub mod player_profile;
 pub mod header;
 pub mod footer;
 
+use crate::net::packets::client_bound::player_list_item::{PlayerListAction, PlayerListItem};
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
-use crate::server::utils::player_list::player_profile::PlayerData;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use crate::server::utils::player_list::player_profile::{GameProfile, PlayerData};
+use std::array;
+use std::collections::HashSet;
 
-// we may want a way to send lines without needing to populate them, otherwise we can just use a vec instead of hashmap probably.
-// this should be per player maybe? not sure.
-// this could also just use like 90% of the scoreboard backend without the teams packet nonsense, since it functions very similarly.
 pub struct PlayerList {
-    tab_list: HashMap<i32, PlayerData>,
+    lines: [PlayerData; 80],
+    updated: HashSet<usize>,
 }
 
 impl PlayerList {
     pub fn new() -> Self {
         Self {
-            tab_list: HashMap::new()
+            lines: generate_default_lines(), // we might want to update this for the skull textures next to names when they matter
+            updated: HashSet::new(),
         }
     }
 
-    pub fn tab_list(&self) -> &HashMap<i32, PlayerData> {
-        &self.tab_list
+    pub fn set_line(&mut self, index: usize, text: ChatComponentText) {
+        assert!(index < self.lines.len(), "Attempted to set player list line {} but there are only {} lines", index, self.lines.len());
+        let line = &mut self.lines[index];
+        line.display_name = Some(text);
+
+        self.updated.insert(index);
     }
 
-    pub fn set_line(&mut self, line: i32, player_data: PlayerData) {
-        self.tab_list.insert(line, player_data);
+    pub fn get_packet(&mut self) -> Option<PlayerListItem> {
+        if self.updated.is_empty() {
+            return None;
+        }
+
+        let lines = self.updated.drain().map(|index| {
+            self.lines[index].clone()
+        }).collect::<Vec<_>>();
+
+        Some(PlayerListItem::new(PlayerListAction::UpdateDisplayName, lines))
     }
 
-    pub fn update_text(&mut self, line: i32, text: ChatComponentText) {
-        match self.tab_list.entry(line) {
-            Entry::Occupied(mut entry) => {
-                entry.get_mut().display_name = Some(text);
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(PlayerData::with_text(text));
-            }
-        };
+    pub fn new_packet(&mut self) -> PlayerListItem {
+        PlayerListItem::new(PlayerListAction::AddPlayer, self.lines.clone())
     }
+}
 
-    pub fn get_line(&self, line: i32) -> Option<&PlayerData> {
-        self.tab_list.get(&line)
-    }
+// this is what hypixel does to force alphabetical order. We should be able to change this however we want as long as it maintains order.
+fn generate_default_lines<const N: usize>() -> [PlayerData; N] {
+    array::from_fn(|i| {
+        let left = index_to_letter(i / 26);
+        let right = index_to_letter(i % 26);
+        PlayerData::new(GameProfile::new(format!("!{}-{}", left, right)))
+    })
+}
+
+const fn index_to_letter(n: usize) -> char {
+    (b'a' + (n % 26) as u8) as char
 }
