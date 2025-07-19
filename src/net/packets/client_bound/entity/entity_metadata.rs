@@ -2,26 +2,26 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::Entity;
-use crate::server::entity::metadata::Metadata;
+use crate::server::entity::entity_metadata::EntityVariant;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone)]
-pub struct EntityMetadata {
+pub struct PacketEntityMetadata {
     entity_id: i32,
-    metadata: Metadata,
+    metadata: EntityVariant,
 }
 
-impl EntityMetadata {
+impl PacketEntityMetadata {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
-            entity_id: entity.entity_id,
-            metadata: entity.metadata.clone(),
+            entity_id: entity.id,
+            metadata: entity.variant.clone(),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl ClientBoundPacketImpl for EntityMetadata {
+impl ClientBoundPacketImpl for PacketEntityMetadata {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
         let buf = build_packet!(
             0x1C,

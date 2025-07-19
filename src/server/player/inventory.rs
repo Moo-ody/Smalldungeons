@@ -4,7 +4,7 @@ use crate::net::packets::packet::SendPacket;
 use crate::net::packets::server_bound::click_window::{ClickMode, ClickWindow};
 use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
-use crate::server::player::ClientId;
+use crate::server::player::player::ClientId;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default, Debug, Clone)]

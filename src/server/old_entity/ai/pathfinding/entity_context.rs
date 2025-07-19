@@ -1,4 +1,4 @@
-use crate::server::entity::entity::Entity;
+use crate::server::old_entity::entity::Entity;
 
 pub struct EntityContext {
     pub width: f32,

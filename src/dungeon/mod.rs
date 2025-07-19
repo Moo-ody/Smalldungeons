@@ -7,9 +7,10 @@ use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
-use crate::server::player::Player;
+use crate::server::entity::entity::EntityId;
+use crate::server::player::player::Player;
 use crate::server::server::Server;
-use crate::server::world::World;
+use crate::server::world;
 use anyhow::bail;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
@@ -47,6 +48,7 @@ pub struct Dungeon {
 pub struct OpenDoorTask {
     pub ticks_left: usize,
     pub door_index: usize,
+    pub door_entity_ids: Vec<EntityId>,
 }
 
 impl Dungeon {
@@ -118,6 +120,7 @@ impl Dungeon {
                 };
 
                 doors.push(Door {
+                    id: doors.len(),
                     x,
                     z,
                     direction,
@@ -208,8 +211,8 @@ impl Dungeon {
             return None;
         }
 
-        let grid_x = ((x as i32 - DUNGEON_ORIGIN.0) / 32) as usize;
-        let grid_z = ((z as i32 - DUNGEON_ORIGIN.1) / 32) as usize;
+        let grid_x = ((x - DUNGEON_ORIGIN.0) / 32) as usize;
+        let grid_z = ((z - DUNGEON_ORIGIN.1) / 32) as usize;
 
         // The returned number is 0 if no room here, or will return the index + 1 of the room in the rooms vec
         let entry = self.index_grid.get(grid_x + (grid_z * 6));
@@ -222,138 +225,41 @@ impl Dungeon {
     }
 
     pub fn get_player_room(&mut self, player: &Player) -> Option<&mut Room> {
-        let server = player.server_mut();
-        let entity = player.get_entity(&server.world).unwrap();
-        self.get_room_at(entity.pos.x as i32, entity.pos.z as i32)
-    }
-
-    pub fn load_door(
-        &self,
-        door: &Door,
-        world: &mut World,
-        door_blocks: &HashMap<DoorType, Vec<Vec<Blocks>>>
-    ) {
-        // Area to fill with air
-        let (dx, dz) = match door.direction {
-            Axis::X => (3, 2),
-            _ => (2, 3),
-        };
-
-        // Doors have a thick bedrock floor usually
-        world.fill_blocks(
-            Blocks::Bedrock,
-            (door.x - dx, 67, door.z - dz),
-            (door.x + dx, 66, door.z + dz)
-        );
-
-        // Might need to replace with a random palette of cobble, stone, gravel etc if we want to mimic hypixel FULLY, but this works fine.
-        world.fill_blocks(
-            Blocks::Stone { variant: 0 },
-            (door.x - (dz - 2) * 2, 68, door.z - (dx - 2) * 2),
-            (door.x + (dz - 2) * 2, 68, door.z + (dx - 2) * 2)
-        );
-
-        world.fill_blocks(
-            Blocks::Air,
-            (door.x - dx, 69, door.z - dz),
-            (door.x + dx, 73, door.z + dz)
-        );
-
-        // Pretty much just to get a normal door from a wither one, since wither doors are just normal doors with coal blocks.
-        let door_type = match door.door_type {
-            DoorType::BLOOD => DoorType::BLOOD,
-            DoorType::ENTRANCE => DoorType::ENTRANCE,
-            DoorType::WITHER | DoorType::NORMAL => DoorType::NORMAL,
-        };
-
-        let block_data = door_blocks.get(&door_type).unwrap();
-        let mut rng = rand::rng();
-
-        let chosen = block_data.choose(&mut rng).unwrap();
-        let door_direction = door.direction.get_direction();
-
-        for (i, block) in chosen.iter().enumerate() {
-            let x = (i % 5) as i32;
-            let z = ((i / 5) % 5) as i32;
-            let y = (i / (5 * 5)) as i32;
-
-            let bp = BlockPos { x: x - 2, y, z: z - 2 }.rotate(door_direction);
-
-            let mut block_to_place = block.clone();
-            block_to_place.rotate(door_direction);
-
-            world.set_block_at(block_to_place, door.x + bp.x, 69 + bp.y, door.z + bp.z);
-        }
-
-        // Nothing left to do for normal doors
-        if door.door_type == DoorType::NORMAL {
-            return;
-        }
-
-        // Fill in the blocks for entrance, wither and blood doors
-        let fill_block = match door.door_type {
-            DoorType::BLOOD => Blocks::StainedHardenedClay { color: 14 },
-            DoorType::ENTRANCE => Blocks::SilverfishBlock { variant: 5 },
-            DoorType::WITHER => Blocks::CoalBlock,
-            _ => Blocks::Air
-        };
-
-        world.fill_blocks(
-            fill_block,
-            (door.x - 1, 69, door.z - 1),
-            (door.x + 1, 72, door.z + 1)
-        );
+        self.get_room_at(
+            player.position.x as i32,
+            player.position.z as i32
+        )
     }
     
     pub fn start_dungeon(&mut self) {
-        for (index, door) in self.doors.iter().enumerate() {
+        let world = &mut self.server_mut().world;
+        for (index, door) in self.doors.iter_mut().enumerate() {
             if door.door_type == DoorType::ENTRANCE {
-                self.server_mut().world.fill_blocks(
-                    Blocks::Barrier,
-                    (door.x - 1, 69, door.z - 1),
-                    (door.x + 1, 72, door.z + 1)
-                );
-                self.test.push(OpenDoorTask {
-                    ticks_left: 40,
-                    door_index: index,
-                });
+                door.open_door(world);
                 continue;
             }
+            
             if door.door_type == DoorType::NORMAL { 
                 continue;
             }
-
-            let start = (door.x - 1, 69, door.z - 1);
-            let end = (door.x + 1, 72, door.z + 1);
             
-            let x0 = start.0.min(end.0);
-            let y0 = start.1.min(end.1);
-            let z0 = start.2.min(end.2);
-
-            let x1 = start.0.max(end.0);
-            let y1 = start.1.max(end.1);
-            let z1 = start.2.max(end.2);
-
-            let world = &mut self.server_mut().world;
-            
-            for x in x0..=x1 {
-                for z in z0..=z1 {
-                    for y in y0..=y1 {
-                        world.interactable_blocks.insert(
-                            BlockPos::new(x, y, z),
-                            match door.door_type {
-                                DoorType::WITHER => BlockInteractAction::WitherDoor { door_index: index },
-                                DoorType::BLOOD => BlockInteractAction::BloodDoor { door_index: index },
-                                _ => unreachable!()
-                            }
-                        );
-                    }
+            world::iterate_blocks(
+                BlockPos { x: door.x - 1, y: 69, z: door.z - 1 },
+                BlockPos { x: door.x + 1, y: 72, z: door.z + 1 },
+                |x, y, z| {
+                    let action = match door.door_type {
+                        DoorType::WITHER => BlockInteractAction::WitherDoor { door_index: index },
+                        DoorType::BLOOD => BlockInteractAction::BloodDoor { door_index: index },
+                        _ => unreachable!()
+                    };
+                    world.interactable_blocks.insert(BlockPos::new(x, y, z), action);
                 }
-            }
+            );
         }
+        // probably mark room connected to entrance as entered 
     }
 
-    // TODO: all ticking happens from here,
+    // TODO: all dungeon-ticking happens from here,
     pub fn tick(&mut self) -> anyhow::Result<()> {
         let server = self.server_mut();
         
@@ -371,7 +277,7 @@ impl Dungeon {
                     let s = if seconds_remaining == 1 { "" } else { "s" };
                     let str = format!("§aStarting in {} second{}.", seconds_remaining, s);
 
-                    for (_, player) in &server.players {
+                    for (_, player) in &server.world.players {
                         player.send_msg(&str)?;
                     }
                 }
@@ -380,7 +286,7 @@ impl Dungeon {
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
                 
-                for (_, player) in &server.players  {
+                for (_, player) in &server.world.players  {
                     if let Some(room) = server.dungeon.get_player_room(player) {
                         for crusher in room.crushers.iter_mut() {
                             crusher.tick(player);
@@ -388,15 +294,18 @@ impl Dungeon {
                     }
                 }
                 
-                self.test.retain_mut(|test| {
+                self.test.retain_mut(move |test| {
                     test.ticks_left -= 1;
                     if test.ticks_left == 0 {
                         let door = &server.dungeon.doors[test.door_index];
                         server.world.fill_blocks(
                             Blocks::Air,
-                            (door.x - 1, 69, door.z - 1),
-                            (door.x + 1, 72, door.z + 1)
+                            BlockPos { x: door.x - 1, y: 69, z: door.z - 1 },
+                            BlockPos { x: door.x + 1, y: 72, z: door.z + 1 },
                         );
+                        for entity_id in &test.door_entity_ids {
+                            server.world.despawn_entity(*entity_id).unwrap()
+                        }
                         false
                     } else {
                         true

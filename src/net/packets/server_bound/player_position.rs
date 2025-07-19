@@ -1,5 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
@@ -24,8 +24,8 @@ impl ServerBoundPacket for PlayerPosition {
         })
     }
 
-    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        player.get_entity_mut(world)?.update_position(self.x, self.y, self.z);
+    fn main_process(&self, _: &mut World, player: &mut Player) -> anyhow::Result<()> {
+        player.set_position(self.x, self.y, self.z);
         Ok(())
     }
 }

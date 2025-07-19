@@ -1,4 +1,4 @@
-use crate::server::utils::vec3d::DVec3;
+use crate::server::utils::dvec3::DVec3;
 
 #[derive(Clone, Debug)]
 pub struct EntityMoveData {

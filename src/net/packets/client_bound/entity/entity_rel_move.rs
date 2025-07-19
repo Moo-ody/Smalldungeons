@@ -15,11 +15,14 @@ pub struct EntityRelMove {
 
 impl EntityRelMove {
     pub fn from_entity(entity: &Entity) -> Self {
+        println!("pos x {}", entity.last_position.x - entity.position.x);
+        println!("pos y {}", entity.last_position.y - entity.position.y);
+        println!("pos z {}", entity.last_position.z - entity.position.z);
         Self {
-            entity_id: entity.entity_id,
-            pos_x: ((entity.last_sent_pos.x - entity.pos.x) * 32.0) as i8,
-            pos_y: ((entity.last_sent_pos.y - entity.pos.y) * 32.0) as i8,
-            pos_z: ((entity.last_sent_pos.z - entity.pos.z) * 32.0) as i8,
+            entity_id: entity.id,
+            pos_x: ((entity.last_position.x - entity.position.x) * 32.0) as i8,
+            pos_y: ((entity.last_position.y - entity.position.y) * 32.0) as i8,
+            pos_z: ((entity.last_position.z - entity.position.z) * 32.0) as i8,
             on_ground: entity.on_ground,
         }
     }

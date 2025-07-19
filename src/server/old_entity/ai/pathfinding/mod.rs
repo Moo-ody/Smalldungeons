@@ -1,7 +1,7 @@
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
-use crate::server::entity::ai::pathfinding::check_collision::CollisionType;
-use crate::server::entity::ai::pathfinding::entity_context::EntityContext;
+use crate::server::old_entity::ai::pathfinding::check_collision::CollisionType;
+use crate::server::old_entity::ai::pathfinding::entity_context::EntityContext;
 use crate::server::world::World;
 
 pub mod node;

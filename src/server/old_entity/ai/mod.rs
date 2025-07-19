@@ -1,4 +1,4 @@
-use crate::server::entity::entity_type::EntityType;
+use crate::server::old_entity::entity_type::EntityType;
 
 pub mod task_data;
 pub mod ai_tasks;

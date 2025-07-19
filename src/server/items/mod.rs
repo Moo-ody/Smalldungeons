@@ -1,8 +1,8 @@
 use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::player::player::Player;
 use crate::server::player::ui::UI;
-use crate::server::player::Player;
 use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
 use indoc::indoc;
@@ -30,12 +30,11 @@ impl Item {
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();
                 let world = &server.world;
-                let entity = player.get_entity(world)?;
 
                 if player.is_sneaking {
-                    handle_ether_warp(player, &server.network_tx, world, entity)?;
+                    handle_ether_warp(player, world)?;
                 } else {
-                    handle_teleport(player, &server.network_tx, world, entity)?;
+                    handle_teleport(player, &server.network_tx)?;
                 }
             }
             Item::SpiritSceptre => {

@@ -224,32 +224,32 @@ impl Room {
 
             world.fill_blocks(
                 block,
-                (
-                    *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                    self.room_data.bottom,
-                    *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                ),
-                (
-                    *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
-                    self.room_data.bottom,
-                    *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
-                )
+                BlockPos {
+                    x: *x as i32 * 32 + DUNGEON_ORIGIN.0,
+                    y: self.room_data.bottom,
+                    z: *z as i32 * 32 + DUNGEON_ORIGIN.1,
+                },
+                BlockPos {
+                    x: *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+                    y: self.room_data.bottom,
+                    z: *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+                }
             );
 
             // Merge to the side
             if self.segments.contains(&(x+1, *z)) {
                 world.fill_blocks(
                     block,
-                    (
-                        *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        self.room_data.bottom,
-                        *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                    ),
-                    (
-                        *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        self.room_data.bottom,
-                        *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
-                    )
+                    BlockPos {
+                        x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
+                        y: self.room_data.bottom,
+                        z: *z as i32 * 32 + DUNGEON_ORIGIN.1,
+                    },
+                    BlockPos {
+                        x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
+                        y: self.room_data.bottom,
+                        z: *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+                    }
                 );
             }
             
@@ -257,16 +257,16 @@ impl Room {
             if self.segments.contains(&(*x, z+1)) {
                 world.fill_blocks(
                     block,
-                    (
-                        *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                        self.room_data.bottom,
-                        *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
-                    ),
-                    (
-                        *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
-                        self.room_data.bottom,
-                        *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
-                    )
+                    BlockPos {
+                        x: *x as i32 * 32 + DUNGEON_ORIGIN.0,
+                        y: self.room_data.bottom,
+                        z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
+                    },
+                    BlockPos {
+                        x: * x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+                        y: self.room_data.bottom,
+                        z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
+                    }
                 );
             }
         }

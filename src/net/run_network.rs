@@ -5,7 +5,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::player::ClientId;
+use crate::server::player::player::ClientId;
 
 pub async fn run_network_thread(
     mut network_rx: UnboundedReceiver<NetworkThreadMessage>,

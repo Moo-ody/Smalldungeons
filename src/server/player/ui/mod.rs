@@ -1,7 +1,7 @@
 use crate::dungeon::dungeon_state::DungeonState::{NotReady, Starting};
 use crate::net::packets::server_bound::click_window::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::player::{ClientId, Player};
+use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::nbt::NBT;
 
@@ -91,7 +91,7 @@ impl UI {
 
     /// returns a list of items to send to client 
     pub fn get_container_contents(&self, server: &Server, client_id: &ClientId) -> Option<Vec<Option<ItemStack>>> {
-        let player = server.players.get(client_id)?;
+        let player = server.world.players.get(client_id)?;
         match self {
             UI::SkyblockMenu => {
                 let content = default_container_content(54);
@@ -111,10 +111,10 @@ impl UI {
                     metadata: 3,
                     tag_compound: Some(NBT::with_nodes(vec![
                         NBT::compound("display", vec![
-                            NBT::string("Name", &format!("§7{}", player.username)),
+                            NBT::string("Name", &format!("§7{}", player.profile.username)),
                             NBT::list_from_string("Lore", &format!("{}", item_name))
                         ]),
-                        NBT::string("SkullOwner", &player.username),
+                        NBT::string("SkullOwner", &player.profile.username),
                     ])),
                 }));
                 content.insert(13, Some(ItemStack {

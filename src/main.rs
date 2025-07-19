@@ -9,21 +9,15 @@ use crate::dungeon::room_data::RoomData;
 use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID, NIGHTVISIONID};
-use crate::net::packets::client_bound::particles::Particles;
+use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
-use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
-use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
-use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_type::EntityType;
 use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
-use crate::server::utils::particles::ParticleTypes;
-use crate::server::utils::vec3d::DVec3;
+use crate::server::utils::dvec3::DVec3;
 use anyhow::Result;
 use include_dir::include_dir;
 use indoc::formatdoc;
@@ -132,7 +126,7 @@ async fn main() -> Result<()> {
     }
 
     for door in &dungeon.doors {
-        dungeon.load_door(door, &mut server.world, &door_type_blocks);
+        door.load_into_world(&mut server.world, &door_type_blocks);
     }
 
     let zombie_spawn_pos = DVec3 {
@@ -141,10 +135,10 @@ async fn main() -> Result<()> {
         z: 25.0,
     };
     
-    let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
-    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
+    // let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
+    // let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
 
-    server.world.entities.insert(zombie.entity_id, zombie);
+    // server.world.entities.insert(zombie.entity_id, zombie);
 
     let cata_line =
         ChatComponentTextBuilder::new("")
@@ -163,23 +157,26 @@ async fn main() -> Result<()> {
         }
 
         server.dungeon.tick()?;
+        server.world.tick()?;
         
-        for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
-            if let Some(mut entity) = server.world.entities.remove(&entity_id) {
-                entity.ticks_existed += 1;
-                // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
-                let returned = entity.update(&mut server.world, &server.network_tx);
-                server.world.entities.insert(entity_id, returned);
-            }
-        }
+        // for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
+        //     if let Some(mut entity) = server.world.entities.remove(&entity_id) {
+        //         entity.ticks_existed += 1;
+        //         // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
+        //         let returned = entity.update(&mut server.world, &server.network_tx);
+        //         server.world.entities.insert(entity_id, returned);
+        //     }
+        // }
 
         let tab_list_packet = server.world.player_info.get_packet();
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to actually be in a vanilla adjacent way.
-        for player in server.players.values_mut() {
+        for player in server.world.players.values_mut() {
             // println!("player ticked: {player:?}");
+            player.ticks_existed += 1;
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
+            
             // for entity in player.tracked_entities.iter() {
             //     if let Some(entity) = server.world.entities.get_mut(entity) {
             //         EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
@@ -187,10 +184,10 @@ async fn main() -> Result<()> {
             //     }
             // }
 
-            let mut scoreboard_lines = ScoreboardLines(Vec::new());
+            let mut sidebar_lines = ScoreboardLines(Vec::new());
 
             // TODO: correctly handle date based on clock, handle room id according to current room
-            scoreboard_lines.push(formatdoc! {r#"
+            sidebar_lines.push(formatdoc! {r#"
                 §e§lSKYBLOCK
                 §7{date} §8m24§87W {room_id}
 
@@ -205,18 +202,18 @@ async fn main() -> Result<()> {
 
             match server.dungeon.state {
                 DungeonState::NotReady => {
-                    for (_, p) in &player.server_mut().players {
-                        scoreboard_lines.push(format!("§c[M] §7{}", p.username))
+                    for (_, p) in &player.server_mut().world.players {
+                        sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
                     }
-                    scoreboard_lines.new_line();
+                    sidebar_lines.new_line();
                 }
                 DungeonState::Starting { tick_countdown } => {
-                    for (_, p) in &player.server_mut().players {
-                        scoreboard_lines.push(format!("§a[M] §7{}", p.username))
+                    for (_, p) in &player.server_mut().world.players {
+                        sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
                     }
-                    scoreboard_lines.new_line();
-                    scoreboard_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
-                    scoreboard_lines.new_line();
+                    sidebar_lines.new_line();
+                    sidebar_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
+                    sidebar_lines.new_line();
                 }
                 DungeonState::Started { current_ticks } => {
                     // this is scuffed but it works
@@ -231,7 +228,7 @@ async fn main() -> Result<()> {
                     };
                     // TODO: display correct keys, and cleared percentage
                     // clear percentage is based on amount of tiles that are cleared.
-                    scoreboard_lines.push(formatdoc! {r#"
+                    sidebar_lines.push(formatdoc! {r#"
                         Keys: §c■ §c✖ §8§8■ §a0x
                         Time elapsed: §a§a{time}
                         Cleared: §c{clear_percent}% §8§8({score})
@@ -250,49 +247,44 @@ async fn main() -> Result<()> {
                 tab_list.clone().send_packet(player.client_id, &server.network_tx)?;
             }
 
-            scoreboard_lines.push_str("§emc.hypixel.net");
+            sidebar_lines.push_str("§emc.hypixel.net");
 
-            for packet in player.scoreboard.update(scoreboard_lines) {
+            for packet in player.sidebar.update(sidebar_lines) {
                 packet.send_packet(player.client_id, &server.network_tx)?;
             }
             
-            if let Some(player_entity) = server.world.entities.get(&player.entity_id) {
-
-                if player_entity.ticks_existed % 5 == 0 {
-                    let mut current_index = 1;
-                    for pos in path.iter() {
-                        let particle = Particles::new(
-                            ParticleTypes::Crit,
-                            DVec3::from(pos),
-                            DVec3::new(0.1, 0.1, 0.1),
-                            0.0,
-                            current_index,
-                            true,
-                            None,
-                        );
-                        current_index += 1;
-
-                        particle?.send_packet(player.client_id, &server.network_tx)?;
-                    }
-                }
-
-                if player_entity.ticks_existed % 60 == 0 {
-                    EntityEffect {
-                        entity_id: player.entity_id,
-                        effect_id: HASTEID,
-                        amplifier: 2,
-                        duration: 200,
-                        hide_particles: true,
-                    }.send_packet(player.client_id, &server.network_tx)?;
-
-                    EntityEffect {
-                        entity_id: player.entity_id,
-                        effect_id: NIGHTVISIONID,
-                        amplifier: 0,
-                        duration: 400,
-                        hide_particles: true,
-                    }.send_packet(player.client_id, &server.network_tx)?;
-                }
+            // if player.ticks_existed % 5 == 0 {
+            //     let mut current_index = 1;
+            //     for pos in path.iter() {
+            //         let particle = Particles::new(
+            //             ParticleTypes::Crit,
+            //             DVec3::from(pos),
+            //             DVec3::new(0.1, 0.1, 0.1),
+            //             0.0,
+            //             current_index,
+            //             true,
+            //             None,
+            //         );
+            //         current_index += 1;
+            // 
+            //         particle?.send_packet(player.client_id, &server.network_tx)?;
+            //     }
+            // }
+            if player.ticks_existed % 60 == 0 {
+                player.send_packet(EntityEffect {
+                    entity_id: player.entity_id,
+                    effect: Effects::Haste,
+                    amplifier: 2,
+                    duration: 200,
+                    hide_particles: true,
+                })?;
+                player.send_packet(EntityEffect {
+                    entity_id: player.entity_id,
+                    effect: Effects::NightVision,
+                    amplifier: 0,
+                    duration: 400,
+                    hide_particles: true,
+                })?;
             }
         }
     }

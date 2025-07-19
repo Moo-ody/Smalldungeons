@@ -1,6 +1,6 @@
-use crate::server::entity::entity::Entity;
-use crate::server::entity::look_helper::wrap_to_180;
-use crate::server::utils::vec3d::DVec3;
+use crate::server::old_entity::entity::Entity;
+use crate::server::old_entity::look_helper::wrap_to_180;
+use crate::server::utils::dvec3::DVec3;
 
 #[derive(Clone, Debug)]
 pub struct MoveHelper {

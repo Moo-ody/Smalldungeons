@@ -1,7 +1,7 @@
 use crate::server::block::block_pos::BlockPos;
-use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
-use crate::server::entity::entity::Entity;
-use crate::server::utils::vec3d::DVec3;
+use crate::server::old_entity::ai::pathfinding::pathfinder::Pathfinder;
+use crate::server::old_entity::entity::Entity;
+use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 
 pub struct Navigator {

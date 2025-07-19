@@ -2,16 +2,14 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_type::EntityType;
-use crate::server::entity::metadata::Metadata;
-use anyhow::bail;
+use crate::server::entity::entity_metadata::EntityVariant;
 use async_trait::async_trait;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 const MOTION_CLAMP: f64 = 3.9;
 
 #[derive(Debug, Clone)]
-pub struct SpawnMob {
+pub struct PacketSpawnMob {
     entity_id: i32,
     entity_type: i8,
     x: i32,
@@ -23,33 +21,30 @@ pub struct SpawnMob {
     velocity_x: i16,
     velocity_y: i16,
     velocity_z: i16,
-    metadata: Metadata
+    metadata: EntityVariant,
 }
 
-impl SpawnMob {
-    pub fn from_entity(entity: &Entity) -> anyhow::Result<Self> {
-        if entity.entity_type == EntityType::Player {
-            bail!("Player cannot be spawned as a mob.");
-        }
-        Ok(Self {
-            entity_id: entity.entity_id,
-            entity_type: entity.entity_type.get_id(),
-            x: (entity.pos.x * 32.0).floor() as i32,
-            y: (entity.pos.y * 32.0).floor() as i32,
-            z: (entity.pos.z * 32.0).floor() as i32,
+impl PacketSpawnMob {
+    pub fn from_entity(entity: &Entity) -> Self {
+        Self {
+            entity_id: entity.id,
+            entity_type: entity.variant.get_id(),
+            x: (entity.position.x * 32.0).floor() as i32,
+            y: (entity.position.y * 32.0).floor() as i32,
+            z: (entity.position.z * 32.0).floor() as i32,
             yaw: (entity.yaw * 256.0 / 360.0) as i8,
             pitch: (entity.pitch * 256.0 / 360.0) as i8,
-            head_pitch: (entity.head_yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
-            velocity_x: (entity.motion.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-            velocity_y: (entity.motion.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-            velocity_z: (entity.motion.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-            metadata: entity.metadata.clone()
-        })
+            head_pitch: (entity.yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
+            velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            metadata: entity.variant.clone()
+        }
     }
 }
 
 #[async_trait]
-impl ClientBoundPacketImpl for SpawnMob {
+impl ClientBoundPacketImpl for PacketSpawnMob {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
         let buf = build_packet!(
             0x0F,

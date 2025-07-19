@@ -18,10 +18,10 @@ pub struct EntityTeleport {
 impl EntityTeleport {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
-            entity_id: entity.entity_id,
-            pos_x: (entity.pos.x * 32.0) as i32,
-            pos_y: (entity.pos.y * 32.0) as i32,
-            pos_z: (entity.pos.z * 32.0) as i32,
+            entity_id: entity.id,
+            pos_x: (entity.position.x * 32.0) as i32,
+            pos_y: (entity.position.y * 32.0) as i32,
+            pos_z: (entity.position.z * 32.0) as i32,
             yaw: (entity.yaw * 256.0 / 360.0) as i8,
             pitch: (entity.pitch * 256.0 / 360.0) as i8,
             on_ground: entity.on_ground,

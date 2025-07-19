@@ -15,9 +15,9 @@ pub struct EntityLook {
 impl EntityLook {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
-            entity_id: entity.entity_id,
-            yaw: ((entity.last_sent_yaw - entity.yaw) * 256.0 / 360.0) as i8,
-            pitch: ((entity.last_sent_pitch - entity.pitch) * 256.0 / 360.0) as i8,
+            entity_id: entity.id,
+            yaw: ((entity.last_yaw - entity.yaw) * 256.0 / 360.0) as i8,
+            pitch: ((entity.last_pitch - entity.pitch) * 256.0 / 360.0) as i8,
             on_ground: entity.on_ground,
         }
     }

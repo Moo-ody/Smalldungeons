@@ -1,5 +1,5 @@
-use crate::server::entity::ai::{TaskData, TaskType};
-use crate::server::entity::entity::Entity;
+use crate::server::old_entity::ai::{TaskData, TaskType};
+use crate::server::old_entity::entity::Entity;
 use crate::server::world::World;
 use anyhow::Context;
 use indexmap::IndexSet;

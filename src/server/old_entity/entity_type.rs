@@ -33,23 +33,23 @@ macro_rules! entity_type_registry {
             pub const fn get_id(&self) -> i8 {
                 match self {
                     $(
-                        Self::$name => crate::server::entity::r#impl::$path::ID
+                        Self::$name => crate::server::old_entity::r#impl::$path::ID
                     ),*
                 }
             }
 
-            pub fn get_tasks(&self) -> Option<crate::server::entity::ai::ai_tasks::AiTasks> {
+            pub fn get_tasks(&self) -> Option<crate::server::old_entity::ai::ai_tasks::AiTasks> {
                 match self {
                     $(
-                        Self::$name => crate::server::entity::r#impl::$path::ai_tasks()
+                        Self::$name => crate::server::old_entity::r#impl::$path::ai_tasks()
                     ),*
                 }
             }
 
-            pub fn metadata(&self) -> crate::server::entity::metadata::EntityMetadata {
+            pub fn metadata(&self) -> crate::server::old_entity::metadata::EntityMetadata {
                 match self {
                     $(
-                        Self::$name => crate::server::entity::r#impl::$path::metadata()
+                        Self::$name => crate::server::old_entity::r#impl::$path::metadata()
                     ),*
                 }
             }
@@ -57,14 +57,14 @@ macro_rules! entity_type_registry {
             pub const fn get_width(&self) -> f32 {
                 match self {
                     $(
-                        Self::$name => crate::server::entity::r#impl::$path::WIDTH
+                        Self::$name => crate::server::old_entity::r#impl::$path::WIDTH
                     ),*
                 }
             }
             pub const fn get_height(&self) -> f32 {
                 match self {
                     $(
-                        Self::$name => crate::server::entity::r#impl::$path::HEIGHT
+                        Self::$name => crate::server::old_entity::r#impl::$path::HEIGHT
                     ),*
                 }
             }

@@ -119,25 +119,3 @@ impl Attribute {
         ((base + add_sum) * (1.0 + mul_base)) * (1.0 + mul_total)
     }
 }
-
-#[macro_export]
-macro_rules! id_enum {
-    (pub enum $enumName:ident: $idType:ty {$($name:ident ($id:expr)),* $(,)?}) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        pub enum $enumName {
-            $(
-                $name,
-            )*
-        }
-
-        impl $enumName {
-            pub const fn id(&self) -> $idType {
-                match self {
-                    $(
-                        $enumName::$name => $id,
-                    )*
-                }
-            }
-        }
-    }
-}

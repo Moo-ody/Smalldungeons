@@ -13,8 +13,8 @@ pub struct EntityHeadLook {
 impl EntityHeadLook {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
-            entity_id: entity.entity_id,
-            yaw: (entity.head_yaw * 256.0 / 360.0) as i8,
+            entity_id: entity.id,
+            yaw: (entity.yaw * 256.0 / 360.0) as i8,
         }
     }
 }

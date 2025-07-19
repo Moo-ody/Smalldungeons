@@ -1,4 +1,4 @@
-use crate::server::entity::entity::Entity;
+use crate::server::old_entity::entity::Entity;
 
 /// impl for the movement of entities to keep entity file clean.
 impl Entity {

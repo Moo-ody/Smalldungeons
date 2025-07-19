@@ -2,8 +2,7 @@ use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
-use crate::server::entity::entity::Entity;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
 use serde_json::Value;
@@ -96,16 +95,16 @@ impl Crusher {
                     let z = self.block_pos.z + (self.current_length as i32 * dz);
                     self.set_blocks(world, Blocks::Stone { variant: 2 }, x, y, z, dx, dz);
 
-                    for (id, player) in &server.players {
-                        let entity = player.get_entity_mut(world).unwrap();
+                    for (id, player) in &server.world.players {
+                        // let entity = player.get_entity_mut(world).unwrap();
 
-                        if self.is_in_way(entity, x, y, z) {
+                        if self.is_in_way(player, x, y, z) {
                             PositionLook {
-                                x: entity.pos.x + dx as f64,
-                                y: entity.pos.y,
-                                z: entity.pos.z + dz as f64,
-                                yaw: entity.yaw,
-                                pitch: entity.pitch,
+                                x: player.position.x + dx as f64,
+                                y: player.position.y,
+                                z: player.position.z + dz as f64,
+                                yaw: player.yaw,
+                                pitch: player.pitch,
                                 flags: 0,
                             }.send_packet(*id, &server.network_tx).unwrap();
                         }
@@ -143,7 +142,7 @@ impl Crusher {
         }
     }
 
-    fn is_in_way(&self, entity: &Entity, x: i32, y: i32, z: i32) -> bool {
+    fn is_in_way(&self, entity: &Player, x: i32, y: i32, z: i32) -> bool {
         let (x_offset, z_offset) = match self.direction {
             Direction::North => (1, 0),
             Direction::East => (0, 0),
@@ -158,6 +157,8 @@ impl Crusher {
             Direction::West => (1, -self.width),
             _ => unreachable!(),
         };
-        entity.is_in_box_i32(x + x_offset, y, z + z_offset, width, self.height, length)
+        // TODO: FINISH
+        false
+        // entity.is_in_box_i32(x + x_offset, y, z + z_offset, width, self.height, length)
     }
 }

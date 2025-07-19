@@ -1,4 +1,4 @@
-use crate::server::utils::vec3d::DVec3;
+use crate::server::utils::dvec3::DVec3;
 use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 

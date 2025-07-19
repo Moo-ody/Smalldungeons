@@ -1,7 +1,7 @@
 use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::var_int::write_var_int;
-use crate::server::player::ClientId;
+use crate::server::player::player::ClientId;
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::AsyncWrite;
@@ -26,7 +26,7 @@ macro_rules! register_clientbound_packets {
             }
         
             impl $crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
-                fn send_packet(self, client_id: $crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
+                fn send_packet(self, client_id: $crate::server::player::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
                     // println!("Sending packet {:?} to client {}", self, client_id);
                     ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
                     
@@ -54,7 +54,7 @@ macro_rules! register_clientbound_packets {
         }
 
         impl ClientBoundPacket {
-            pub fn send_packet(self, client_id: crate::server::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
+            pub fn send_packet(self, client_id: crate::server::player::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
                 network_tx.send($crate::net::internal_packets::NetworkThreadMessage::SendPacket {
                     client_id,
                     packet: self
@@ -123,7 +123,7 @@ macro_rules! register_serverbound_packets {
                 }
             }
 
-            fn main_process(&self, world: &mut $crate::server::world::World, player: &mut $crate::server::player::Player) -> anyhow::Result<()> {
+            fn main_process(&self, world: &mut $crate::server::world::World, player: &mut $crate::server::player::player::Player) -> anyhow::Result<()> {
                 match self {
                     $(
                         $(
@@ -173,7 +173,7 @@ pub trait ServerBoundPacket: Send + Sync {
         Ok(())
     }
 
-    fn main_process(&self, _: &mut crate::server::world::World, _: &mut crate::server::player::Player) -> Result<()> {
+    fn main_process(&self, _: &mut crate::server::world::World, _: &mut crate::server::player::player::Player) -> Result<()> {
         Ok(())
     }
 }

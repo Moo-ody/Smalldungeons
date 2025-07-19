@@ -1,5 +1,5 @@
-use crate::server::entity::ai::ai_tasks::AiTasks;
-use crate::server::entity::metadata::EntityMetadata;
+use crate::server::old_entity::ai::ai_tasks::AiTasks;
+use crate::server::old_entity::metadata::EntityMetadata;
 
 pub const ID: i8 = -1; // todo: not have this for players. they send a uuid instead.
 pub const WIDTH: f32 = 0.6;

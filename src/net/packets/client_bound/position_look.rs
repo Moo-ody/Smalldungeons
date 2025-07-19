@@ -1,6 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::entity::entity::Entity;
+use crate::server::player::player::Player;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone, Copy)]
@@ -11,17 +11,16 @@ pub struct PositionLook {
     pub yaw: f32,
     pub pitch: f32,
     pub flags: u8,
-    // pub teleport_id: i32,
 }
 
 impl PositionLook {
-    pub fn from_entity(entity: &Entity) -> Self {
+    pub fn from_player(player: &Player) -> Self {
         Self {
-            x: entity.pos.x,
-            y: entity.pos.y,
-            z: entity.pos.z,
-            yaw: entity.yaw,
-            pitch: entity.pitch,
+            x: player.position.x,
+            y: player.position.y,
+            z: player.position.z,
+            yaw: player.yaw,
+            pitch: player.pitch,
             flags: 0,
         }
     }

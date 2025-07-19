@@ -4,7 +4,7 @@ use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
 use crate::net::var_int::peek_var_int;
-use crate::server::player::ClientId;
+use crate::server::player::player::ClientId;
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;

@@ -2,7 +2,7 @@ use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::block::block_pos::{read_block_pos, BlockPos};
 use crate::server::items::item_stack::{read_item_stack, ItemStack};
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 

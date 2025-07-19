@@ -1,5 +1,5 @@
-use crate::server::entity::entity::Entity;
-use crate::server::utils::vec3d::DVec3;
+use crate::server::old_entity::entity::Entity;
+use crate::server::utils::dvec3::DVec3;
 
 /// this is weird and probably bad, but ill worry about moving and fixing it later
 #[derive(Clone, Debug)]

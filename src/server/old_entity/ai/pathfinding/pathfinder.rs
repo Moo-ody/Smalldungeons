@@ -1,8 +1,8 @@
 use crate::server::block::block_pos::BlockPos;
-use crate::server::entity::ai::pathfinding::entity_context::EntityContext;
-use crate::server::entity::ai::pathfinding::node::{NodeData, NodeEntry};
-use crate::server::entity::ai::pathfinding::{get_neighbors, heuristic};
-use crate::server::entity::entity::Entity;
+use crate::server::old_entity::ai::pathfinding::entity_context::EntityContext;
+use crate::server::old_entity::ai::pathfinding::node::{NodeData, NodeEntry};
+use crate::server::old_entity::ai::pathfinding::{get_neighbors, heuristic};
+use crate::server::old_entity::entity::Entity;
 use crate::server::world::World;
 use anyhow::Context;
 use std::collections::{BinaryHeap, HashMap};

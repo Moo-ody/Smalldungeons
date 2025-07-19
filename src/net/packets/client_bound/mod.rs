@@ -26,3 +26,5 @@ pub mod teams;
 pub mod sound_effect;
 pub mod open_window;
 pub mod close_window;
+pub mod spawn_object;
+pub mod multi_block_change;

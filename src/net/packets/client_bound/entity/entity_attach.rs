@@ -2,10 +2,11 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
+#[derive(Debug, Clone)]
 pub struct EntityAttach {
-    entity_id: i32,
-    vehicle_id: i32,
-    leash: i8,
+    pub entity_id: i32,
+    pub vehicle_id: i32,
+    pub leash: bool,
 }
 
 #[async_trait::async_trait]

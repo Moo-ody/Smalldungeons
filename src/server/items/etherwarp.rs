@@ -1,18 +1,15 @@
-use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::blocks::Blocks::Air;
-use crate::server::entity::entity::Entity;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
+use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::particles::ParticleTypes::SpellWitch;
 use crate::server::utils::sounds::Sounds;
-use crate::server::utils::vec3d::DVec3;
 use crate::server::world::World;
 use crate::utils::bitset::BitSet;
 use std::f64::consts::PI;
-use tokio::sync::mpsc::UnboundedSender;
 
 const VALID_ETHER_WARP_BLOCK_IDS: BitSet<3> = BitSet::new(
     &[
@@ -28,16 +25,14 @@ enum EtherResult {
 
 pub fn handle_ether_warp(
     player: &Player,
-    network_tx: &UnboundedSender<NetworkThreadMessage>,
     world: &World,
-    entity: &Entity
 ) -> anyhow::Result<()> {
-    let mut start_pos = entity.pos.clone();
+    let mut start_pos = player.position.clone();
     start_pos.y += 1.54; // assume always sneaking
 
     let end_pos = {
-        let yaw = entity.yaw as f64;
-        let pitch = entity.pitch as f64;
+        let yaw = player.yaw as f64;
+        let pitch = player.pitch as f64;
         let rad_yaw = -yaw.to_radians() - PI;
         let rad_pitch = -pitch.to_radians();
 
@@ -57,20 +52,16 @@ pub fn handle_ether_warp(
     };
 
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
-
-        if let Ok(packet) = Particles::new(
+        player.send_packet(Particles::new(
             SpellWitch,
-            entity.pos,
+            player.position,
             DVec3::new(0.25, 1.0, 0.25),
             0.0,
             25,
             true,
             None,
-        ) {
-            packet.send_packet(player.client_id, network_tx)?;
-        }
-
-        PositionLook {
+        ).unwrap())?;
+        player.send_packet(PositionLook {
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
             z: z as f64 + 0.5,
@@ -80,16 +71,15 @@ pub fn handle_ether_warp(
             // while keeping yaw and pitch relative (meaning it is added to players yaw)
             // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
             flags: 24,
-        }.send_packet(player.client_id, network_tx)?;
-
-        SoundEffect {
+        })?;
+        player.send_packet(SoundEffect {
             sounds: Sounds::EnderDragonHit,
             volume: 1.0,
             pitch: 0.53968257,
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
             z: z as f64 + 0.5,
-        }.send_packet(player.client_id, network_tx)?;
+        })?;
     }
     Ok(())
 }

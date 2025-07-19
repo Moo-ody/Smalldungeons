@@ -1,6 +1,6 @@
-use crate::server::entity::ai::ai_tasks::{AiTasks, TaskEntry};
-use crate::server::entity::ai::TaskType::WatchClosest;
-use crate::server::entity::metadata::EntityMetadata;
+use crate::server::old_entity::ai::ai_tasks::{AiTasks, TaskEntry};
+use crate::server::old_entity::ai::TaskType::WatchClosest;
+use crate::server::old_entity::metadata::EntityMetadata;
 
 pub const ID: i8 = 54;
 pub const WIDTH: f32 = 0.6;

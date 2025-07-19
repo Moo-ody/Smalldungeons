@@ -53,8 +53,9 @@ impl DVec3 {
         self.x += amount
     }
 
-    pub fn add_y(&mut self, amount: f64) {
-        self.y += amount
+    pub fn add_y(&mut self, amount: f64) -> Self {
+        self.y += amount;
+        *self
     }
 
     pub fn add_z(&mut self, amount: f64) {

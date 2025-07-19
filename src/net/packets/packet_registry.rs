@@ -9,12 +9,13 @@ use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::display_scoreboard::DisplayScoreboard;
 
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
+use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
 use crate::net::packets::client_bound::entity::entity_effect::EntityEffect;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
 use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
-use crate::net::packets::client_bound::entity::entity_metadata::EntityMetadata;
-use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
+use crate::net::packets::client_bound::entity::entity_metadata::PacketEntityMetadata;
+// use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::entity::entity_rel_move::EntityRelMove;
 use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
@@ -31,7 +32,8 @@ use crate::net::packets::client_bound::scoreboard_objective::ScoreboardObjective
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::sound_effect::SoundEffect;
-use crate::net::packets::client_bound::spawn_mob::SpawnMob;
+use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
+use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
 use crate::net::packets::client_bound::teams::Teams;
 use crate::net::packets::client_bound::update_score::UpdateScore;
 use crate::net::packets::client_bound::window_items::WindowItems;
@@ -67,7 +69,9 @@ register_clientbound_packets! {
     CBKeepAlive,
     CBConfirmTransaction,
     Disconnect,
-    SpawnMob,
+    EntityAttach,
+    PacketSpawnMob,
+    PacketSpawnObject,
     DestroyEntities,
     EntityVelocity,
     SetSlot,
@@ -78,12 +82,12 @@ register_clientbound_packets! {
 
     EntityLookMove,
     EntityHeadLook,
-    EntityMetadata,
+    PacketEntityMetadata,
     EntityRelMove,
     EntityLook,
     EntityTeleport,
     EntityEffect,
-    EntityProperties,
+    // EntityProperties,
     CCloseWindowPacket,
     
     SoundEffect,

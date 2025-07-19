@@ -1,7 +1,7 @@
-use crate::server::entity::ai::{TaskData, TaskType};
-use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_type::EntityType;
-use crate::server::utils::vec3d::DVec3;
+use crate::server::old_entity::ai::{TaskData, TaskType};
+use crate::server::old_entity::entity::Entity;
+use crate::server::old_entity::entity_type::EntityType;
+use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 use rand::random_range;
 
