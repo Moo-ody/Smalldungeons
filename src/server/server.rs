@@ -2,6 +2,7 @@ use crate::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
+use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::position_look::PositionLook;
@@ -9,6 +10,7 @@ use crate::net::packets::packet::ServerBoundPacket;
 // use crate::server::old_entity::attributes::Attribute;
 // use crate::server::old_entity::attributes::AttributeTypes::MovementSpeed;
 use crate::server::items::Item;
+use crate::server::player::attribute::{Attribute, AttributeMap};
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::player::{GameProfile, Player};
 use crate::server::utils::dvec3::DVec3;
@@ -105,6 +107,14 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
                 player.sync_inventory()?;
+
+                let mut attributes = AttributeMap::new();
+                attributes.insert(Attribute::MovementSpeed, 0.4);
+
+                player.send_packet(EntityProperties {
+                    entity_id: player.entity_id,
+                    properties: attributes,
+                })?;
 
                 // let entity = self.world.spawn_entity(spawn_point, Zombie, None)?;
 

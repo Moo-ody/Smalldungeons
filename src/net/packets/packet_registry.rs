@@ -7,7 +7,6 @@ use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction a
 use crate::net::packets::client_bound::custom_payload::CustomPayload;
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::display_scoreboard::DisplayScoreboard;
-
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
 use crate::net::packets::client_bound::entity::entity_effect::EntityEffect;
@@ -15,7 +14,7 @@ use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
 use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
 use crate::net::packets::client_bound::entity::entity_metadata::PacketEntityMetadata;
-// use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
+use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::entity::entity_rel_move::EntityRelMove;
 use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
@@ -87,7 +86,7 @@ register_clientbound_packets! {
     EntityLook,
     EntityTeleport,
     EntityEffect,
-    // EntityProperties,
+    EntityProperties,
     CCloseWindowPacket,
     
     SoundEffect,

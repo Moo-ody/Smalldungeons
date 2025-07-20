@@ -123,7 +123,7 @@ impl Door {
                 world.set_block_at(Blocks::Barrier, x, y, z);
                 
                 let id = world.spawn_entity(
-                    DVec3::new(x as f64 + 0.5, y as f64, z as f64 + 0.5),
+                    DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
                     EntityVariant::Bat { hanging: false },
                     DoorEntityImpl {
                         block: self.door_type.get_block(),
@@ -141,7 +141,10 @@ impl Door {
     }
 }
 
+/// this entity implementation is used for doors in dungeons to animate them.
 ///
+/// it spawns a falling block entity that rides the entity.
+/// every tick it lowers the y position, you must remove the entity to make it stop
 #[derive(Debug)]
 pub struct DoorEntityImpl {
     pub block: Blocks,
@@ -163,13 +166,10 @@ impl EntityImpl for DoorEntityImpl {
             block_id | (metadata << 12)
         };
 
-        let falling_block_pos = entity.position.clone();
-        entity.position.y -= DOOR_ENTITY_OFFSET;
-
         let spawn_packet = PacketSpawnObject::new(
             entity_id,
             EntityVariant::FallingBlock,
-            falling_block_pos,
+            entity.position.clone().add_y(DOOR_ENTITY_OFFSET),
             DVec3::ZERO,
             0.0,
             0.0,
@@ -192,10 +192,10 @@ impl EntityImpl for DoorEntityImpl {
         // probably when i get real values, destroy entity in here
         // maybe add ease in interpolation to make improve animation
         entity.position.y -= 0.25;
-        println!("entity position y {}", entity.position.y)
     }
 
     fn despawn(&mut self, entity: &mut Entity) {
+        // next entity id is always the one riding on top of it
         let destroy_packet = DestroyEntities {
             entity_ids: vec![entity.id + 1],
         };
