@@ -1,4 +1,4 @@
-use crate::dungeon::Dungeon;
+use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
@@ -7,8 +7,6 @@ use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::ServerBoundPacket;
-// use crate::server::old_entity::attributes::Attribute;
-// use crate::server::old_entity::attributes::AttributeTypes::MovementSpeed;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap};
 use crate::server::player::inventory::ItemSlot;
@@ -121,15 +119,7 @@ impl Server {
                 self.world.players.insert(client_id, player);
             },
             MainThreadMessage::ClientDisconnected { client_id } => {
-                if let Some(player) = self.world.players.remove(&client_id) {
-                    // for entity_id in player.observed_entities {
-                    //     if let Some(entity) = self.world.entities.get_mut(&entity_id) {
-                    //         // doesnt call stop_observing_entity because player is borrowed to get its observed entities ids.
-                    //         // and the player object itself should be destroyed sometime here.
-                    //         entity.observing_players.remove(&client_id);
-                    //     }
-                    // }
-                }
+                self.world.players.remove(&client_id);
                 println!("Client {} disconnected", client_id);
             },
             MainThreadMessage::PacketReceived { client_id, packet } => {

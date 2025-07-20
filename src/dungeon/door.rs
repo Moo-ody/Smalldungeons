@@ -1,4 +1,3 @@
-use crate::dungeon::{Dungeon, OpenDoorTask};
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
 use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
@@ -121,25 +120,24 @@ impl Door {
 
             |x,y, z| {
                 world.set_block_at(Blocks::Barrier, x, y, z);
+                world.interactable_blocks.remove(&BlockPos { x, y, z });
                 
                 let id = world.spawn_entity(
                     DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
                     EntityVariant::Bat { hanging: false },
-                    DoorEntityImpl {
-                        block: self.door_type.get_block(),
-                    }
+                    DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
                 ).unwrap();
-                
                 entities.push(id);
             }
         );
-        world.server_mut().dungeon.test.push(OpenDoorTask {
-            ticks_left: 20,
-            door_index: self.id,
-            door_entity_ids: entities,
-        });
+        // world.server_mut().dungeon.test.push(OpenDoorTask {
+        //     ticks_left: 20,
+        //     door_index: self.id,
+        // });
     }
 }
+
+// this maybe could be used in places other than doors, ie when you flick lever 
 
 /// this entity implementation is used for doors in dungeons to animate them.
 ///
@@ -148,6 +146,18 @@ impl Door {
 #[derive(Debug)]
 pub struct DoorEntityImpl {
     pub block: Blocks,
+    distance_per_tick: f64,
+    ticks_left: u32,
+}
+
+impl DoorEntityImpl {
+    pub fn new(block: Blocks, distance: f64, ticks: u32) -> Self {
+        Self {
+            block,
+            distance_per_tick: distance / ticks as f64,
+            ticks_left: ticks,
+        }
+    }
 }
 
 /// offset so that the falling block riding the bat
@@ -189,9 +199,11 @@ impl EntityImpl for DoorEntityImpl {
     }
 
     fn tick(&mut self, entity: &mut Entity) {
-        // probably when i get real values, destroy entity in here
-        // maybe add ease in interpolation to make improve animation
-        entity.position.y -= 0.25;
+        entity.position.y -= self.distance_per_tick;
+        self.ticks_left -= 1;
+        if self.ticks_left == 0 {
+            entity.world_mut().despawn_entity(entity.id).unwrap();
+        }
     }
 
     fn despawn(&mut self, entity: &mut Entity) {

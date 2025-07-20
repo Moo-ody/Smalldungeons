@@ -84,6 +84,7 @@ impl Scoreboard {
                 }
                 
                 let name = format!("{}", i);
+                let team = format!("team_{}", old_len - i);
                 
                 packets.push(Packet::from(UpdateScore {
                     name: hide_name(&name),
@@ -92,7 +93,7 @@ impl Scoreboard {
                     action: UpdateScoreAction::Remove,
                 }));
                 packets.push(Packet::from(Teams {
-                    name: "".into(),
+                    name: team.into(),
                     display_name: "".into(),
                     prefix: "".into(),
                     suffix: "".into(),
