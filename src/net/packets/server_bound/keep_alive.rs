@@ -1,7 +1,8 @@
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::var_int::read_var_int;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
+use anyhow::Context;
 use bytes::BytesMut;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,7 +14,7 @@ pub struct KeepAlive {
 #[async_trait::async_trait]
 impl ServerBoundPacket for KeepAlive {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        let id = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read keep alive id"))?;
+        let id = read_var_int(buf).context("Failed to read keep alive id")?;
         Ok(KeepAlive {
             id
         })

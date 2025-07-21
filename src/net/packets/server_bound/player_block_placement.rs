@@ -2,7 +2,7 @@ use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
 use crate::server::block::block_pos::{read_block_pos, BlockPos};
 use crate::server::items::item_stack::{read_item_stack, ItemStack};
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
@@ -32,7 +32,7 @@ impl ServerBoundPacket for PlayerBlockPlacement {
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
         if !self.block_pos.is_invalid() {
-            let mut bp = self.block_pos;
+            let mut bp = self.block_pos.clone();
             match self.placed_direction {
                 0 => bp.y -= 1,
                 1 => bp.y += 1,
@@ -46,12 +46,16 @@ impl ServerBoundPacket for PlayerBlockPlacement {
                 block_pos: bp,
                 block_state: block.get_block_state_id(),
             }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+            
+            if let Some(test) = world.interactable_blocks.get(&self.block_pos) {
+                test.interact(player, &self.block_pos);
+                return Ok(());
+            }
         }
-        if self.item_stack.is_some() {
-            player.handle_right_click()
-        }
-        // make sure inventory is synced
-        player.inventory.sync(player, &player.server_mut().network_tx)?;
+        // println!("packet {:?}", self);
+        
+        player.handle_right_click();
+        player.sync_inventory()?;
         Ok(())
     }
 }

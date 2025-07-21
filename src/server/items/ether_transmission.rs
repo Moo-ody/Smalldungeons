@@ -1,30 +1,26 @@
 use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::SendPacket;
-use crate::server::entity::entity::Entity;
-use crate::server::player::Player;
-use crate::server::utils::vec3f::Vec3f;
-use crate::server::world::World;
+use crate::server::player::player::Player;
+use crate::server::utils::dvec3::DVec3;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn handle_teleport(
     player: &Player,
     network_tx: &UnboundedSender<NetworkThreadMessage>,
-    world: &World,
-    entity: &Entity
 ) -> anyhow::Result<()> {
-    let mut start_pos = entity.pos.clone();
+    let mut start_pos = player.position.clone();
     start_pos.y += 1.54; // assume always sneaking
 
     let end_pos = {
-        let yaw = entity.yaw as f64;
-        let pitch = entity.pitch as f64;
+        let yaw = player.yaw as f64;
+        let pitch = player.pitch as f64;
         let rad_yaw = -yaw.to_radians() - PI;
         let rad_pitch = -pitch.to_radians();
 
         let f2 = -rad_pitch.cos();
-        let mut pos = Vec3f {
+        let mut pos = DVec3 {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
             z: rad_yaw.cos() * f2,

@@ -1,6 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::utils::scoreboard::sized_string::SizedString;
+use crate::server::utils::sized_string::SizedString;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]

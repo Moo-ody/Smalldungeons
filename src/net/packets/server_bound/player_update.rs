@@ -1,5 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 

@@ -1,29 +1,22 @@
+use crate::id_enum;
 use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
 use crate::net::var_int::VarInt;
 use crate::server::utils::player_list::player_profile::PlayerData;
-use crate::id_enum;
-use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug, Clone)]
 pub struct PlayerListItem {
-    action: PlayerListAction,
-    players: Vec<PlayerData>,
+    pub action: PlayerListAction,
+    pub players: Arc<[PlayerData]>, // arc instead of vec since its faster to clone for every player.
 }
 
 impl PlayerListItem {
-    pub fn new(action: PlayerListAction, players: &[PlayerData]) -> Self {
+    pub fn new(action: PlayerListAction, players: impl Into<Arc<[PlayerData]>>) -> Self {
         Self {
             action,
-            players: players.to_vec(),
-        }
-    }
-
-    pub fn init_packet(player_list: &HashMap<i32, PlayerData>) -> Self {
-        Self {
-            action: PlayerListAction::AddPlayer,
-            players: player_list.values().cloned().collect::<Vec<PlayerData>>(),
+            players: players.into(),
         }
     }
 }
@@ -31,7 +24,6 @@ impl PlayerListItem {
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for PlayerListItem {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
-        println!("{:?}", self);
         let mut payload = Vec::new();
         VarInt(0x38).write(&mut payload);
 

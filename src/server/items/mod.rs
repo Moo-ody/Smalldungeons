@@ -1,8 +1,9 @@
 use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::player::Player;
-use crate::server::utils::nbt::encode::{TAG_COMPOUND_ID, TAG_LIST_ID};
+use crate::server::player::player::Player;
+use crate::server::player::ui::UI;
+use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
 use indoc::indoc;
 
@@ -13,6 +14,7 @@ mod ether_transmission;
 /// List of items available to be used
 #[derive(Copy, Debug, Clone, PartialEq)]
 pub enum Item {
+    SkyblockMenu,
     AspectOfTheVoid,
     DiamondPickaxe,
     SpiritSceptre,
@@ -21,17 +23,19 @@ pub enum Item {
 
 impl Item {
 
-    pub fn on_right_click(&self, player: &Player) -> anyhow::Result<()> {
+    pub fn on_right_click(&self, player: &mut Player) -> anyhow::Result<()> {
         match self {
+            Item::SkyblockMenu => {
+                player.open_ui(UI::SkyblockMenu)?
+            }
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();
                 let world = &server.world;
-                let entity = player.get_entity(world)?;
 
                 if player.is_sneaking {
-                    handle_ether_warp(player, &server.network_tx, world, entity)?;
+                    handle_ether_warp(player, world)?;
                 } else {
-                    handle_teleport(player, &server.network_tx, world, entity)?;
+                    handle_teleport(player, &server.network_tx)?;
                 }
             }
             Item::SpiritSceptre => {
@@ -45,9 +49,26 @@ impl Item {
     
     /// creates a vanilla item stack, including all nbt data.
     /// 
-    /// this is only used for packets, we do not need the data on the server.
+    /// this is only used for packets, we do not need to store this on the server.
     pub fn get_item_stack(&self) -> ItemStack {
         let mut stack = match self {
+            Item::SkyblockMenu => ItemStack {
+                item: 399,
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§aSkyBlock Menu §7(Click)"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            §7View all of your SkyBlock progress,
+                            §7including your Skills, Collections,
+                            §7Recipes, and more!
+
+                            §eClick to Open!
+                        "#})
+                    ]),
+                ])),
+            },
             Item::AspectOfTheVoid => ItemStack {
                 item: 277,
                 stack_size: 1,

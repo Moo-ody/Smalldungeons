@@ -1,4 +1,4 @@
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::dvec3::DVec3;
 use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
@@ -9,8 +9,8 @@ pub struct BlockPos {
     pub z: i32,
 }
 
-impl From<Vec3f> for BlockPos {
-    fn from(vec: Vec3f) -> Self {
+impl From<DVec3> for BlockPos {
+    fn from(vec: DVec3) -> Self {
         Self {
             x: vec.x as i32,
             y: vec.y as i32,
@@ -20,6 +20,11 @@ impl From<Vec3f> for BlockPos {
 }
 
 impl BlockPos {
+    
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
+    }
+    
     pub const fn is_invalid(&self) -> bool {
         self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
     }
@@ -93,8 +98,8 @@ impl BlockPos {
         }
     }
 
-    pub fn as_vec3f(&self) -> Vec3f {
-            Vec3f {
+    pub fn as_vec3f(&self) -> DVec3 {
+            DVec3 {
                 x: self.x as f64,
                 y: self.y as f64,
                 z: self.z as f64

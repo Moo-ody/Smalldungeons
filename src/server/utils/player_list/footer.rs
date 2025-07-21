@@ -1,5 +1,5 @@
 use crate::server::utils::chat_component::chat_component_text::{ChatComponentText, ChatComponentTextBuilder, HoverAction};
-use crate::server::utils::color::Color;
+use crate::server::utils::color::MCColors;
 
 pub fn footer() -> ChatComponentText {
     ChatComponentTextBuilder::new("")
@@ -10,7 +10,7 @@ pub fn footer() -> ChatComponentText {
             ChatComponentTextBuilder::new("")
                 .append(
                     ChatComponentTextBuilder::new("Active Effects")
-                        .color(Color::Green)
+                        .color(MCColors::Green)
                         .bold()
                         .build()
                 )
@@ -22,22 +22,22 @@ pub fn footer() -> ChatComponentText {
         .append(
             ChatComponentTextBuilder::new("")
                 .append(
-                    ChatComponentTextBuilder::new("").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("").color(MCColors::Gray).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("You have ").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("You have ").color(MCColors::Gray).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("2 ").color(Color::Yellow).build()
+                    ChatComponentTextBuilder::new("2 ").color(MCColors::Yellow).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("active effects. Use \"").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("active effects. Use \"").color(MCColors::Gray).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("/effects").color(Color::Gold).build()
+                    ChatComponentTextBuilder::new("/effects").color(MCColors::Gold).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("\" to see them.").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("\" to see them.").color(MCColors::Gray).build()
                 )
                 .build()
         )
@@ -47,7 +47,7 @@ pub fn footer() -> ChatComponentText {
         .append(
             ChatComponentTextBuilder::new("")
                 .append(
-                    ChatComponentTextBuilder::new("Haste III").color(Color::Yellow).build()
+                    ChatComponentTextBuilder::new("Haste III").color(MCColors::Yellow).build()
                 )
                 .append(
                     ChatComponentTextBuilder::new("").build()
@@ -78,7 +78,7 @@ pub fn footer() -> ChatComponentText {
             ChatComponentTextBuilder::new("")
                 .append(
                     ChatComponentTextBuilder::new("Cookie Buff")
-                        .color(Color::Light_Purple)
+                        .color(MCColors::LightPurple)
                         .bold()
                         .build()
                 )
@@ -90,10 +90,10 @@ pub fn footer() -> ChatComponentText {
         .append(
             ChatComponentTextBuilder::new("")
                 .append(
-                    ChatComponentTextBuilder::new("").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("").color(MCColors::Gray).build()
                 )
                 .append(
-                    ChatComponentTextBuilder::new("Not Active! Obtain booster cookies from the community").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("Not Active! Obtain booster cookies from the community").color(MCColors::Gray).build()
                 )
                 .build()
         )
@@ -103,7 +103,7 @@ pub fn footer() -> ChatComponentText {
         .append(
             ChatComponentTextBuilder::new("")
                 .append(
-                    ChatComponentTextBuilder::new("shop in the hub.").color(Color::Gray).build()
+                    ChatComponentTextBuilder::new("shop in the hub.").color(MCColors::Gray).build()
                 )
                 .build()
         )
@@ -130,7 +130,7 @@ pub fn footer() -> ChatComponentText {
                     ChatComponentTextBuilder::new("Ranks, Boosters, & MORE! ")
                         .append(
                             ChatComponentTextBuilder::new("STORE.HYPIXEL.NET")
-                                .color(Color::Red)
+                                .color(MCColors::Red)
                                 .bold()
                                 .on_hover(
                                     HoverAction::ShowText,
@@ -138,7 +138,7 @@ pub fn footer() -> ChatComponentText {
                                 )
                                 .build()
                         )
-                        .color(Color::Green)
+                        .color(MCColors::Green)
                         .build()
                 )
                 .build()

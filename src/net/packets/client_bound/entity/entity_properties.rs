@@ -1,12 +1,14 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
-use crate::server::entity::attributes::Attributes;
+use crate::server::entity::entity::EntityId;
+use crate::server::player::attribute::AttributeMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
+#[derive(Clone, Debug)]
 pub struct EntityProperties {
-    pub entity_id: i32,
-    pub properties: Attributes,
+    pub entity_id: EntityId,
+    pub properties: AttributeMap,
 }
 
 #[async_trait::async_trait]

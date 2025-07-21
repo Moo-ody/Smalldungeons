@@ -3,8 +3,8 @@ use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, Netw
 use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::packet_registry::parse_packet;
-use crate::net::var_int::read_var_int_with_len;
-use crate::server::player::ClientId;
+use crate::net::var_int::peek_var_int;
+use crate::server::player::player::ClientId;
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -43,7 +43,10 @@ pub async fn handle_client(
         tokio::select! {
             result = socket.read_buf(&mut bytes) => {
                 match result {
-                    Ok(0) => { break },
+                    Ok(0) => { 
+                        // Channel closed normally
+                        break 
+                    },
                     Ok(_) => {
                         while let Some(mut packet) = read_whole_packet(&mut bytes).await {
                             match parse_packet(&mut packet, &mut client).await {
@@ -93,7 +96,7 @@ pub async fn handle_client(
         }
     }
 
-    network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id }).unwrap();
+    let _ = network_tx.send(NetworkThreadMessage::ConnectionClosed { client_id });
     println!("handle client for {client_id} closed.");
 }
 
@@ -101,7 +104,7 @@ pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
     if buf.is_empty() {
         return None;
     }
-    let (packet_len, varint_len) = read_var_int_with_len(buf)?;
+    let (packet_len, varint_len) = peek_var_int(buf)?;
 
     let packet_len = packet_len as usize;
     if buf.len() < packet_len + varint_len {

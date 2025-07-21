@@ -4,7 +4,7 @@ use crate::net::var_int::read_var_int;
 use crate::server::block::block_pos::{read_block_pos, BlockPos};
 use crate::server::items::Item;
 use crate::server::player::inventory::ItemSlot;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};

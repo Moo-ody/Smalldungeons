@@ -1,28 +1,27 @@
 mod net;
 mod server;
 mod dungeon;
+mod utils;
 
 use crate::dungeon::door::DoorType;
-use crate::dungeon::room_data::{RoomData, RoomType};
-use crate::dungeon::Dungeon;
+use crate::dungeon::dungeon::Dungeon;
+use crate::dungeon::dungeon_state::DungeonState;
+use crate::dungeon::room::room_data::{RoomData, RoomType};
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::entity::entity_effect::{EntityEffect, HASTEID};
-use crate::net::packets::client_bound::particles::Particles;
+use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
-use crate::server::entity::ai::pathfinding::pathfinder::Pathfinder;
-use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_type::EntityType;
+use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
-use crate::server::utils::particles::ParticleTypes;
-use crate::server::utils::vec3f::Vec3f;
-use crate::server::world;
+use crate::server::utils::color::MCColors;
+use crate::server::utils::dvec3::DVec3;
 use anyhow::Result;
 use include_dir::include_dir;
+use indoc::formatdoc;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
@@ -42,18 +41,6 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
 
-    let mut server = Server::initialize(network_tx);
-    server.world.server = &mut server;
-
-    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
-    tokio::spawn(
-        run_network_thread(
-            network_rx,
-            server.network_tx.clone(),
-            main_tx,
-        )
-    );
-
     let rooms_dir = include_dir!("src/room_data/");
 
     let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
@@ -70,7 +57,7 @@ async fn main() -> Result<()> {
 
             (room_id, room_data)
         }).collect();
-    
+
     // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
     // But this works for now...
     let door_data: Vec<Vec<Blocks>> = include_str!("door_data/doors.txt").split("\n").map(|line| {
@@ -119,8 +106,22 @@ async fn main() -> Result<()> {
 
     println!("Dungeon String: {}", dungeon_str);
 
-    let mut dungeon = Dungeon::from_string(dungeon_str, &room_data_storage).unwrap();
+    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage)?;
+    let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
+    server.world.server = &mut server;
+    server.dungeon.server = &mut server;
 
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
+    tokio::spawn(
+        run_network_thread(
+            network_rx,
+            server.network_tx.clone(),
+            main_tx,
+        )
+    );
+
+    let dungeon = &server.dungeon;
+    
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
@@ -138,22 +139,29 @@ async fn main() -> Result<()> {
     }
 
     for door in &dungeon.doors {
-        dungeon.load_door(door, &mut server.world, &door_type_blocks);
+        door.load_into_world(&mut server.world, &door_type_blocks);
     }
 
-    let zombie_spawn_pos = Vec3f {
+    let zombie_spawn_pos = DVec3 {
         x: 25.0,
         y: 69.0,
         z: 25.0,
     };
     
-    let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
-    let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
+    // let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
+    // let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;
 
-    server.world.entities.insert(zombie.entity_id, zombie);
-    let text = ChatComponentTextBuilder::new("Hello World!").build();
-    server.world.player_info.update_text(1, text);
+    // server.world.entities.insert(zombie.entity_id, zombie);
 
+    let cata_line =
+        ChatComponentTextBuilder::new("")
+            .append(ChatComponentTextBuilder::new("Dungeon: ").color(MCColors::Aqua).bold().build())
+            .append(ChatComponentTextBuilder::new("Catacombs").color(MCColors::Gray).build())
+            .build();
+
+    server.world.player_info.set_line(0, cata_line);
+    
+    
     loop {
         tick_interval.tick().await;
 
@@ -161,20 +169,27 @@ async fn main() -> Result<()> {
             server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
         }
 
-        for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
-            if let Some(mut entity) = server.world.entities.remove(&entity_id) {
-                entity.ticks_existed += 1;
-                // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
-                let returned = entity.update(&mut server.world, &server.network_tx);
-                server.world.entities.insert(entity_id, returned);
-            }
-        }
+        server.dungeon.tick()?;
+        server.world.tick()?;
+        
+        // for entity_id in server.world.entities.keys().cloned().collect::<Vec<_>>() {
+        //     if let Some(mut entity) = server.world.entities.remove(&entity_id) {
+        //         entity.ticks_existed += 1;
+        //         // this may at some point be abused to prevent getting an entities own self if it iterates over world entities so be careful if you change this
+        //         let returned = entity.update(&mut server.world, &server.network_tx);
+        //         server.world.entities.insert(entity_id, returned);
+        //     }
+        // }
+
+        let tab_list_packet = server.world.player_info.get_packet();
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to actually be in a vanilla adjacent way.
-        for player in server.players.values_mut() {
+        for player in server.world.players.values_mut() {
             // println!("player ticked: {player:?}");
+            player.ticks_existed += 1;
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
+            
             // for entity in player.tracked_entities.iter() {
             //     if let Some(entity) = server.world.entities.get_mut(entity) {
             //         EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
@@ -182,82 +197,107 @@ async fn main() -> Result<()> {
             //     }
             // }
 
-            let room = dungeon.get_player_room(player);
+            let mut sidebar_lines = ScoreboardLines(Vec::new());
 
-            if player.scoreboard.header_dirty {
-                player.scoreboard.header_packet().send_packet(player.client_id, &server.network_tx)?;
+            // TODO: correctly handle date based on clock, handle room id according to current room
+            sidebar_lines.push(formatdoc! {r#"
+                §e§lSKYBLOCK
+                §7{date} §8m24§87W {room_id}
+
+                Winter 22nd
+                §73:10pm
+                 §7⏣ §cThe Catacombs §7(F7)
+
+            "#,
+            date = "06/14/25",
+            room_id = "730,-420",
+            });
+
+            match server.dungeon.state {
+                DungeonState::NotReady => {
+                    for (_, p) in &player.server_mut().world.players {
+                        sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
+                    }
+                    sidebar_lines.new_line();
+                }
+                DungeonState::Starting { tick_countdown } => {
+                    for (_, p) in &player.server_mut().world.players {
+                        sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
+                    }
+                    sidebar_lines.new_line();
+                    sidebar_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
+                    sidebar_lines.new_line();
+                }
+                DungeonState::Started { current_ticks } => {
+                    // this is scuffed but it works
+                    let seconds = current_ticks / 20;
+                    let time = if seconds >= 60 {
+                        let minutes = seconds / 60;
+                        let seconds = seconds % 60;
+                        format!("{}{}m{}{}s", if minutes < 10 { "0" } else { "" }, minutes, if seconds < 10 { "0" } else { "" }, seconds)
+                    } else {
+                        let seconds = seconds % 60;
+                        format!("{}{}s", if seconds < 10 { "0" } else { "" }, seconds)
+                    };
+                    // TODO: display correct keys, and cleared percentage
+                    // clear percentage is based on amount of tiles that are cleared.
+                    sidebar_lines.push(formatdoc! {r#"
+                        Keys: §c■ §c✖ §8§8■ §a0x
+                        Time elapsed: §a§a{time}
+                        Cleared: §c{clear_percent}% §8§8({score})
+
+                        §3§lSolo
+
+                    "#,
+                    clear_percent = "0",
+                    score = "0",
+                    });
+                }
+                DungeonState::Finished => {}
             }
 
-            // maybe another value if any lines are updated? this will just not pull any packets if nothing is updated but it will still iterate...
-            for packet in player.scoreboard.get_packets() {
+            if let Some(tab_list) = &tab_list_packet {
+                tab_list.clone().send_packet(player.client_id, &server.network_tx)?;
+            }
+
+            sidebar_lines.push_str("§emc.hypixel.net");
+
+            for packet in player.sidebar.update(sidebar_lines) {
                 packet.send_packet(player.client_id, &server.network_tx)?;
             }
-
-            if !player.scoreboard.displaying {
-                player.scoreboard.display_packet().send_packet(player.client_id, &server.network_tx)?;
-            }
-
-            if let Some(player_entity) = server.world.entities.get(&player.entity_id) {
-                if player_entity.ticks_existed % 20 == 0 {
-                    let seconds = player_entity.ticks_existed / 20;
-                    player.scoreboard.update_line("etime", format!("Time Elapsed: §a§a{seconds}s")); // this isnt accurate to hypixel atm but its ok!
-                }
-
-                if player_entity.ticks_existed % 150 == 0 {
-                    //player.scoreboard.add_line_at(0, "resize", "amazing");
-
-                    // player.scoreboard.update_header("NEW HEADER WOWOWOW");
-                }
-
-                if player_entity.ticks_existed % 250 == 0 {
-                    player.scoreboard.remove_line("etime");
-
-                    // player.scoreboard.update_header("old header :(");
-                }
-
-                if player_entity.ticks_existed % 5 == 0 {
-                    let mut current_index = 1;
-                    for pos in path.iter() {
-                        let particle = Particles::new(
-                            ParticleTypes::Crit,
-                            Vec3f::from(pos),
-                            Vec3f::new(0.1, 0.1, 0.1),
-                            0.0,
-                            current_index,
-                            true,
-                            None,
-                        );
-                        current_index += 1;
-
-                        particle?.send_packet(player.client_id, &server.network_tx)?;
-                    }
-                }
-
-                if player_entity.ticks_existed % 60 == 0 {
-                    EntityEffect {
-                        entity_id: player.entity_id,
-                        effect_id: HASTEID,
-                        amplifier: 2,
-                        duration: 200,
-                        hide_particles: true,
-                    }.send_packet(player.client_id, &server.network_tx)?;
-
-                    // EntityEffect {
-                    //     entity_id: player.entity_id,
-                    //     effect_id: NIGHTVISIONID,
-                    //     amplifier: 0,
-                    //     duration: 400,
-                    //     hide_particles: true,
-                    // }.send_packet(player.client_id, &server.network_tx)?;
-                }
-            }
-        }
-
-        // if  {  }
-
-        for room in dungeon.rooms.iter_mut() {
-            for crusher in room.crushers.iter_mut() {
-                crusher.tick(&mut server);
+            
+            // if player.ticks_existed % 5 == 0 {
+            //     let mut current_index = 1;
+            //     for pos in path.iter() {
+            //         let particle = Particles::new(
+            //             ParticleTypes::Crit,
+            //             DVec3::from(pos),
+            //             DVec3::new(0.1, 0.1, 0.1),
+            //             0.0,
+            //             current_index,
+            //             true,
+            //             None,
+            //         );
+            //         current_index += 1;
+            // 
+            //         particle?.send_packet(player.client_id, &server.network_tx)?;
+            //     }
+            // }
+            if player.ticks_existed % 60 == 0 {
+                player.send_packet(EntityEffect {
+                    entity_id: player.entity_id,
+                    effect: Effects::Haste,
+                    amplifier: 2,
+                    duration: 200,
+                    hide_particles: true,
+                })?;
+                player.send_packet(EntityEffect {
+                    entity_id: player.entity_id,
+                    effect: Effects::NightVision,
+                    amplifier: 0,
+                    duration: 400,
+                    hide_particles: true,
+                })?;
             }
         }
     }

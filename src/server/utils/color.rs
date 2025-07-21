@@ -1,22 +1,22 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum Color {
+#[serde(rename_all = "snake_case")]
+pub enum MCColors {
     Black,
-    Dark_Blue,
-    Dark_Green,
-    Dark_Cyan,
-    Dark_Red,
-    Dark_Purple,
+    DarkBlue,
+    DarkGreen,
+    DarkCyan,
+    DarkRed,
+    DarkPurple,
     Gold,
     Gray,
-    Dark_Gray,
+    DarkGray,
     Blue,
     Green,
     Aqua,
     Red,
-    Light_Purple,
+    LightPurple,
     Yellow,
     White,
     Reset,

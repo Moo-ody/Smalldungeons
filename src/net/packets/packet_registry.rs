@@ -2,22 +2,26 @@ use crate::net::connection_state::ConnectionState;
 use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
+use crate::net::packets::client_bound::close_window::CloseWindowPacket as CCloseWindowPacket;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
 use crate::net::packets::client_bound::custom_payload::CustomPayload;
 use crate::net::packets::client_bound::disconnect::Disconnect;
 use crate::net::packets::client_bound::display_scoreboard::DisplayScoreboard;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
+use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
 use crate::net::packets::client_bound::entity::entity_effect::EntityEffect;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
 use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
-use crate::net::packets::client_bound::entity::entity_metadata::EntityMetadata;
+use crate::net::packets::client_bound::entity::entity_metadata::PacketEntityMetadata;
+use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
 use crate::net::packets::client_bound::entity::entity_rel_move::EntityRelMove;
 use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
 use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
+use crate::net::packets::client_bound::open_window::OpenWindowPacket;
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::player_list_item::PlayerListItem;
@@ -27,13 +31,16 @@ use crate::net::packets::client_bound::scoreboard_objective::ScoreboardObjective
 use crate::net::packets::client_bound::server_info::ServerInfo;
 use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::sound_effect::SoundEffect;
-use crate::net::packets::client_bound::spawn_mob::SpawnMob;
+use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
+use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
 use crate::net::packets::client_bound::teams::Teams;
 use crate::net::packets::client_bound::update_score::UpdateScore;
 use crate::net::packets::client_bound::window_items::WindowItems;
 use crate::net::packets::server_bound::chat_message::ChatMessage;
 use crate::net::packets::server_bound::click_window::ClickWindow;
 use crate::net::packets::server_bound::client_settings::ClientSettings;
+use crate::net::packets::server_bound::client_status::ClientStatusPacket;
+use crate::net::packets::server_bound::close_window::CloseWindowPacket;
 use crate::net::packets::server_bound::confirm_transaction::ConfirmTransaction as SBConfirmTransaction;
 use crate::net::packets::server_bound::handshake::Handshake;
 use crate::net::packets::server_bound::held_item_change::HeldItemChange;
@@ -61,7 +68,9 @@ register_clientbound_packets! {
     CBKeepAlive,
     CBConfirmTransaction,
     Disconnect,
-    SpawnMob,
+    EntityAttach,
+    PacketSpawnMob,
+    PacketSpawnObject,
     DestroyEntities,
     EntityVelocity,
     SetSlot,
@@ -72,11 +81,13 @@ register_clientbound_packets! {
 
     EntityLookMove,
     EntityHeadLook,
-    EntityMetadata,
+    PacketEntityMetadata,
     EntityRelMove,
     EntityLook,
     EntityTeleport,
     EntityEffect,
+    EntityProperties,
+    CCloseWindowPacket,
     
     SoundEffect,
     Particles,
@@ -87,7 +98,7 @@ register_clientbound_packets! {
     UpdateScore,
     DisplayScoreboard,
     Teams,
-    
+    OpenWindowPacket,
 }
 
 register_serverbound_packets! {
@@ -108,7 +119,9 @@ register_serverbound_packets! {
         0x0e => ClickWindow,
         0x07 => PlayerDigging,
         0x15 => ClientSettings,
+        0x16 => ClientStatusPacket,
         0x0F => SBConfirmTransaction,
+        0x0d => CloseWindowPacket,
     },
     ConnectionState::Status {
         0x00 => StatusRequest,

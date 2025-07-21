@@ -1,12 +1,13 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::packets::packet_write::PacketWrite;
+use crate::server::utils::sized_string::SizedString;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Clone, Debug)]
 pub struct CustomPayload {
     // must not be longer than 20
-    pub channel: String,
+    pub channel: SizedString<20>,
     pub data: Vec<u8>,
 }
 

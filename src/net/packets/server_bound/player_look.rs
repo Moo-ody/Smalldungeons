@@ -1,5 +1,5 @@
 use crate::net::packets::packet::ServerBoundPacket;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
@@ -22,10 +22,9 @@ impl ServerBoundPacket for PlayerLook {
         })
     }
 
-    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        let entity = player.get_entity_mut(world)?;
-        entity.yaw = self.yaw;
-        entity.pitch = self.pitch;
+    fn main_process(&self, _: &mut World, player: &mut Player) -> anyhow::Result<()> {
+        player.yaw = self.yaw;
+        player.pitch = self.pitch;
         Ok(())
     }
 }

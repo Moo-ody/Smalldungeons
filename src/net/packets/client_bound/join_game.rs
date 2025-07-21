@@ -1,6 +1,6 @@
 use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
-use crate::server::entity::entity::Entity;
+use crate::server::player::player::Player;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone, Copy)]
@@ -15,8 +15,8 @@ pub struct JoinGame {
 }
 
 impl JoinGame {
-    pub fn from_entity(player: &Entity) -> JoinGame {
-        JoinGame {
+    pub fn from_player(player: &Player) -> Self {
+        Self {
             entity_id: player.entity_id,
             gamemode: 0,
             dimension: 0,

@@ -1,7 +1,7 @@
 //! contains enums for messages sent between threads. 
 
 use crate::net::packets::packet_registry::{ClientBoundPacket, ServerBoundPackets};
-use crate::server::player::ClientId;
+use crate::server::player::player::ClientId;
 
 // too many comments because theres 4 different client disconnect related messages and theyre all needed and do different things...
 
@@ -39,6 +39,7 @@ pub enum MainThreadMessage {
 
     NewPlayer {
         client_id: ClientId,
+        username: String,
     },
 
     ClientDisconnected {

@@ -1,22 +1,22 @@
-use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::client_bound::sound_effect::{SoundEffect, Sounds};
+use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::net::packets::packet::SendPacket;
 use crate::server::block::blocks::Blocks::Air;
-use crate::server::entity::entity::Entity;
-use crate::server::player::Player;
+use crate::server::player::player::Player;
+use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::particles::ParticleTypes::SpellWitch;
-use crate::server::utils::vec3f::Vec3f;
+use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
+use crate::utils::bitset::BitSet;
 use std::f64::consts::PI;
-use tokio::sync::mpsc::UnboundedSender;
 
-const VALID_ETHER_WARP_BLOCK_IDS: &[u16] = &[
-    0, 6, 9, 11, 30, 31, 32, 36, 37, 38, 39, 40, 50, 51, 55, 59, 65, 66, 69, 76, 77, 78,
-    93, 94, 104, 105, 106, 111, 115, 131, 132, 140, 141, 142, 143, 144, 149, 150, 157, 171, 175
-];
-
+const VALID_ETHER_WARP_BLOCK_IDS: BitSet<3> = BitSet::new(
+    &[
+        0, 6, 9, 11, 30, 31, 32, 36, 37, 38, 39, 40, 50, 51, 55, 59, 65, 66, 69, 76, 77, 78,
+        93, 94, 104, 105, 106, 111, 115, 131, 132, 140, 141, 142, 143, 144, 149, 150, 157, 171, 175
+    ]
+);
 
 enum EtherResult {
     Valid(i32, i32, i32),
@@ -25,22 +25,20 @@ enum EtherResult {
 
 pub fn handle_ether_warp(
     player: &Player,
-    network_tx: &UnboundedSender<NetworkThreadMessage>,
     world: &World,
-    entity: &Entity
 ) -> anyhow::Result<()> {
-    let mut start_pos = entity.pos.clone();
+    let mut start_pos = player.position.clone();
     start_pos.y += 1.54; // assume always sneaking
 
     let end_pos = {
-        let yaw = entity.yaw as f64;
-        let pitch = entity.pitch as f64;
+        let yaw = player.yaw as f64;
+        let pitch = player.pitch as f64;
         let rad_yaw = -yaw.to_radians() - PI;
         let rad_pitch = -pitch.to_radians();
 
         let f2 = -rad_pitch.cos();
 
-        let mut pos = Vec3f {
+        let mut pos = DVec3 {
             x: rad_yaw.sin() * f2,
             y: rad_pitch.sin(),
             z: rad_yaw.cos() * f2,
@@ -54,20 +52,16 @@ pub fn handle_ether_warp(
     };
 
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
-
-        if let Ok(packet) = Particles::new(
+        player.send_packet(Particles::new(
             SpellWitch,
-            entity.pos,
-            Vec3f::new(0.25, 1.0, 0.25),
+            player.position,
+            DVec3::new(0.25, 1.0, 0.25),
             0.0,
             25,
             true,
             None,
-        ) {
-            packet.send_packet(player.client_id, network_tx)?;
-        }
-
-        PositionLook {
+        ).unwrap())?;
+        player.send_packet(PositionLook {
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
             z: z as f64 + 0.5,
@@ -77,21 +71,20 @@ pub fn handle_ether_warp(
             // while keeping yaw and pitch relative (meaning it is added to players yaw)
             // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
             flags: 24,
-        }.send_packet(player.client_id, network_tx)?;
-
-        SoundEffect {
+        })?;
+        player.send_packet(SoundEffect {
             sounds: Sounds::EnderDragonHit,
             volume: 1.0,
             pitch: 0.53968257,
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
             z: z as f64 + 0.5,
-        }.send_packet(player.client_id, network_tx)?;
+        })?;
     }
     Ok(())
 }
 
-fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
+fn traverse_voxels(world: &World, start: DVec3, end: DVec3) -> EtherResult {
     let (x0, y0, z0) = (start.x, start.y, start.z);
     let (x1, y1, z1) = (end.x, end.y, end.z);
 
@@ -124,13 +117,13 @@ fn traverse_voxels(world: &World, start: Vec3f, end: Vec3f) -> EtherResult {
         let current_block = world.get_block_at(x, y, z);
 
         if current_block != Air {
-            if VALID_ETHER_WARP_BLOCK_IDS.contains(&(current_block.get_block_state_id() >> 4)) {
+            if VALID_ETHER_WARP_BLOCK_IDS.contains((current_block.get_block_state_id() >> 4) as usize) {
                 return EtherResult::Failed;
             }
             let block_up1 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
-            let block_up2 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
+            let block_up2 = world.get_block_at(x, y + 2, z).get_block_state_id() >> 4;
 
-            return if VALID_ETHER_WARP_BLOCK_IDS.contains(&block_up1) && VALID_ETHER_WARP_BLOCK_IDS.contains(&block_up2) {
+            return if VALID_ETHER_WARP_BLOCK_IDS.contains(block_up1 as usize) && VALID_ETHER_WARP_BLOCK_IDS.contains(block_up2 as usize) {
                 EtherResult::Valid(x, y, z)
             } else {
                 EtherResult::Failed

@@ -1,4 +1,4 @@
-pub mod vec3f;
+pub mod dvec3;
 pub mod aabb;
 pub mod nbt;
 pub mod chat_component;
@@ -6,4 +6,6 @@ pub mod color;
 pub mod direction;
 pub mod particles;
 pub mod player_list;
-pub mod scoreboard;
+pub mod sounds;
+pub mod sized_string;
+pub mod fvec3;

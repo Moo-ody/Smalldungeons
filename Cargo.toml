@@ -1,7 +1,7 @@
 [package]
 name = "RustClear"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bytes = "1.10.1"
@@ -15,4 +15,4 @@ rand = "0.9.1"
 indexmap = "2.9.0"
 indoc = "2.0.6"
 include_dir = "0.7.4"
-blocks = { path = "crates/blocks" }
+blocks = { path = "crates/macros" }
