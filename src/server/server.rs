@@ -117,6 +117,14 @@ impl Server {
                 // let entity = self.world.spawn_entity(spawn_point, Zombie, None)?;
 
                 self.world.players.insert(client_id, player);
+                //
+                // let mut buf = Vec::new();
+                // "hypixel".write(&mut buf);
+                //
+                // CustomPayload {
+                //     channel: "MC|Brand".into(),
+                //     data: buf,
+                // }.send_packet(client_id, &self.network_tx)?;
             },
             MainThreadMessage::ClientDisconnected { client_id } => {
                 self.world.players.remove(&client_id);

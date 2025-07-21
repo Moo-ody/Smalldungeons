@@ -24,7 +24,6 @@ impl PlayerListItem {
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for PlayerListItem {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> std::io::Result<()> {
-        println!("{:?}", self);
         let mut payload = Vec::new();
         VarInt(0x38).write(&mut payload);
 
