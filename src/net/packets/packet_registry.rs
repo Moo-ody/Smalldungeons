@@ -1,8 +1,10 @@
 use crate::net::connection_state::ConnectionState;
+use crate::net::packets::client_bound::block_action::PacketBlockAction;
 use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::client_bound::chat::Chat;
 use crate::net::packets::client_bound::chunk_data::ChunkData;
 use crate::net::packets::client_bound::close_window::CloseWindowPacket as CCloseWindowPacket;
+use crate::net::packets::client_bound::collect_item::PacketCollectItem;
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction as CBConfirmTransaction;
 use crate::net::packets::client_bound::custom_payload::CustomPayload;
 use crate::net::packets::client_bound::disconnect::Disconnect;
@@ -10,6 +12,7 @@ use crate::net::packets::client_bound::display_scoreboard::DisplayScoreboard;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
 use crate::net::packets::client_bound::entity::entity_effect::EntityEffect;
+use crate::net::packets::client_bound::entity::entity_equipment::EntityEquipment;
 use crate::net::packets::client_bound::entity::entity_head_look::EntityHeadLook;
 use crate::net::packets::client_bound::entity::entity_look::EntityLook;
 use crate::net::packets::client_bound::entity::entity_look_move::EntityLookMove;
@@ -87,8 +90,10 @@ register_clientbound_packets! {
     EntityTeleport,
     EntityEffect,
     EntityProperties,
+    EntityEquipment,
     CCloseWindowPacket,
-    
+    PacketCollectItem,
+    PacketBlockAction,
     SoundEffect,
     Particles,
     

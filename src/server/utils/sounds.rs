@@ -24,6 +24,10 @@ macro_rules! id_enum {
 
 id_enum! {
     pub enum Sounds: &'static str {
-        EnderDragonHit("mob.enderdragon.hit")
+        EnderDragonHit("mob.enderdragon.hit"),
+        Harp("note.harp"),
+        Orb("random.orb"),
+        Pop("random.pop"),
+        ChestOpen("random.chestopen"),
     }
 }

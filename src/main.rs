@@ -7,23 +7,33 @@ use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::RoomData;
+use crate::dungeon::room::secrets;
+use crate::dungeon::room::secrets::SecretType::WitherEssence;
+use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
 use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
 use crate::net::packets::packet::SendPacket;
 use crate::net::run_network::run_network_thread;
+use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
+use crate::server::items::item_stack::ItemStack;
 use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
+use crate::server::utils::aabb::AABB;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
+use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
 use anyhow::Result;
+use chrono::Local;
 use include_dir::include_dir;
 use indoc::formatdoc;
 use rand::seq::IndexedRandom;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
+use std::rc::Rc;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -147,10 +157,62 @@ async fn main() -> Result<()> {
             .build();
 
     server.world.player_info.set_line(0, cata_line);
+
+    let mut dungeon_secret =  Rc::new(RefCell::new(DungeonSecret {
+        secret_type: WitherEssence {
+            
+        },
+        spawn_aabb: AABB {
+            min: DVec3::new(10.0, 69.0, 10.0),
+            max: DVec3::new(15.0, 75.0, 15.0),
+        },
+        block_pos: BlockPos::new(13, 69, 13),
+        has_spawned: false,
+        obtained: false,
+    }));
+
+    server.world.set_block_at(Blocks::DiamondBlock, 13, 68, 13);
+
+
+    let mut dungeon_secret2 = Rc::new(RefCell::new(DungeonSecret {
+        secret_type: SecretType::Item {
+            item: ItemStack {
+                item: 368,
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: None,
+            },
+        },
+        spawn_aabb: AABB {
+            min: DVec3::new(10.0, 69.0, 10.0),
+            max: DVec3::new(15.0, 75.0, 15.0),
+        },
+        block_pos: BlockPos::new(11, 69, 13),
+        has_spawned: false,
+        obtained: false,
+    }));
+
+    server.world.set_block_at(Blocks::DiamondBlock, 11, 68, 13);
+    
+    let mut dungeon_secret3 = Rc::new(RefCell::new(DungeonSecret {
+        secret_type: SecretType::Chest {
+            direction: Direction::North
+        },
+        spawn_aabb: AABB {
+            min: DVec3::new(10.0, 69.0, 10.0),
+            max: DVec3::new(15.0, 75.0, 15.0),
+        },
+        block_pos: BlockPos::new(15, 69, 13),
+        has_spawned: false,
+        obtained: false,
+    }));
+
+    server.world.set_block_at(Blocks::DiamondBlock, 15, 68, 13);
     
     
     loop {
         tick_interval.tick().await;
+        // let start = Instant::now();
 
         while let Ok(message) = main_rx.try_recv() {
             server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
@@ -177,26 +239,30 @@ async fn main() -> Result<()> {
             player.ticks_existed += 1;
             ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
             
-            // for entity in player.tracked_entities.iter() {
-            //     if let Some(entity) = server.world.entities.get_mut(entity) {
-            //         EntityLookMove::from_entity(entity).send_packet(player.client_id, &server.network_tx)?;
-            //         EntityHeadLook::new(entity.entity_id, entity.head_yaw).send_packet(player.client_id, &server.network_tx)?;
-            //     }
-            // }
+            if player.ticks_existed % 20 == 0 {
+                secrets::tick(&dungeon_secret, player);
+                secrets::tick(&dungeon_secret2, player);
+                secrets::tick(&dungeon_secret3, player);
+            }
 
             let mut sidebar_lines = ScoreboardLines(Vec::new());
 
-            // TODO: correctly handle date based on clock, handle room id according to current room
+            let now = Local::now();
+            let date = now.format("%m/%d/%y").to_string();
+            // maybe match hypixels sb time?
+            let time = now.format("%-I:%M%P").to_string();
+
+            // TODO: handle room id according to current room
+            // maybe fix winter 22nd
             sidebar_lines.push(formatdoc! {r#"
                 §e§lSKYBLOCK
-                §7{date} §8m24§87W {room_id}
+                §7{date} §8local {room_id}
 
                 Winter 22nd
-                §73:10pm
+                §7{time}
                  §7⏣ §cThe Catacombs §7(F7)
 
             "#,
-            date = "06/14/25",
             room_id = "730,-420",
             });
 
@@ -287,5 +353,6 @@ async fn main() -> Result<()> {
                 })?;
             }
         }
+        // println!("time elapsed {:?}", start.elapsed());
     }
 }

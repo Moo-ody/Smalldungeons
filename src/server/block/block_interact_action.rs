@@ -1,6 +1,15 @@
 use crate::dungeon::dungeon_state::DungeonState;
+use crate::dungeon::room::secrets::{DungeonSecret, EssenceEntity};
+use crate::net::packets::client_bound::block_action::PacketBlockAction;
+use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::server::block::block_pos::BlockPos;
+use crate::server::block::blocks::Blocks;
+use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::Player;
+use crate::server::utils::dvec3::DVec3;
+use crate::server::utils::sounds::Sounds;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub enum BlockInteractAction {
     WitherDoor {
@@ -9,6 +18,13 @@ pub enum BlockInteractAction {
     BloodDoor {
         door_index: usize
     },
+    Chest {
+        secret: Rc<RefCell<DungeonSecret>>,
+    },
+    WitherEssence {
+        secret: Rc<RefCell<DungeonSecret>>
+    },
+    // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
 
@@ -29,6 +45,63 @@ impl BlockInteractAction {
                 }
             }
 
+            Self::Chest { secret } => {
+                let mut secret = secret.borrow_mut();
+                if !secret.obtained {
+                    let p = PacketBlockAction {
+                        block_pos: block_pos.clone(),
+                        event_id: 1,
+                        event_data: 1,
+                        block_id: 54,
+                    };
+                    player.send_packet(p).unwrap();
+                    player.send_packet(SoundEffect {
+                        sounds: Sounds::ChestOpen,
+                        volume: 1.0,
+                        pitch: 0.975,
+                        x: block_pos.x as f64,
+                        y: block_pos.y as f64,
+                        z: block_pos.z as f64,
+                    }).unwrap();
+
+                    secret.obtained = true;
+                }
+                /*
+[19:37:29] sound random.chestopen, 0.5 0.9206349 -94.0 82.0 -51.0
+[19:37:29] sound random.chestopen, 0.5 0.984127 -93.5 82.5 -50.5
+
+// if its a blessing, can likely re-use wither essence as these values appear to be the same
+
+[19:37:29] sound note.harp, 1.0 0.7936508 -94.0 82.0 -51.0
+[19:37:29] sound note.harp, 1.0 0.8888889 -94.0 82.0 -51.0
+[19:37:30] sound note.harp, 1.0 1.0 -94.0 82.0 -51.0
+[19:37:30] sound note.harp, 1.0 1.0952381 -94.0 82.0 -51.0
+[19:37:30] sound note.harp, 1.0 1.1904762 -94.0 82.0 -51.0
+                */
+                // player.send_msg("hi").unwrap();
+            }
+            
+            Self::WitherEssence { secret } => {
+                let mut secret = secret.borrow_mut();
+                debug_assert!(!secret.obtained);
+
+                let world = player.world_mut();
+
+                world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
+                world.interactable_blocks.remove(block_pos);
+
+                world.spawn_entity(
+                    DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
+                    EntityMetadata {
+                        variant: EntityVariant::ArmorStand,
+                        is_invisible: true,
+                    },
+                    EssenceEntity,
+                ).unwrap();
+
+                secret.obtained = true;
+            }
+            
             Self::Callback(func) => {
                 func(player, block_pos);
             }

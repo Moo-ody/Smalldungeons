@@ -5,7 +5,7 @@ use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_pos::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::{Entity, EntityImpl};
-use crate::server::entity::entity_metadata::EntityVariant;
+use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world;
 use crate::server::world::World;
@@ -124,7 +124,10 @@ impl Door {
                 
                 let id = world.spawn_entity(
                     DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
-                    EntityVariant::Bat { hanging: false },
+                    EntityMetadata {
+                        variant: EntityVariant::Bat { hanging: false },
+                        is_invisible: true
+                    },
                     DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
                 ).unwrap();
                 entities.push(id);
@@ -202,17 +205,19 @@ impl EntityImpl for DoorEntityImpl {
         entity.position.y -= self.distance_per_tick;
         self.ticks_left -= 1;
         if self.ticks_left == 0 {
-            entity.world_mut().despawn_entity(entity.id).unwrap();
+            entity.world_mut().despawn_entity(entity.id);
         }
     }
 
     fn despawn(&mut self, entity: &mut Entity) {
+        // // next entity id is always the one riding on top of it
+        // let destroy_packet = DestroyEntities {
+        //     entity_ids: vec![entity.id + 1],
+        // };
         // next entity id is always the one riding on top of it
-        let destroy_packet = DestroyEntities {
-            entity_ids: vec![entity.id + 1],
-        };
-        for player in entity.world_mut().players.values() {
-            player.send_packet(destroy_packet.clone()).unwrap();
-        }
+        entity.world_mut().despawn_entity(entity.id + 1);
+        // for player in entity.world_mut().players.values() {
+        //     player.send_packet(destroy_packet.clone()).unwrap();
+        // }
     }
 }
