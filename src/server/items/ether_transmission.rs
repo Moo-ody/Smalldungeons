@@ -1,13 +1,12 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::packet::SendPacket;
+use crate::net::packets::protocol::clientbound::PositionLook;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn handle_teleport(
-    player: &Player,
+    player: &mut Player,
     network_tx: &UnboundedSender<NetworkThreadMessage>,
 ) -> anyhow::Result<()> {
     let mut start_pos = player.position.clone();
@@ -32,8 +31,8 @@ pub fn handle_teleport(
 
         pos + start_pos
     };
-
-    PositionLook {
+    
+    player.write_packet(&PositionLook {
         x: end_pos.x as f64 + 0.5,
         y: end_pos.y as f64 + 1.05,
         z: end_pos.z as f64 + 0.5,
@@ -42,7 +41,7 @@ pub fn handle_teleport(
         // flags make x y z absolute, and yaw/pitch relative,
         // since yaw and pitch is 0, it doesn't rotate the player
         flags: 24,
-    }.send_packet(player.client_id, network_tx)?;
+    });
 
     Ok(())
 }

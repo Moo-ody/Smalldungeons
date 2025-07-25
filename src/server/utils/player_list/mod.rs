@@ -2,11 +2,13 @@ pub mod player_profile;
 pub mod header;
 pub mod footer;
 
-use crate::net::packets::client_bound::player_list_item::{PlayerListAction, PlayerListItem};
+use crate::net::packets::protocol::clientbound::PlayerListItem;
+use crate::net::var_int::VarInt;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
 use crate::server::utils::player_list::player_profile::{GameProfile, PlayerData};
 use std::array;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 pub struct PlayerList {
     lines: [PlayerData; 80],
@@ -38,11 +40,17 @@ impl PlayerList {
             self.lines[index].clone()
         }).collect::<Vec<_>>();
 
-        Some(PlayerListItem::new(PlayerListAction::UpdateDisplayName, lines))
+        Some(PlayerListItem {
+            action: VarInt(3),
+            players: Rc::from(lines),
+        })
     }
 
     pub fn new_packet(&mut self) -> PlayerListItem {
-        PlayerListItem::new(PlayerListAction::AddPlayer, self.lines.clone())
+        PlayerListItem {
+            action: VarInt(0),
+            players: Rc::from(self.lines.clone()), // i dont think rc doesnt anything
+        }
     }
 }
 

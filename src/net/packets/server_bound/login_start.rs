@@ -1,8 +1,9 @@
 use crate::net::connection_state::ConnectionState;
-use crate::net::internal_packets::MainThreadMessage;
-use crate::net::packets::client_bound::login_success::LoginSuccess;
-use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
+use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
+use crate::net::packets::old_packet::ServerBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::packets::packet_context::PacketContext;
+use crate::net::packets::protocol::clientbound::LoginSuccess;
 use crate::net::var_int::read_var_int;
 use anyhow::Context;
 use bytes::BytesMut;
@@ -24,11 +25,20 @@ impl ServerBoundPacket for LoginStart {
 
     async fn process<'a>(&self, context: PacketContext<'a>) -> anyhow::Result<()> {
         println!("Player {} is attempting to log in.", self.username);
-
-        LoginSuccess {
-            uuid: "d74cb748-b23b-4a99-b41e-b85f73d41999".to_string(), // dummy uuid because we dont need auth for local
-            name: self.username.clone(),
-        }.send_packet(context.client.client_id(), context.network_tx)?;
+        
+        context.network_tx.send(NetworkThreadMessage::SendPackets {
+            client_id: context.client.client_id(),
+            buffer: {
+                let mut buffer = PacketBuffer { buf: Vec::new() };
+                // dummy uuid because we dont need auth for local
+                // but should allow skin
+                buffer.write_packet(&LoginSuccess {
+                    uuid: "d74cb748-b23b-4a99-b41e-b85f73d41999".to_string(),
+                    name: self.username.clone(),
+                });
+                buffer.buf
+            },
+        })?;
 
         context.client.connection_state = ConnectionState::Play;
 

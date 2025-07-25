@@ -1,6 +1,20 @@
+mod packet_serializable;
+
+use crate::packet_serializable::packet_serializable_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Fields, Ident, ItemEnum};
+
+#[proc_macro]
+pub fn packet_serializable(input: TokenStream) -> TokenStream {
+    packet_serializable_macro(input)
+}
+
+// todo: new file for block stuff
+// at that point im redoing the macro
+// because it is really annoying if a block has a niche metadata serializations
+// and i don't want to have a bunch of direction enum copies,
+// also want to be able to specify vanilla block toughness
 
 type TokenStream2 = proc_macro2::TokenStream;
 

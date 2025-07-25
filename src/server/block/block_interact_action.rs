@@ -1,13 +1,11 @@
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::secrets::{DungeonSecret, EssenceEntity};
-use crate::net::packets::client_bound::block_action::PacketBlockAction;
-use crate::net::packets::client_bound::sound_effect::SoundEffect;
-use crate::server::block::block_pos::BlockPos;
+use crate::net::packets::protocol::clientbound::{BlockAction, SoundEffect};
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
-use crate::server::utils::sounds::Sounds;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -30,7 +28,7 @@ pub enum BlockInteractAction {
 
 
 impl BlockInteractAction {
-    pub fn interact(&self, player: &Player, block_pos: &BlockPos) {
+    pub fn interact(&self, player: &mut Player, block_pos: &BlockPos) {
         match self {
             Self::WitherDoor { door_index: id } |
             Self::BloodDoor { door_index: id } => {
@@ -48,22 +46,21 @@ impl BlockInteractAction {
             Self::Chest { secret } => {
                 let mut secret = secret.borrow_mut();
                 if !secret.obtained {
-                    let p = PacketBlockAction {
+                    // maybe make this a packet where it is sent to all players
+                    player.write_packet(&BlockAction {
                         block_pos: block_pos.clone(),
                         event_id: 1,
                         event_data: 1,
                         block_id: 54,
-                    };
-                    player.send_packet(p).unwrap();
-                    player.send_packet(SoundEffect {
-                        sounds: Sounds::ChestOpen,
+                    });
+                    player.write_packet(&SoundEffect {
+                        sound: "random.chestopen",
+                        pos_x: block_pos.x as f64,
+                        pos_y: block_pos.y as f64,
+                        pos_z: block_pos.z as f64,
                         volume: 1.0,
                         pitch: 0.975,
-                        x: block_pos.x as f64,
-                        y: block_pos.y as f64,
-                        z: block_pos.z as f64,
-                    }).unwrap();
-
+                    });
                     secret.obtained = true;
                 }
                 /*

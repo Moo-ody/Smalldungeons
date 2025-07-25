@@ -1,4 +1,4 @@
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// Double (f64) Vec3

@@ -40,6 +40,7 @@ impl PlayerData {
     }
 }
 
+// todo merge with one in player
 #[derive(Debug, Clone)]
 pub struct GameProfile {
     pub id: Uuid,

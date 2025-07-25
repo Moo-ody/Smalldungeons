@@ -4,7 +4,7 @@ use crate::dungeon::room::room::Room;
 use crate::dungeon::room::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::world;
@@ -264,8 +264,8 @@ impl Dungeon {
                     let s = if seconds_remaining == 1 { "" } else { "s" };
                     let str = format!("§aStarting in {} second{}.", seconds_remaining, s);
 
-                    for (_, player) in &server.world.players {
-                        player.send_msg(&str)?;
+                    for (_, player) in server.world.players.iter_mut() {
+                        player.send_message(&str);
                     }
                 }
             }

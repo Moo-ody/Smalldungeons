@@ -1,5 +1,5 @@
 pub mod block_parameter;
-pub mod block_pos;
+pub mod block_position;
 pub mod blocks;
 pub mod metadata;
 pub mod rotatable;

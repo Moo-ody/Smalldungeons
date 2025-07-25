@@ -1,5 +1,5 @@
 use crate::net::connection_state::ConnectionState;
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::var_int::read_var_int;
 use anyhow::{bail, Context, Result};

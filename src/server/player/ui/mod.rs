@@ -58,7 +58,7 @@ impl UI {
             UI::None => player.sync_inventory()?,
             UI::Inventory => {
                 if packet.slot_id == 44 { 
-                    player.open_ui(UI::SkyblockMenu)?;
+                    // player.open_ui(UI::SkyblockMenu)?;
                     return Ok(())
                 }
                 if player.inventory.click_slot(&packet, &player.client_id, &player.network_tx)? { 
@@ -80,7 +80,7 @@ impl UI {
                             _ => {}
                         }
                     }
-                    49 => player.close_ui()?,
+                    // 49 => player.close_ui()?,
                     _ => {}
                 }
                 player.sync_inventory()?;

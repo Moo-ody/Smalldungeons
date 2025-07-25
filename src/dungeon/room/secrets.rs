@@ -1,11 +1,7 @@
-use crate::net::packets::client_bound::collect_item::PacketCollectItem;
-use crate::net::packets::client_bound::entity::entity_equipment::EntityEquipment;
-use crate::net::packets::client_bound::entity::entity_metadata::PacketEntityMetadata;
-use crate::net::packets::client_bound::entity::entity_velocity::EntityVelocity;
-use crate::net::packets::client_bound::particles::Particles;
-use crate::net::packets::client_bound::sound_effect::SoundEffect;
+use crate::net::packets::protocol::clientbound::{CollectItem, EntityEquipment, EntityVelocity, PacketEntityMetadata, Particles, SoundEffect};
+use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::{Entity, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
@@ -16,8 +12,6 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
-use crate::server::utils::particles::ParticleTypes;
-use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
@@ -105,17 +99,19 @@ pub struct ItemSecretEntity;
 // this isn't necessarily a secret, simply an animation for one, can be re-used for blessings
 impl EntityImpl for ItemSecretEntity {
     fn spawn(&mut self, entity: &mut Entity) {
-        for player in entity.world_mut().players.values() {
-            player.send_packet(PacketEntityMetadata {
-                entity_id: entity.id,
-                metadata: entity.metadata.clone()
-            }).unwrap();
-            player.send_packet(EntityVelocity {
-                entity_id: entity.id,
-                motion_x: 0.0,
-                motion_y: 0.2,
-                motion_z: 0.0,
-            }).unwrap();
+        let metadata_packet = &PacketEntityMetadata {
+            entity_id: VarInt(entity.id),
+            metadata: entity.metadata.clone(),
+        };
+        let velocity_packet = &EntityVelocity {
+            entity_id: VarInt(entity.id),
+            velocity_x: 0,
+            velocity_y: 0,
+            velocity_z: 0,
+        };
+        for player in entity.world_mut().players.values_mut() {
+            player.write_packet(metadata_packet);
+            player.write_packet(velocity_packet);
         }
     }
     
@@ -128,13 +124,13 @@ impl EntityImpl for ItemSecretEntity {
             // since it is really easy for item drop to de-sync
             entity.last_position = DVec3::ZERO;
 
-            for player in entity.world_mut().players.values() {
-                player.send_packet(EntityVelocity {
-                    entity_id: entity.id,
-                    motion_x: 0.0,
-                    motion_y: 0.0,
-                    motion_z: 0.0,
-                }).unwrap();
+            for player in entity.world_mut().players.values_mut() {
+                player.write_packet(&EntityVelocity {
+                    entity_id: VarInt(entity.id),
+                    velocity_x: 0,
+                    velocity_y: 0,
+                    velocity_z: 0,
+                });
             }
         }
         
@@ -146,20 +142,20 @@ impl EntityImpl for ItemSecretEntity {
             DVec3::new(entity.position.x - W, entity.position.y - H, entity.position.z - W),
             DVec3::new(entity.position.x + W, entity.position.y + H, entity.position.z + W),
         );
-        for player in entity.world_mut().players.values() {
+        for player in entity.world_mut().players.values_mut() {
             if player.collision_aabb().intersects(&aabb) { 
-                player.send_packet(PacketCollectItem {
-                    item_entity_id: entity.id,
-                    entity_id: player.entity_id,
-                }).unwrap();
-                player.send_packet(SoundEffect {
-                    sounds: Sounds::Pop,
-                    volume: 0.2,
-                    pitch: 1.7619047,
-                    x: player.position.x,
-                    y: player.position.y,
-                    z: player.position.z,
-                }).unwrap();
+                player.write_packet(&CollectItem {
+                    item_entity_id: VarInt(entity.id),
+                    entity_id: VarInt(player.entity_id),
+                });
+                // player.send_packet(SoundEffect {
+                //     sounds: Sounds::Pop,
+                //     volume: 0.2,
+                //     pitch: 1.7619047,
+                //     x: player.position.x,
+                //     y: player.position.y,
+                //     z: player.position.z,
+                // }).unwrap();
                 entity.world_mut().despawn_entity(entity.id);
                 break;
             }
@@ -173,9 +169,9 @@ pub struct EssenceEntity;
 impl EntityImpl for EssenceEntity {
     
     fn spawn(&mut self, entity: &mut Entity) {
-        for player in entity.world_mut().players.values() {
-            player.send_packet(EntityEquipment {
-                entity_id: entity.id,
+        for player in entity.world_mut().players.values_mut() {
+            player.write_packet(&EntityEquipment {
+                entity_id: VarInt(entity.id),
                 item_slot: 4,
                 item_stack: Some(ItemStack {
                     item: 397,
@@ -196,55 +192,55 @@ impl EntityImpl for EssenceEntity {
                         ]),
                     ])),
                 }),
-            }).unwrap()
+            });
         }
     }
     
     fn tick(&mut self, entity: &mut Entity) {
-        entity.position.y += 0.05;
+        entity.position.y += 0.04;
         entity.yaw += 15.0;
         
         if entity.ticks_existed % 5 == 0 {
-            for player in entity.world_mut().players.values() {
-                player.send_packet(Particles::new(
-                    ParticleTypes::Cloud,
-                    entity.position.clone().add_y(1.5),
-                    DVec3::ZERO,
-                    0.06,
-                    5,
-                    true,
-                    None,
-                ).unwrap()).unwrap();
-                
-                player.send_packet(SoundEffect {
-                    sounds: Sounds::Harp,
-                    volume: 1.0,
-                    pitch: 0.8 + ((entity.ticks_existed / 5) as f32 * 0.1),
-                    x: entity.position.x,
-                    y: entity.position.y + 1.5,
-                    z: entity.position.z,
-                }).unwrap()
+            // todo, constants
+            let particle_packet = Particles {
+                particle_id: 29,
+                long_distance: true,
+                x: entity.position.x as f32,
+                y: entity.position.y as f32 + 1.5,
+                z: entity.position.z as f32,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                offset_z: 0.0,
+                speed: 0.06,
+                count: 5,
+            };
+            let sound_packet = SoundEffect {
+                sound: "note.harp",
+                pos_x: entity.position.x,
+                pos_y: entity.position.y + 1.5,
+                pos_z: entity.position.z,
+                volume: 1.0,
+                pitch: 0.8 + ((entity.ticks_existed / 5) as f32 * 0.1),
+            };
+            for player in entity.world_mut().players.values_mut() {
+                player.write_packet(&particle_packet);
+                player.write_packet(&sound_packet);
             }
         }
         
         if entity.ticks_existed == 20 {
-            for player in entity.world_mut().players.values() {
-                player.send_packet(SoundEffect {
-                    sounds: Sounds::Orb,
-                    volume: 1.0,
-                    pitch: 1.5,
-                    x: entity.position.x,
-                    y: entity.position.y,
-                    z: entity.position.z,
-                }).unwrap();
-                player.send_packet(SoundEffect {
-                    sounds: Sounds::Orb,
-                    volume: 1.0,
-                    pitch: 1.5,
-                    x: entity.position.x,
-                    y: entity.position.y,
-                    z: entity.position.z,
-                }).unwrap();
+            let sound_packet = SoundEffect {
+                sound: "random.orb",
+                pos_x: entity.position.x,
+                pos_y: entity.position.y,
+                pos_z: entity.position.z,
+                volume: 1.0,
+                pitch: 1.5,
+            };
+            for player in entity.world_mut().players.values_mut() {
+                // for whatever reason, this sent twice on hypixel
+                player.write_packet(&sound_packet);
+                player.write_packet(&sound_packet);
             }
             entity.world_mut().despawn_entity(entity.id);
         }

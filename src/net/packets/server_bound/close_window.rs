@@ -1,6 +1,5 @@
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
 use crate::server::world::World;
 use bytes::{Buf, BytesMut};
 
@@ -19,7 +18,7 @@ impl ServerBoundPacket for CloseWindowPacket {
 
     fn main_process(&self, _: &mut World, player: &mut Player) -> anyhow::Result<()> {
         // todo in wd branch, implement transaction packet syncing with this 
-        player.open_ui(UI::None)?;
+        // player.open_ui(UI::None)?;
         Ok(())
     }
 }

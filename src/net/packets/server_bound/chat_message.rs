@@ -1,10 +1,7 @@
-use crate::net::packets::client_bound::chat::{Chat, CHAT};
-use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::net::packets::packet_context::PacketContext;
 use crate::net::packets::read_string_from_buf;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::world::World;
 use bytes::BytesMut;
 
@@ -35,17 +32,10 @@ impl ServerBoundPacket for ChatMessage {
 
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
         if self.message == "/locraw" {
-            Chat {
-                typ: CHAT,
-                component: ChatComponentTextBuilder::new(r#"{"server":"mini237V","gametype":"SKYBLOCK","mode":"dungeon","map":"Dungeon"}"#).build(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
-        } else if self.message == "/mort" {
-            Chat {
-                typ: CHAT,
-                component: ChatComponentTextBuilder::new("opening menu").build(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
+            player.send_message(r#"{"server":"mini237V","gametype":"SKYBLOCK","mode":"dungeon","map":"Dungeon"}"#);
+        }/* else if self.message == "/mort" {
             player.open_ui(UI::MortReadyUpMenu)?;
-        };
+        };*/
 
         // if self.message.starts_with("/") && self.message == "/updatezombie" {
         //     let mut id: Option<EntityId> = None;

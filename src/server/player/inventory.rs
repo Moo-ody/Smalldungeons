@@ -1,6 +1,4 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::client_bound::set_slot::SetSlot;
-use crate::net::packets::packet::SendPacket;
 use crate::net::packets::server_bound::click_window::{ClickMode, ClickWindow};
 use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
@@ -75,11 +73,11 @@ impl Inventory {
                 // this currently doesn't implement different buttons.
                 let slot = packet.slot_id;
                 if slot < 0 {
-                    SetSlot {
-                        window_id: -1,
-                        slot: 0,
-                        item_stack: self.dragged_item.clone().get_item_stack(),
-                    }.send_packet(*client_id, network_tx)?;
+                    // SetSlot {
+                    //     window_id: -1,
+                    //     slot: 0,
+                    //     item_stack: self.dragged_item.clone().get_item_stack(),
+                    // }.send_packet(*client_id, network_tx)?;
                 } else if is_valid_range(slot as usize) {
                     let item = self.get_slot_cloned(slot as usize);
                     self.set_slot(self.dragged_item.clone(), slot as usize);
@@ -113,11 +111,11 @@ impl Inventory {
                     let item = self.get_slot_cloned(slot);
 
                     if to_slot == slot {
-                        SetSlot {
-                            window_id: 0,
-                            slot: slot as i16,
-                            item_stack: item.get_item_stack(),
-                        }.send_packet(*client_id, network_tx)?;
+                        // SetSlot {
+                        //     window_id: 0,
+                        //     slot: slot as i16,
+                        //     item_stack: item.get_item_stack(),
+                        // }.send_packet(*client_id, network_tx)?;
                     } else {
                         let item_to = self.get_slot_cloned(to_slot);
                         self.set_slot(item, to_slot);
@@ -128,11 +126,11 @@ impl Inventory {
             ClickMode::Drop => {
                 let slot = packet.slot_id as usize;
                 if is_valid_range(slot) {
-                    SetSlot {
-                        window_id: 0,
-                        slot: packet.slot_id,
-                        item_stack: self.get_slot_cloned(slot).get_item_stack(),
-                    }.send_packet(*client_id, network_tx)?;
+                    // SetSlot {
+                    //     window_id: 0,
+                    //     slot: packet.slot_id,
+                    //     item_stack: self.get_slot_cloned(slot).get_item_stack(),
+                    // }.send_packet(*client_id, network_tx)?;
                 }
             }
             ClickMode::DoubleClick => {}

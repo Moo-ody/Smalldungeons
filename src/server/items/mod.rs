@@ -2,7 +2,6 @@ use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
 use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
 use indoc::indoc;
@@ -25,7 +24,7 @@ impl Item {
     pub fn on_right_click(&self, player: &mut Player) -> anyhow::Result<()> {
         match self {
             Item::SkyblockMenu => {
-                player.open_ui(UI::SkyblockMenu)?
+                // player.open_ui(UI::SkyblockMenu)?
             }
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();

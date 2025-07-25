@@ -1,5 +1,5 @@
-use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
-use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::packets::protocol::clientbound::EntityTeleport;
 use crate::server::entity::entity_metadata::EntityMetadata;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
@@ -40,7 +40,7 @@ pub struct Entity {
     pub last_pitch: f32,
     
     pub ticks_existed: u32,
-
+    
     pub metadata: EntityMetadata,
 }
 
@@ -75,7 +75,7 @@ impl Entity {
     pub fn tick(
         &mut self,
         entity_impl: &mut Box<dyn EntityImpl>,
-        packets: &mut Vec<ClientBoundPacket>
+        packets: &mut PacketBuffer
     ) {
         // this might not be a good idea
         let test: *mut Entity = self;
@@ -84,7 +84,15 @@ impl Entity {
         
         if self.position != self.last_position {
             // TODO: if distance is < 8 blocks use entity rel move
-            packets.push(EntityTeleport::from_entity(entity).into());
+            packets.write_packet(&EntityTeleport {
+                entity_id: entity.id,
+                pos_x: entity.position.x,
+                pos_y: entity.position.y,
+                pos_z: entity.position.z,
+                yaw: entity.yaw,
+                pitch: entity.pitch,
+                on_ground: entity.on_ground,
+            });
             self.last_position = self.position;
         }
         self.ticks_existed += 1;

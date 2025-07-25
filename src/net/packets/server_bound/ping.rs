@@ -1,6 +1,8 @@
-use crate::net::packets::client_bound::pong::Pong;
-use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
+use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::old_packet::ServerBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::packets::packet_context::PacketContext;
+use crate::net::packets::protocol::clientbound::Pong;
 use anyhow::{bail, Result};
 use bytes::{Buf, BytesMut};
 
@@ -23,10 +25,15 @@ impl ServerBoundPacket for Ping {
     async fn process<'a>(&self, context: PacketContext<'a>) -> Result<()> {
         println!("Received ping: {}", self.client_time);
 
-        Pong {
+        // todo, a way to write individual packets for cases like these (shouldn't be used commonly tho)
+        let mut buffer = PacketBuffer { buf: Vec::new() };
+        buffer.write_packet(&Pong {
             client_time: self.client_time,
-        }.send_packet(context.client.client_id(), context.network_tx)?;
-
+        });
+        context.network_tx.send(NetworkThreadMessage::SendPackets {
+            client_id: context.client.client_id(),
+            buffer: buffer.buf,
+        })?;
         Ok(())
     }
 }

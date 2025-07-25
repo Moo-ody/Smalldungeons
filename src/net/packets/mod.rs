@@ -2,12 +2,14 @@ use crate::net::var_int::read_var_int;
 use anyhow::{bail, Context};
 use bytes::BytesMut;
 
-pub mod packet;
-pub mod client_bound;
+pub mod old_packet;
 pub mod server_bound;
 pub mod packet_context;
+pub mod old_packet_registry;
+pub mod packet_buffer;
 pub mod packet_registry;
-pub mod packet_write;
+pub mod packet_serialize;
+pub mod protocol;
 
 // maybe own file?
 pub fn read_string_from_buf(buf: &mut BytesMut, max_length: i32) -> anyhow::Result<String> {

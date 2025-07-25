@@ -1,12 +1,7 @@
-use crate::net::packets::client_bound::particles::Particles;
-use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::client_bound::sound_effect::SoundEffect;
-use crate::net::packets::packet::SendPacket;
+use crate::net::packets::protocol::clientbound::{PositionLook, SoundEffect};
 use crate::server::block::blocks::Blocks::Air;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
-use crate::server::utils::particles::ParticleTypes::SpellWitch;
-use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
 use crate::utils::bitset::BitSet;
 use std::f64::consts::PI;
@@ -24,7 +19,7 @@ enum EtherResult {
 }
 
 pub fn handle_ether_warp(
-    player: &Player,
+    player: &mut Player,
     world: &World,
 ) -> anyhow::Result<()> {
     let mut start_pos = player.position.clone();
@@ -52,16 +47,19 @@ pub fn handle_ether_warp(
     };
 
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
-        player.send_packet(Particles::new(
-            SpellWitch,
-            player.position,
-            DVec3::new(0.25, 1.0, 0.25),
-            0.0,
-            25,
-            true,
-            None,
-        ).unwrap())?;
-        player.send_packet(PositionLook {
+        // player.write_packet(&Particles {
+        //     particle_id: 0,
+        //     long_distance: true,
+        //     x: 0.0,
+        //     y: 0.0,
+        //     z: 0.0,
+        //     offset_x: 0.0,
+        //     offset_y: 0.0,
+        //     offset_z: 0.0,
+        //     speed: 0.0,
+        //     count: 0,
+        // });
+        player.write_packet(&PositionLook {
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,
             z: z as f64 + 0.5,
@@ -71,15 +69,15 @@ pub fn handle_ether_warp(
             // while keeping yaw and pitch relative (meaning it is added to players yaw)
             // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
             flags: 24,
-        })?;
-        player.send_packet(SoundEffect {
-            sounds: Sounds::EnderDragonHit,
+        });
+        player.write_packet(&SoundEffect {
+            sound: "mob.enderdragon.hit",
             volume: 1.0,
             pitch: 0.53968257,
-            x: x as f64 + 0.5,
-            y: y as f64 + 1.05,
-            z: z as f64 + 0.5,
-        })?;
+            pos_x: x as f64 + 0.5,
+            pos_y: y as f64 + 1.05,
+            pos_z: z as f64 + 0.5,
+        });
     }
     Ok(())
 }

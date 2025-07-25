@@ -1,4 +1,4 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::items::item_stack::ItemStack;
 
 /// Represents an entity type in Minecraft.
@@ -65,21 +65,21 @@ const FLOAT: u8 = 3;
 const STRING: u8 = 4;
 const ITEM_STACK: u8 = 5;
 
-fn write_data(buf: &mut Vec<u8>, data_type: u8, id: u8, data: impl PacketWrite) {
+fn write_data(buf: &mut Vec<u8>, data_type: u8, id: u8, data: impl PacketSerializable) {
     buf.push((data_type << 5 | id & 31) & 255);
     data.write(buf);
 }
 
-impl PacketWrite for EntityMetadata {
+impl PacketSerializable for EntityMetadata {
     fn write(&self, buf: &mut Vec<u8>) {
         let mut flags: u8 = 0;
-        
+
         if self.is_invisible {
-            flags |= 0b00100000 
+            flags |= 0b00100000
         }
-        
+
         write_data(buf, BYTE, 0, flags);
-        
+
         match &self.variant {
             EntityVariant::DroppedItem { item } => {
                 write_data(buf, ITEM_STACK, 10, Some(item.clone()))

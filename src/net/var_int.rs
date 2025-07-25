@@ -1,13 +1,7 @@
-use crate::net::packets::packet_write::PacketWrite;
 use bytes::{Buf, BytesMut};
 
+#[derive(PartialEq, Eq)]
 pub struct VarInt(pub i32);
-
-impl PacketWrite for VarInt {
-    fn write(&self, buf: &mut Vec<u8>) {
-        write_var_int(buf, self.0);
-    }
-}
 
 pub fn peek_var_int(buf: &BytesMut) -> Option<(i32, usize)> {
     let mut num_read = 0;

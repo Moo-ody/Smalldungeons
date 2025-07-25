@@ -1,8 +1,8 @@
 use crate::net::connection_state::ConnectionState;
 use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
+use crate::net::packets::old_packet_registry::parse_packet;
 use crate::net::packets::packet_context::PacketContext;
-use crate::net::packets::packet_registry::parse_packet;
 use crate::net::var_int::peek_var_int;
 use crate::server::player::player::ClientId;
 use bytes::{Buf, BytesMut};

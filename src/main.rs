@@ -6,16 +6,16 @@ mod utils;
 use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
+use crate::dungeon::dungeon_state::DungeonState::Starting;
 use crate::dungeon::room::room_data::RoomData;
 use crate::dungeon::room::secrets;
 use crate::dungeon::room::secrets::SecretType::WitherEssence;
 use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::client_bound::confirm_transaction::ConfirmTransaction;
-use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
-use crate::net::packets::packet::SendPacket;
+use crate::net::packets::old_packet::SendPacket;
 use crate::net::run_network::run_network_thread;
-use crate::server::block::block_pos::BlockPos;
+use crate::net::var_int::VarInt;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::scoreboard::ScoreboardLines;
@@ -29,6 +29,8 @@ use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
 use indoc::formatdoc;
+use net::packets::protocol::clientbound;
+use net::packets::protocol::clientbound::AddEffect;
 use rand::seq::IndexedRandom;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -139,6 +141,9 @@ async fn main() -> Result<()> {
         door.load_into_world(&mut server.world, &door_type_blocks);
     }
 
+
+    server.dungeon.state = Starting { tick_countdown: 100 };
+
     let zombie_spawn_pos = DVec3 {
         x: 25.0,
         y: 69.0,
@@ -212,7 +217,7 @@ async fn main() -> Result<()> {
     
     loop {
         tick_interval.tick().await;
-        // let start = Instant::now();
+        // let start = std::time::Instant::now();
 
         while let Ok(message) = main_rx.try_recv() {
             server.process_event(message).unwrap_or_else(|err| eprintln!("Error processing event: {err}"));
@@ -237,8 +242,12 @@ async fn main() -> Result<()> {
         for player in server.world.players.values_mut() {
             // println!("player ticked: {player:?}");
             player.ticks_existed += 1;
-            ConfirmTransaction::new().send_packet(player.client_id, &server.network_tx)?; // should stop disconnects? keep alive logic would too probably.
-            
+            player.write_packet(&clientbound::ConfirmTransaction {
+                window_id: 0,
+                action_number: -1,
+                accepted: false,
+            });
+
             if player.ticks_existed % 20 == 0 {
                 secrets::tick(&dungeon_secret, player);
                 secrets::tick(&dungeon_secret2, player);
@@ -310,14 +319,11 @@ async fn main() -> Result<()> {
             }
 
             if let Some(tab_list) = &tab_list_packet {
-                tab_list.clone().send_packet(player.client_id, &server.network_tx)?;
+                player.write_packet(tab_list);
             }
 
             sidebar_lines.push_str("§emc.hypixel.net");
-
-            for packet in player.sidebar.update(sidebar_lines) {
-                packet.send_packet(player.client_id, &server.network_tx)?;
-            }
+            player.sidebar.write_update(sidebar_lines, &mut player.packet_buffer);
             
             // if player.ticks_existed % 5 == 0 {
             //     let mut current_index = 1;
@@ -337,21 +343,22 @@ async fn main() -> Result<()> {
             //     }
             // }
             if player.ticks_existed % 60 == 0 {
-                player.send_packet(EntityEffect {
-                    entity_id: player.entity_id,
-                    effect: Effects::Haste,
+                player.write_packet(&AddEffect {
+                    entity_id: VarInt(player.entity_id),
+                    effect_id: 3,
                     amplifier: 2,
-                    duration: 200,
+                    duration: VarInt(200),
                     hide_particles: true,
-                })?;
-                player.send_packet(EntityEffect {
-                    entity_id: player.entity_id,
-                    effect: Effects::NightVision,
+                });
+                player.write_packet(&AddEffect {
+                    entity_id: VarInt(player.entity_id),
+                    effect_id: 16,
                     amplifier: 0,
-                    duration: 400,
+                    duration: VarInt(400),
                     hide_particles: true,
-                })?;
+                });
             }
+            player.flush_packets();
         }
         // println!("time elapsed {:?}", start.elapsed());
     }

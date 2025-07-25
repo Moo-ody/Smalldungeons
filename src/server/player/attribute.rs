@@ -1,4 +1,4 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::net::var_int::VarInt;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -48,7 +48,7 @@ impl Attribute {
     }
 }
 
-impl PacketWrite for AttributeMap {
+impl PacketSerializable for AttributeMap {
     fn write(&self, buf: &mut Vec<u8>) {
         (self.map.len() as i32).write(buf);
 

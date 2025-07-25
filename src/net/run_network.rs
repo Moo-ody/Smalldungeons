@@ -4,7 +4,6 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::server::player::player::ClientId;
 
 pub async fn run_network_thread(
@@ -33,19 +32,9 @@ pub async fn run_network_thread(
 
             Some(msg) = network_rx.recv() => {
                 match msg {
-                    NetworkThreadMessage::SendPacket { client_id, packet } => {
+                    NetworkThreadMessage::SendPackets { client_id, buffer } => {
                         if let Some(client_tx) = clients.get(&client_id) {
-                            //println!("sending packet to client {}: {:?}", client_id, packet);
-                            match packet.encode().await {
-                                Ok(bytes) => {
-                                    let _ = client_tx.send(ClientHandlerMessage::Send(bytes));
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to encode packet for client {}: {}", client_id, e);
-                                }
-                            }
-                        } else {
-                            eprintln!("Attempted to send packet to nonexistent client {}", client_id);
+                            let _ = client_tx.send(ClientHandlerMessage::Send(buffer));
                         }
                     }
 

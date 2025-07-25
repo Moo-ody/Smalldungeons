@@ -1,11 +1,20 @@
-use crate::net::packets::client_bound::display_scoreboard::{DisplayScoreboard, SIDEBAR};
-use crate::net::packets::client_bound::scoreboard_objective::{ScoreboardObjective, ScoreboardRenderType, ADD_OBJECTIVE, UPDATE_NAME};
-use crate::net::packets::client_bound::teams::{Teams, ADD_PLAYER, CREATE_TEAM, REMOVE_TEAM, UPDATE_TEAM};
-use crate::net::packets::client_bound::update_score::{UpdateScore, UpdateScoreAction};
-use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::packets::protocol::clientbound::{DisplayScoreboard, ScoreboardObjective, Teams, UpdateScore};
+use crate::net::var_int::VarInt;
 use crate::server::utils::sized_string::SizedString;
 
 const OBJECTIVE_NAME: &str = "SBScoreboard";
+
+// for team packet:
+pub const CREATE_TEAM: i8 = 0;
+pub const REMOVE_TEAM: i8 = 1;
+pub const UPDATE_TEAM: i8 = 2;
+pub const ADD_PLAYER: i8 = 3;
+pub const REMOVE_PLAYER: i8 = 4;
+
+// for scoreboard objective packet
+pub const ADD_OBJECTIVE: i8 = 0;
+pub const UPDATE_NAME: i8 = 2;
 
 /// wrapper for Vec<SizedString<32>>,
 /// which includes functions to push strings (and strs), splitting their lines and converting to sized strings
@@ -36,8 +45,6 @@ pub struct Scoreboard {
     lines: ScoreboardLines,
 }
 
-type Packet = ClientBoundPacket;
-
 impl Scoreboard {
 
     pub fn new() -> Scoreboard {
@@ -48,30 +55,24 @@ impl Scoreboard {
 
     /// must be sent to client when it is initialized
     /// if not sent scoreboard will not display on the client.
-    pub fn packets_to_init(&self) -> Vec<Packet> {
-        vec![
-            Packet::from(ScoreboardObjective {
-                objective_name: OBJECTIVE_NAME.into(),
-                objective_value: OBJECTIVE_NAME.into(),
-                typ: ScoreboardRenderType::Integer,
-                mode: ADD_OBJECTIVE
-            }),
-            Packet::from(DisplayScoreboard {
-                position: SIDEBAR,
-                score_name: OBJECTIVE_NAME.into(),
-            })
-        ]
-
+    pub fn write_init_packets(&self, packet_buffer: &mut PacketBuffer) {
+        packet_buffer.write_packet(&ScoreboardObjective {
+            objective_name: OBJECTIVE_NAME.into(),
+            objective_value: OBJECTIVE_NAME.into(),
+            render_type: "integer",
+            mode: 0,
+        });
+        packet_buffer.write_packet(&DisplayScoreboard {
+            position: 1,
+            score_name: OBJECTIVE_NAME.into(),
+        });
     }
 
     /// this function updates the scoreboard with a new list
     /// and sends packets according to what has changed
     ///
     /// the first index always represents the header
-    pub fn update(&mut self, lines: ScoreboardLines) -> Vec<Packet> {
-
-        // this isn't the most optimal/performant solution, but it works and its convent
-        let mut packets = Vec::new();
+    pub fn write_update(&mut self, lines: ScoreboardLines, packet_buffer: &mut PacketBuffer) {
         
         let (old_len, new_len) = (self.lines.0.len(), lines.0.len());
         let is_size_different = new_len != old_len;
@@ -86,13 +87,13 @@ impl Scoreboard {
                 let name = format!("{}", i);
                 let team = format!("team_{}", old_len - i);
                 
-                packets.push(Packet::from(UpdateScore {
+                packet_buffer.write_packet(&UpdateScore {
                     name: hide_name(&name),
                     objective: OBJECTIVE_NAME.into(),
-                    value: 0,
-                    action: UpdateScoreAction::Remove,
-                }));
-                packets.push(Packet::from(Teams {
+                    value: VarInt(0),
+                    action: VarInt(1),
+                });
+                packet_buffer.write_packet(&Teams {
                     name: team.into(),
                     display_name: "".into(),
                     prefix: "".into(),
@@ -102,7 +103,7 @@ impl Scoreboard {
                     players: vec![],
                     action: REMOVE_TEAM,
                     friendly_flags: 0,
-                }))
+                });
             }
         }
 
@@ -116,12 +117,12 @@ impl Scoreboard {
             }
             // index 0 is always header
             if i == 0 {
-                packets.push(Packet::from(ScoreboardObjective {
+                packet_buffer.write_packet(&ScoreboardObjective {
                     objective_name: OBJECTIVE_NAME.into(),
                     objective_value: new_str.clone().into(),
-                    typ: ScoreboardRenderType::Integer,
+                    render_type: "integer",
                     mode: UPDATE_NAME,
-                }))
+                });
             } else {
                 let line_index = new_len - i;
                 let name = format!("{}", i);
@@ -130,7 +131,7 @@ impl Scoreboard {
                 let first_half = first_half(new_str);
                 
                 if is_size_different {
-                    packets.push(Packet::from(Teams {
+                    packet_buffer.write_packet(&Teams {
                         name: team.clone().into(),
                         display_name: team.clone().into(),
                         prefix: "".into(),
@@ -140,17 +141,16 @@ impl Scoreboard {
                         players: vec![],
                         action: CREATE_TEAM,
                         friendly_flags: 3,
-                    }));
-
-                    packets.push(ClientBoundPacket::from(UpdateScore {
+                    });
+                    packet_buffer.write_packet(&UpdateScore {
                         name: hide_name(&name),
                         objective: OBJECTIVE_NAME.into(),
-                        value: line_index as i32,
-                        action: UpdateScoreAction::Change,
-                    }));
+                        value: VarInt(line_index as i32),
+                        action: VarInt(0),
+                    });
                 }
                 
-                packets.push(Packet::from(Teams {
+                packet_buffer.write_packet(&Teams {
                     name: team.clone().into(),
                     display_name: team.clone().into(),
                     prefix: first_half,
@@ -160,10 +160,10 @@ impl Scoreboard {
                     players: vec![],
                     action: UPDATE_TEAM,
                     friendly_flags: 3,
-                }));
+                });
                 
                 if is_size_different {
-                    packets.push(ClientBoundPacket::from(Teams {
+                    packet_buffer.write_packet(&Teams {
                         name: team.clone().into(),
                         display_name: team.into(),
                         prefix: "".into(),
@@ -173,12 +173,11 @@ impl Scoreboard {
                         players: vec![hide_name(&name)],
                         action: ADD_PLAYER,
                         friendly_flags: 0,
-                    }));
+                    });
                 }
             }
         }
         self.lines = lines;
-        packets
     }
 
 }

@@ -1,4 +1,4 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::nbt::encode::serialize_nbt;
 use crate::server::utils::nbt::NBT;
 use bytes::{Buf, BytesMut};
@@ -11,7 +11,7 @@ pub struct ItemStack {
     pub tag_compound: Option<NBT>,
 }
 
-impl PacketWrite for Option<ItemStack> {
+impl PacketSerializable for Option<ItemStack> {
     fn write(&self, buf: &mut Vec<u8>) {
         if let Some(item_stack) = self {
             item_stack.item.write(buf);

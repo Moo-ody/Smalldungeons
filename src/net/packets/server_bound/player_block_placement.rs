@@ -1,6 +1,7 @@
-use crate::net::packets::client_bound::block_change::BlockChange;
-use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
-use crate::server::block::block_pos::{read_block_pos, BlockPos};
+use crate::net::packets::old_packet::ServerBoundPacket;
+use crate::net::packets::protocol::clientbound::BlockChange;
+use crate::net::var_int::VarInt;
+use crate::server::block::block_position::{read_block_pos, BlockPos};
 use crate::server::items::item_stack::{read_item_stack, ItemStack};
 use crate::server::player::player::Player;
 use crate::server::world::World;
@@ -42,11 +43,10 @@ impl ServerBoundPacket for PlayerBlockPlacement {
                 _ => bp.x += 1
             }
             let block = world.get_block_at(bp.x, bp.y, bp.z);
-            BlockChange {
+            player.write_packet(&BlockChange {
                 block_pos: bp,
-                block_state: block.get_block_state_id(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
-            
+                block_state: VarInt(block.get_block_state_id() as i32),
+            });
             if let Some(test) = world.interactable_blocks.get(&self.block_pos) {
                 test.interact(player, &self.block_pos);
                 return Ok(());

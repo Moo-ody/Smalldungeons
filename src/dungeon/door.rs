@@ -1,8 +1,7 @@
-use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
-use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
-use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
+use crate::net::packets::protocol::clientbound::{EntityAttach, SpawnObject};
+use crate::net::var_int::VarInt;
 use crate::server::block::block_parameter::Axis;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::{Entity, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
@@ -179,25 +178,28 @@ impl EntityImpl for DoorEntityImpl {
             block_id | (metadata << 12)
         };
 
-        let spawn_packet = PacketSpawnObject::new(
-            entity_id,
-            EntityVariant::FallingBlock,
-            entity.position.clone().add_y(DOOR_ENTITY_OFFSET),
-            DVec3::ZERO,
-            0.0,
-            0.0,
-            object_data
-        );
-
+        let spawn_packet = SpawnObject {
+            entity_id: VarInt(entity_id),
+            entity_variant: 70,
+            x: (entity.position.x * 32.0).floor() as i32,
+            y: ((entity.position.y + DOOR_ENTITY_OFFSET) * 32.0).floor() as i32,
+            z: (entity.position.z * 32.0).floor() as i32,
+            yaw: 0,
+            pitch: 0,
+            data: object_data,
+            velocity_x: 0,
+            velocity_y: 0,
+            velocity_z: 0,
+        };
         let attach_packet = EntityAttach {
             entity_id,
             vehicle_id: entity.id,
             leash: false,
         };
 
-        for player in world.players.values() {
-            player.send_packet(spawn_packet.clone()).unwrap();
-            player.send_packet(attach_packet.clone()).unwrap();
+        for player in world.players.values_mut() {
+            player.write_packet(&spawn_packet);
+            player.write_packet(&attach_packet);
         }
     }
 

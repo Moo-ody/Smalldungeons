@@ -1,4 +1,4 @@
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::server::items::item_stack::{read_item_stack, ItemStack};
 use crate::server::player::player::Player;
 use crate::server::world::World;

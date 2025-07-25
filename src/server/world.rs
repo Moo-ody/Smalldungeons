@@ -1,11 +1,8 @@
-use crate::net::packets::client_bound::block_change::BlockChange;
-use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
-use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
-use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
-use crate::net::packets::packet::SendPacket;
-use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::packets::protocol::clientbound::{BlockChange, DestroyEntites, SpawnMob, SpawnObject};
+use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_grid::ChunkGrid;
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
@@ -79,13 +76,43 @@ impl World {
             position,
             metadata,
         );
+
+        const MOTION_CLAMP: f64 = 3.9;
+        
         if entity.metadata.variant.is_object() {
-            for player in self.players.values() {
-                player.send_packet(PacketSpawnObject::from_entity(&entity))?;
+            let packet = SpawnObject {
+                entity_id: VarInt(entity.id),
+                entity_variant: entity.metadata.variant.get_id(),
+                x: (entity.position.x * 32.0).floor() as i32,
+                y: (entity.position.y * 32.0).floor() as i32,
+                z: (entity.position.z * 32.0).floor() as i32,
+                yaw: (entity.yaw * 256.0 / 360.0) as i8,
+                pitch: (entity.pitch * 256.0 / 360.0) as i8,
+                data: 0,
+                velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+                velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+                velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+            };
+            for player in self.players.values_mut() {
+                player.write_packet(&packet);
             }
         } else {
-            for player in self.players.values() {
-                player.send_packet(PacketSpawnMob::from_entity(&entity))?;
+            let packet = SpawnMob {
+                entity_id: VarInt(entity.id),
+                entity_variant: entity.metadata.variant.get_id(),
+                x: (entity.position.x * 32.0).floor() as i32,
+                y: (entity.position.y * 32.0).floor() as i32,
+                z: (entity.position.z * 32.0).floor() as i32,
+                yaw: (entity.yaw * 256.0 / 360.0) as i8,
+                pitch: (entity.pitch * 256.0 / 360.0) as i8,
+                head_pitch: (entity.yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
+                velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+                velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+                velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
+                metadata: entity.metadata.clone(),
+            };
+            for player in self.players.values_mut() {
+                player.write_packet(&packet);
             }
         }
 
@@ -102,40 +129,44 @@ impl World {
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
-        let mut packets: Vec<ClientBoundPacket> = Vec::new();
-        
+        // should maybe write packets to chunk
         if self.entities_for_removal.len() != 0 {
-            let mut packet = DestroyEntities {
-                entity_ids: Vec::with_capacity(self.entities_for_removal.len()),
+            let mut packet = DestroyEntites {
+                entities: Vec::with_capacity(self.entities_for_removal.len())
             };
             
             while let Some(entity_id) = self.entities_for_removal.pop_front() {
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
                     entity_impl.despawn(&mut entity);
                 }
-                packet.entity_ids.push(entity_id)
+                packet.entities.push(VarInt(entity_id))
             }
             
-            packets.push(packet.into());
+            for player in self.players.values_mut() {
+                player.write_packet(&packet)
+            }
         }
+        let mut buf = PacketBuffer {
+            buf: Vec::new(),
+        };
         for (entity, entity_impl) in self.entities.values_mut() {
-            entity.tick(entity_impl, &mut packets);
+            entity.tick(entity_impl, &mut buf);
         }
         for player in self.players.values_mut() {
-            for packet in &packets {
-                packet.clone().send_packet(player.client_id, &player.network_tx)?;
-            }
+            player.packet_buffer.extend(&buf);
+            player.flush_packets();
         }
         Ok(())
     }
 
     pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
         let server = self.server_mut();
-        for (client_id, _) in server.world.players.iter() {
-            BlockChange {
-                block_pos: BlockPos { x, y, z },
-                block_state: block.get_block_state_id()
-            }.send_packet(*client_id, &server.network_tx).unwrap();
+        let packet = BlockChange {
+            block_pos: BlockPos { x, y, z },
+            block_state: VarInt(block.get_block_state_id() as i32),
+        };
+        for (_, player) in server.world.players.iter_mut() {
+            player.write_packet(&packet);
         }
         self.chunk_grid.set_block_at(block, x, y, z);
     }

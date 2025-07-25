@@ -25,7 +25,7 @@ macro_rules! register_clientbound_packets {
                 }
             }
         
-            impl $crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
+            impl $crate::net::packets::old_packet::SendPacket<$packet_ty> for $packet_ty {
                 fn send_packet(self, client_id: $crate::server::player::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
                     // println!("Sending packet {:?} to client {}", self, client_id);
                     ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
@@ -35,7 +35,7 @@ macro_rules! register_clientbound_packets {
         )*
 
         #[async_trait::async_trait]
-        impl crate::net::packets::packet::ClientBoundPacketImpl for ClientBoundPacket {
+        impl crate::net::packets::old_packet::ClientBoundPacketImpl for ClientBoundPacket {
             async fn write_to<W: tokio::io::AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
                 match self {
                     $(
@@ -93,7 +93,7 @@ macro_rules! register_serverbound_packets {
     ) => {
         use crate::net::packets::packet_context::PacketContext;
         use crate::net::client::Client;
-        use crate::net::packets::packet::ServerBoundPacket;
+        use crate::net::packets::old_packet::ServerBoundPacket;
         use crate::net::var_int::read_var_int;
         use anyhow::{bail, Context};
         use bytes::BytesMut;

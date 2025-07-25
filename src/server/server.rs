@@ -1,12 +1,8 @@
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::client_bound::chunk_data::ChunkData;
-use crate::net::packets::client_bound::entity::entity_effect::{Effects, EntityEffect};
-use crate::net::packets::client_bound::entity::entity_properties::EntityProperties;
-use crate::net::packets::client_bound::join_game::JoinGame;
-use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
-use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
+use crate::net::packets::protocol::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerListHeaderFooter, PositionLook};
+use crate::net::var_int::VarInt;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap};
 use crate::server::player::inventory::ItemSlot;
@@ -61,16 +57,29 @@ impl Server {
                 );
                 println!("player entity id: {}", player.entity_id);
 
-                player.send_packet(JoinGame::from_player(&player))?;
-                player.send_packet(PositionLook::from_player(&player))?;
+                player.write_packet(&JoinGame {
+                    entity_id: player.entity_id,
+                    gamemode: 0,
+                    dimension: 0,
+                    difficulty: 0,
+                    max_players: 0,
+                    level_type: "",
+                    reduced_debug_info: false,
+                });
+                player.write_packet(&PositionLook {
+                    x: player.position.x,
+                    y: player.position.y,
+                    z: player.position.z,
+                    yaw: player.yaw,
+                    pitch: player.pitch,
+                    flags: 0,
+                });
 
                 for chunk in self.world.chunk_grid.chunks.iter() {
-                    player.send_packet(ChunkData::from_chunk(chunk, true))?;
+                    player.write_packet(&chunk.get_chunk_data(true));
                 }
 
-                for packet in player.sidebar.packets_to_init() {
-                    packet.send_packet(client_id, &self.network_tx)?;
-                }
+                player.sidebar.write_init_packets(&mut player.packet_buffer);
 
                 // for entity in self.world.entities.values_mut() {
                 //     if entity.entity_id == player.entity_id {
@@ -82,24 +91,24 @@ impl Server {
 
                 // player.send_packet(PlayerListItem::init_packet(self.world.player_info.tab_list()))?;
 
-                player.send_packet(PlayerListHeaderFooter {
+                player.write_packet(&PlayerListHeaderFooter {
                     header: header(),
                     footer: footer(),
-                })?;
-                player.send_packet(EntityEffect {
-                    entity_id: player.entity_id,
-                    effect: Effects::Haste,
+                });
+                player.write_packet(&AddEffect {
+                    entity_id: VarInt(player.entity_id),
+                    effect_id: 3,
                     amplifier: 2,
-                    duration: 200,
+                    duration: VarInt(200),
                     hide_particles: true,
-                })?;
-                player.send_packet(EntityEffect {
-                    entity_id: player.entity_id,
-                    effect: Effects::NightVision,
+                });
+                player.write_packet(&AddEffect {
+                    entity_id: VarInt(player.entity_id),
+                    effect_id: 16,
                     amplifier: 0,
-                    duration: 400,
+                    duration: VarInt(400),
                     hide_particles: true,
-                })?;
+                });
 
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
@@ -109,10 +118,12 @@ impl Server {
                 let mut attributes = AttributeMap::new();
                 attributes.insert(Attribute::MovementSpeed, 0.4);
 
-                player.send_packet(EntityProperties {
-                    entity_id: player.entity_id,
+                player.write_packet(&EntityProperties {
+                    entity_id: VarInt(player.entity_id),
                     properties: attributes,
-                })?;
+                });
+                
+                player.flush_packets();
 
                 // let entity = self.world.spawn_entity(spawn_point, Zombie, None)?;
 

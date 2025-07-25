@@ -1,8 +1,7 @@
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::net::packets::server_bound::client_status::ClientStatus::{OpenInventory, PerformRespawn, RequestStats};
 use crate::net::var_int::read_var_int;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
 use crate::server::world::World;
 use bytes::BytesMut;
 
@@ -34,7 +33,8 @@ impl ServerBoundPacket for ClientStatusPacket {
         match self.status {
             PerformRespawn => { /* maybe needed, not sure */ }
             RequestStats => { /* not needed at all */ }
-            OpenInventory => player.open_ui(UI::Inventory)?
+            // TOODO:
+            OpenInventory => {} /*player.open_ui(UI::Inventory)?*/
         }
         Ok(())
     }

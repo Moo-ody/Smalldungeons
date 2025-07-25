@@ -1,4 +1,4 @@
-use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::old_packet::ServerBoundPacket;
 use crate::net::packets::read_string_from_buf;
 use bytes::{Buf, BytesMut};
 

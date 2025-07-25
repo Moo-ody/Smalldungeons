@@ -1,5 +1,6 @@
+use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
-use crate::{net::packets::packet_write::PacketWrite, server::utils::direction::Direction};
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
@@ -91,7 +92,7 @@ impl BlockPos {
     }
 }
 
-impl PacketWrite for BlockPos {
+impl PacketSerializable for BlockPos {
     fn write(&self, buf: &mut Vec<u8>) {
         let long: i64 = (self.x as i64 & XZ_MASK) << X_SHIFT | (self.y as i64 & Y_MASK) << Y_SHIFT | (self.z as i64 & XZ_MASK);
         long.write(buf);

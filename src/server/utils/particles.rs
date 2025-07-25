@@ -1,5 +1,3 @@
-use crate::net::packets::packet_write::PacketWrite;
-
 crate::particle_enum! {
     ExplosionNormal("explode", 0, true),
     ExplosionLarge("largeexplode", 1, true),
@@ -45,11 +43,11 @@ crate::particle_enum! {
     MobAppearance("mobappearance", 41, true)
 }
 
-impl PacketWrite for ParticleTypes {
-    fn write(&self, buf: &mut Vec<u8>) {
-        self.get_id().write(buf);
-    }
-}
+// impl PacketWrite for ParticleTypes {
+//     fn write(&self, buf: &mut Vec<u8>) {
+//         self.get_id().write(buf);
+//     }
+// }
 
 #[macro_export]
 macro_rules! particle_enum {

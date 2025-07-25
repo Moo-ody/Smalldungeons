@@ -1,10 +1,8 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::client_bound::chat::Chat;
-use crate::net::packets::client_bound::close_window::CloseWindowPacket;
-use crate::net::packets::client_bound::open_window::{InventoryType, OpenWindowPacket};
-use crate::net::packets::client_bound::set_slot::SetSlot;
-use crate::net::packets::client_bound::window_items::WindowItems;
-use crate::net::packets::packet::SendPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::packets::packet_registry::IdentifiedPacket;
+use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::net::packets::protocol::clientbound::{Chat, WindowItems};
 use crate::server::entity::entity::EntityId;
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::player::scoreboard::Scoreboard;
@@ -30,6 +28,7 @@ pub struct GameProfile {
 #[derive(Debug)]
 pub struct Player {
     pub server: *mut Server,
+    pub packet_buffer: PacketBuffer,
     pub network_tx: UnboundedSender<NetworkThreadMessage>,
     
     pub profile: GameProfile,
@@ -78,6 +77,7 @@ impl Player {
     ) -> Self {
         Self {
             server,
+            packet_buffer: PacketBuffer { buf: Vec::new() },
             network_tx: server.network_tx.clone(),
             profile,
             client_id,
@@ -118,9 +118,25 @@ impl Player {
         &mut self.server_mut().world
     }
     
-    /// sends a packet to the player
-    pub fn send_packet<T>(&self, packet: impl SendPacket<T>) -> anyhow::Result<()> {
-        packet.send_packet(self.client_id, &self.network_tx)
+    // /// sends a packet to the player
+    // pub fn send_packet<T>(&self, packet: impl SendPacket<T>) -> anyhow::Result<()> {
+    //     packet.send_packet(self.client_id, &self.network_tx)
+    // }
+    
+    pub fn write_packet<P : IdentifiedPacket + PacketSerializable>(&mut self, packet: &P) {
+        self.packet_buffer.write_packet(packet);
+    }
+    
+    pub fn flush_packets(&mut self) {
+        if self.packet_buffer.buf.len() != 0 {
+            let result = self.network_tx.send(NetworkThreadMessage::SendPackets {
+                client_id: self.client_id,
+                buffer: self.packet_buffer.test(),
+            });
+            if result.is_err() { 
+                panic!("error happened flushing packets");
+            }
+        }
     }
     
     // todo: tick function here?, 
@@ -181,31 +197,31 @@ impl Player {
         }
     }
     
-    pub fn open_ui(&mut self, ui: UI) -> anyhow::Result<()> {
-        self.current_ui = ui;
-        
-        if let Some(container_data) = ui.get_container_data() {
-            self.current_window_id += 1;
-            
-            OpenWindowPacket {
-                window_id: self.current_window_id,
-                inventory_type: InventoryType::Container,
-                window_title: ChatComponentTextBuilder::new(container_data.title).build(),
-                slot_count: container_data.slot_amount,
-            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-            
-            self.sync_inventory()?;
-        }
-        Ok(()) 
-    }
-    
-    pub fn close_ui(&mut self) -> anyhow::Result<()> {
-        self.current_ui = UI::None;
-        CloseWindowPacket {
-            window_id: self.current_window_id as i8,
-        }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-        Ok(())
-    }
+    // pub fn open_ui(&mut self, ui: UI) -> anyhow::Result<()> {
+    //     self.current_ui = ui;
+    //
+    //     if let Some(container_data) = ui.get_container_data() {
+    //         self.current_window_id += 1;
+    //
+    //         OpenWindowPacket {
+    //             window_id: self.current_window_id,
+    //             inventory_type: InventoryType::Container,
+    //             window_title: ChatComponentTextBuilder::new(container_data.title).build(),
+    //             slot_count: container_data.slot_amount,
+    //         }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+    //
+    //         self.sync_inventory()?;
+    //     }
+    //     Ok(())
+    // }
+    //
+    // pub fn close_ui(&mut self) -> anyhow::Result<()> {
+    //     self.current_ui = UI::None;
+    //     CloseWindowPacket {
+    //         window_id: self.current_window_id as i8,
+    //     }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+    //     Ok(())
+    // }
 
     
     pub fn sync_inventory(&mut self) -> anyhow::Result<()> {
@@ -216,38 +232,38 @@ impl Player {
             inv_items.push(item.get_item_stack())
         }
         
-        if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
-            WindowItems {
-                window_id: self.current_window_id,
-                items,
-            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-        }
-        
-        WindowItems {
+        // if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
+        //     WindowItems {
+        //         window_id: self.current_window_id,
+        //         items,
+        //     }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+        // }
+        //
+        self.write_packet(&WindowItems {
             window_id: 0,
             items: inv_items,
-        }.send_packet(self.client_id, network_tx)?;
+        });
         
-        if let UI::Inventory = self.current_ui { 
-            SetSlot {
-                window_id: -1,
-                slot: 0,
-                item_stack: self.inventory.dragged_item.get_item_stack(),
-            }.send_packet(self.client_id, network_tx)?;
-        } else {
-            SetSlot {
-                window_id: -1,
-                slot: 0,
-                item_stack: None,
-            }.send_packet(self.client_id, network_tx)?;
-        }
+        // if let UI::Inventory = self.current_ui {
+        //     SetSlot {
+        //         window_id: -1,
+        //         slot: 0,
+        //         item_stack: self.inventory.dragged_item.get_item_stack(),
+        //     }.send_packet(self.client_id, network_tx)?;
+        // } else {
+        //     SetSlot {
+        //         window_id: -1,
+        //         slot: 0,
+        //         item_stack: None,
+        //     }.send_packet(self.client_id, network_tx)?;
+        // }
         Ok(())
     }
     
-    pub fn send_msg(&self, msg: &str) -> anyhow::Result<()> {
-        Chat {
+    pub fn send_message(&mut self, msg: &str) {
+        self.write_packet(&Chat {
             component: ChatComponentTextBuilder::new(msg).build(),
-            typ: 0,
-        }.send_packet(self.client_id, &self.network_tx)
+            chat_type: 0 
+        })
     }
 }
