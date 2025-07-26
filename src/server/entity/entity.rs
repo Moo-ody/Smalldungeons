@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::packets::protocol::clientbound::EntityTeleport;
+use crate::net::protocol::play::clientbound::EntityTeleport;
 use crate::server::entity::entity_metadata::EntityMetadata;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;

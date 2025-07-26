@@ -53,6 +53,12 @@ impl PacketSerializable for i32 {
     }
 }
 
+impl PacketSerializable for u64 {
+    fn write(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_be_bytes());
+    }
+}
+
 impl PacketSerializable for i64 {
     fn write(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.to_be_bytes());

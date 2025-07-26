@@ -1,8 +1,12 @@
 use crate::net::connection_state::ConnectionState;
+use crate::net::connection_state::ConnectionState::*;
 use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::old_packet::ServerBoundPacket;
-use crate::net::packets::old_packet_registry::parse_packet;
-use crate::net::packets::packet_context::PacketContext;
+use crate::net::packets::packet::{ProcessContext, ProcessPacket};
+use crate::net::packets::packet_deserialize::PacketDeserializable;
+use crate::net::protocol::handshake::serverbound::HandshakePacket;
+use crate::net::protocol::login::serverbound::Login;
+use crate::net::protocol::play::serverbound::Play;
+use crate::net::protocol::status::serverbound::Status;
 use crate::net::var_int::peek_var_int;
 use crate::server::player::player::ClientId;
 use bytes::{Buf, BytesMut};
@@ -12,7 +16,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug, Clone)]
 pub struct Client {
-    client_id: ClientId,
+    pub client_id: ClientId,
     pub connection_state: ConnectionState,
 }
 
@@ -20,7 +24,7 @@ impl Client {
     pub const fn new(client_id: ClientId) -> Self {
         Self {
             client_id,
-            connection_state: ConnectionState::Handshaking,
+            connection_state: Handshaking,
         }
     }
 
@@ -47,30 +51,9 @@ pub async fn handle_client(
                         // Channel closed normally
                         break 
                     },
+                    
                     Ok(_) => {
-                        while let Some(mut packet) = read_whole_packet(&mut bytes).await {
-                            match parse_packet(&mut packet, &mut client).await {
-                                Ok(parsed) => {
-                                    if let Err(e) = parsed.process(PacketContext {
-                                        client: &mut client,
-                                        network_tx: &network_tx,
-                                        main_tx: &main_tx,
-                                    }).await
-                                    {
-                                        eprintln!("Failed to process packet for {client_id}: {e}");
-                                        continue;
-                                    }
-
-                                    if client.connection_state == ConnectionState::Play {
-                                        main_tx.send(MainThreadMessage::PacketReceived { client_id, packet: parsed })
-                                            .unwrap_or_else(|e| eprintln!("Failed to send packet to main thread from {client_id}: {e}"));
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to parse packet from client {client_id}: {e}");
-                                }
-                            }
-                        }
+                        read_packets(&mut bytes, &mut client, &network_tx, &main_tx).await
                     }
                     Err(e) => {
                         eprintln!("Client {client_id} read error: {e}");
@@ -100,7 +83,8 @@ pub async fn handle_client(
     println!("handle client for {client_id} closed.");
 }
 
-pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
+
+async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
     if buf.is_empty() {
         return None;
     }
@@ -113,4 +97,58 @@ pub async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
 
     buf.advance(varint_len);
     Some(buf.split_to(packet_len))
+}
+
+async fn read_packets(
+    buffer: &mut BytesMut,
+    client: &mut Client,
+    network_thread_tx: &UnboundedSender<NetworkThreadMessage>,
+    main_thread_tx: &UnboundedSender<MainThreadMessage>
+) {
+    while let Some(mut buffer) = read_whole_packet(buffer).await {
+        let context = ProcessContext { network_thread_tx, main_thread_tx, };
+        match client.connection_state {
+            Handshaking => parse_from_packets::<HandshakePacket>(&mut buffer, client, context).await,
+            Status => parse_from_packets::<Status>(&mut buffer, client, context).await,
+            Login => parse_from_packets::<Login>(&mut buffer, client, context).await,
+            Play => {
+                match <Play as PacketDeserializable>::read(&mut buffer) {
+                    Ok(packet) => {
+                        if let Err(err) = packet.process(client, context).await {
+                            eprintln!("error processing {err}");
+                            continue
+                        }
+                        main_thread_tx.send(
+                            MainThreadMessage::PacketReceived {
+                                client_id: client.client_id,
+                                packet
+                            }
+                        ).unwrap_or_else(|err| { 
+                            eprintln!("failed to send packet to main thread: {err}") 
+                        });
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to parse packet from {err}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn parse_from_packets<'a, P: PacketDeserializable + ProcessPacket>(
+    buffer: &mut BytesMut,
+    client: &mut Client,
+    process_context: ProcessContext<'a>
+) {
+    match <P as PacketDeserializable>::read(buffer) {
+        Ok(packet) => {
+            if let Err(e) = packet.process(client, process_context).await {
+                eprintln!("error processing {e}");
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to parse packet from {e}")
+        }
+    }
 }

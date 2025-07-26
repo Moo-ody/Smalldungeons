@@ -1,6 +1,4 @@
-//! contains enums for messages sent between threads. 
-
-use crate::net::packets::old_packet_registry::ServerBoundPackets;
+use crate::net::protocol::play::serverbound::Play;
 use crate::server::player::player::ClientId;
 
 // too many comments because theres 4 different client disconnect related messages and theyre all needed and do different things...
@@ -34,7 +32,7 @@ pub enum ClientHandlerMessage {
 pub enum MainThreadMessage {
     PacketReceived {
         client_id: ClientId,
-        packet: ServerBoundPackets,
+        packet: Play,
     },
 
     NewPlayer {

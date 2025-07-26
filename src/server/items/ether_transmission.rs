@@ -1,5 +1,5 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::protocol::clientbound::PositionLook;
+use crate::net::protocol::play::clientbound::PositionLook;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use std::f64::consts::PI;

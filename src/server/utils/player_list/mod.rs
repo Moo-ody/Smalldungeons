@@ -2,7 +2,7 @@ pub mod player_profile;
 pub mod header;
 pub mod footer;
 
-use crate::net::packets::protocol::clientbound::PlayerListItem;
+use crate::net::protocol::play::clientbound::PlayerListItem;
 use crate::net::var_int::VarInt;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
 use crate::server::utils::player_list::player_profile::{GameProfile, PlayerData};

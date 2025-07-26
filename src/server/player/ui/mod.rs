@@ -1,7 +1,6 @@
-use crate::dungeon::dungeon_state::DungeonState::{NotReady, Starting};
-use crate::net::packets::server_bound::click_window::ClickWindow;
+use crate::dungeon::dungeon_state::DungeonState::NotReady;
 use crate::server::items::item_stack::ItemStack;
-use crate::server::player::player::{ClientId, Player};
+use crate::server::player::player::ClientId;
 use crate::server::server::Server;
 use crate::server::utils::nbt::NBT;
 
@@ -44,50 +43,50 @@ impl UI {
     }
 
     /// handles the click window packet for all UI
-    pub fn handle_click_window(
-        &self,
-        packet: &ClickWindow,
-        player: &mut Player,
-    ) -> anyhow::Result<()> {
-        
-        // todo in wd branch, track active windows with transaction packet sync and stuff
-        // to make sure client doesnt send packets for a different gui when it hasn't recieved new 1
-        
-        match self {
-            // maybe flag, since should never be possible
-            UI::None => player.sync_inventory()?,
-            UI::Inventory => {
-                if packet.slot_id == 44 { 
-                    // player.open_ui(UI::SkyblockMenu)?;
-                    return Ok(())
-                }
-                if player.inventory.click_slot(&packet, &player.client_id, &player.network_tx)? { 
-                    // needs re-syncing
-                    player.sync_inventory()?;
-                }
-            },
-            
-            UI::SkyblockMenu => {
-                player.sync_inventory()?;
-            }
-            UI::MortReadyUpMenu => {
-                match packet.slot_id { 
-                    4 | 13 => {
-                        let dung = &mut player.server_mut().dungeon;
-                        match dung.state {
-                            NotReady => dung.state = Starting { tick_countdown: 100 },
-                            Starting { .. } => dung.state = NotReady,
-                            _ => {}
-                        }
-                    }
-                    // 49 => player.close_ui()?,
-                    _ => {}
-                }
-                player.sync_inventory()?;
-            }
-        }
-        Ok(())
-    }
+    // pub fn handle_click_window(
+    //     &self,
+    //     packet: &ClickWindow,
+    //     player: &mut Player,
+    // ) -> anyhow::Result<()> {
+    //
+    //     // todo in wd branch, track active windows with transaction packet sync and stuff
+    //     // to make sure client doesnt send packets for a different gui when it hasn't recieved new 1
+    //
+    //     match self {
+    //         // maybe flag, since should never be possible
+    //         UI::None => player.sync_inventory()?,
+    //         UI::Inventory => {
+    //             if packet.slot_id == 44 {
+    //                 // player.open_ui(UI::SkyblockMenu)?;
+    //                 return Ok(())
+    //             }
+    //             if player.inventory.click_slot(&packet, &player.client_id, &player.network_tx)? {
+    //                 // needs re-syncing
+    //                 player.sync_inventory()?;
+    //             }
+    //         },
+    //
+    //         UI::SkyblockMenu => {
+    //             player.sync_inventory()?;
+    //         }
+    //         UI::MortReadyUpMenu => {
+    //             match packet.slot_id {
+    //                 4 | 13 => {
+    //                     let dung = &mut player.server_mut().dungeon;
+    //                     match dung.state {
+    //                         NotReady => dung.state = Starting { tick_countdown: 100 },
+    //                         Starting { .. } => dung.state = NotReady,
+    //                         _ => {}
+    //                     }
+    //                 }
+    //                 // 49 => player.close_ui()?,
+    //                 _ => {}
+    //             }
+    //             player.sync_inventory()?;
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     /// returns a list of items to send to client 
     pub fn get_container_contents(&self, server: &Server, client_id: &ClientId) -> Option<Vec<Option<ItemStack>>> {

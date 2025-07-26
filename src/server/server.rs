@@ -1,7 +1,7 @@
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
-use crate::net::packets::old_packet::ServerBoundPacket;
-use crate::net::packets::protocol::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerListHeaderFooter, PositionLook};
+use crate::net::packets::packet::ProcessPacket;
+use crate::net::protocol::play::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerListHeaderFooter, PositionLook};
 use crate::net::var_int::VarInt;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap};
@@ -143,7 +143,7 @@ impl Server {
             },
             MainThreadMessage::PacketReceived { client_id, packet } => {
                 let player = self.world.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?;
-                packet.main_process(&mut player.server_mut().world, player)?;
+                packet.process_with_player(player);
             }
         }
         Ok(())

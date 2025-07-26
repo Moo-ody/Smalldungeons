@@ -1,4 +1,4 @@
-use crate::net::packets::protocol::clientbound::{EntityAttach, SpawnObject};
+use crate::net::protocol::play::clientbound::{EntityAttach, SpawnObject};
 use crate::net::var_int::VarInt;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;

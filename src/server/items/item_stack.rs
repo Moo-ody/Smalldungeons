@@ -1,3 +1,4 @@
+use crate::net::packets::packet_deserialize::PacketDeserializable;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::nbt::encode::serialize_nbt;
 use crate::server::utils::nbt::NBT;
@@ -28,16 +29,18 @@ impl PacketSerializable for Option<ItemStack> {
     }
 }
 
-pub fn read_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
-    let id = buf.get_i16();
-    if id >= 0 {
-        let item_stack = ItemStack {
-            item: id,
-            stack_size: buf.get_i8(),
-            metadata: buf.get_i16(),
-            tag_compound: None,
-        };
-        return Some(item_stack);
+impl PacketDeserializable for Option<ItemStack> {
+    fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
+        let id = buffer.get_i16();
+        if id >= 0 {
+            let item_stack = ItemStack {
+                item: id,
+                stack_size: buffer.get_i8(),
+                metadata: buffer.get_i16(),
+                tag_compound: None,
+            };
+            return Ok(Some(item_stack));
+        }
+        Ok(None)
     }
-    None
 }

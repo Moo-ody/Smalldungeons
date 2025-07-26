@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::packets::protocol::clientbound::{BlockChange, DestroyEntites, SpawnMob, SpawnObject};
+use crate::net::protocol::play::clientbound::{BlockChange, DestroyEntites, SpawnMob, SpawnObject};
 use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_position::BlockPos;
@@ -147,14 +147,14 @@ impl World {
             }
         }
         let mut buf = PacketBuffer {
-            buf: Vec::new(),
+            buffer: Vec::new(),
         };
         for (entity, entity_impl) in self.entities.values_mut() {
             entity.tick(entity_impl, &mut buf);
         }
         for player in self.players.values_mut() {
-            player.packet_buffer.extend(&buf);
-            player.flush_packets();
+            player.packet_buffer.copy_from(&buf);
+            // player.flush_packets();
         }
         Ok(())
     }
@@ -163,7 +163,7 @@ impl World {
         let server = self.server_mut();
         let packet = BlockChange {
             block_pos: BlockPos { x, y, z },
-            block_state: VarInt(block.get_block_state_id() as i32),
+            block_state: block.get_block_state_id(),
         };
         for (_, player) in server.world.players.iter_mut() {
             player.write_packet(&packet);

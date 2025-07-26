@@ -1,6 +1,6 @@
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::secrets::{DungeonSecret, EssenceEntity};
-use crate::net::packets::protocol::clientbound::{BlockAction, SoundEffect};
+use crate::net::protocol::play::clientbound::{BlockAction, SoundEffect};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};

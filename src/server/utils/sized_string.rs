@@ -3,7 +3,7 @@ use crate::net::packets::packet_serialize::PacketSerializable;
 /// [String] with a character size limit of N.
 /// All characters after that size will be truncated.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct SizedString<const N: usize>(String);
+pub struct SizedString<const N: usize>(pub String);
 
 impl<const N: usize> SizedString<N> {
     pub fn truncated(text: &str) -> Self {

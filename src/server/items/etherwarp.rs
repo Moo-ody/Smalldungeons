@@ -1,4 +1,4 @@
-use crate::net::packets::protocol::clientbound::{PositionLook, SoundEffect};
+use crate::net::protocol::play::clientbound::{PositionLook, SoundEffect};
 use crate::server::block::blocks::Blocks::Air;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;

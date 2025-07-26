@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::packets::protocol::clientbound::{DisplayScoreboard, ScoreboardObjective, Teams, UpdateScore};
+use crate::net::protocol::play::clientbound::{DisplayScoreboard, ScoreboardObjective, Teams, UpdateScore};
 use crate::net::var_int::VarInt;
 use crate::server::utils::sized_string::SizedString;
 
@@ -10,6 +10,7 @@ pub const CREATE_TEAM: i8 = 0;
 pub const REMOVE_TEAM: i8 = 1;
 pub const UPDATE_TEAM: i8 = 2;
 pub const ADD_PLAYER: i8 = 3;
+
 pub const REMOVE_PLAYER: i8 = 4;
 
 // for scoreboard objective packet

@@ -1,4 +1,4 @@
-use crate::net::packets::protocol::clientbound::ChunkData;
+use crate::net::protocol::play::clientbound::ChunkData;
 use crate::server::chunk::chunk_section::ChunkSection;
 
 pub mod chunk_section;

@@ -1,4 +1,4 @@
-use crate::net::packets::protocol::clientbound::{CollectItem, EntityEquipment, EntityVelocity, PacketEntityMetadata, Particles, SoundEffect};
+use crate::net::protocol::play::clientbound::{CollectItem, EntityEquipment, EntityVelocity, PacketEntityMetadata, Particles, SoundEffect};
 use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_position::BlockPos;
@@ -135,8 +135,8 @@ impl EntityImpl for ItemSecretEntity {
         }
         
         // todo get correct values
-        const W: f64 = 1.5;
-        const H: f64 = 1.5;
+        const W: f64 = 3.0;
+        const H: f64 = 3.0;
         
         let aabb = AABB::new(
             DVec3::new(entity.position.x - W, entity.position.y - H, entity.position.z - W),
@@ -148,14 +148,14 @@ impl EntityImpl for ItemSecretEntity {
                     item_entity_id: VarInt(entity.id),
                     entity_id: VarInt(player.entity_id),
                 });
-                // player.send_packet(SoundEffect {
-                //     sounds: Sounds::Pop,
-                //     volume: 0.2,
-                //     pitch: 1.7619047,
-                //     x: player.position.x,
-                //     y: player.position.y,
-                //     z: player.position.z,
-                // }).unwrap();
+                player.write_packet(&SoundEffect {
+                    sound: "random.pop",
+                    pos_x: player.position.x,
+                    pos_y: player.position.y,
+                    pos_z: player.position.z,
+                    volume: 0.2,
+                    pitch: 1.7619047,
+                });
                 entity.world_mut().despawn_entity(entity.id);
                 break;
             }

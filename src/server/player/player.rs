@@ -1,8 +1,8 @@
 use crate::net::internal_packets::NetworkThreadMessage;
+use crate::net::packets::packet::IdentifiedPacket;
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::packets::packet_registry::IdentifiedPacket;
 use crate::net::packets::packet_serialize::PacketSerializable;
-use crate::net::packets::protocol::clientbound::{Chat, WindowItems};
+use crate::net::protocol::play::clientbound::{Chat, WindowItems};
 use crate::server::entity::entity::EntityId;
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::player::scoreboard::Scoreboard;
@@ -77,7 +77,7 @@ impl Player {
     ) -> Self {
         Self {
             server,
-            packet_buffer: PacketBuffer { buf: Vec::new() },
+            packet_buffer: PacketBuffer::new(),
             network_tx: server.network_tx.clone(),
             profile,
             client_id,
@@ -128,11 +128,8 @@ impl Player {
     }
     
     pub fn flush_packets(&mut self) {
-        if self.packet_buffer.buf.len() != 0 {
-            let result = self.network_tx.send(NetworkThreadMessage::SendPackets {
-                client_id: self.client_id,
-                buffer: self.packet_buffer.test(),
-            });
+        if self.packet_buffer.buffer.len() != 0 {
+            let result = self.network_tx.send(self.packet_buffer.get_packet_message(&self.client_id));
             if result.is_err() { 
                 panic!("error happened flushing packets");
             }

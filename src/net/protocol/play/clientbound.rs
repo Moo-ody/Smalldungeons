@@ -1,4 +1,4 @@
-use crate::net::packets::packet_registry::IdentifiedPacket;
+use crate::net::packets::packet::IdentifiedPacket;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::net::var_int::{write_var_int, VarInt};
 use crate::register_packets;
@@ -13,57 +13,80 @@ use blocks::packet_serializable;
 use std::rc::Rc;
 
 register_packets! {
-    // these should probably go in a different file
-    ServerInfo = 0x00;
-    JoinGame<'_> = 0x01;
-    LoginSuccess = 0x02;
-
     KeepAlive = 0x00;
-    Pong = 0x01;
+    JoinGame<'_> = 0x01;
     Chat = 0x02;
     UpdateTime = 0x03;
     EntityEquipment = 0x04;
+    // SpawnPosition = 0x05;
+    // UpdateHealth = 0x06;
+    // Respawn = 0x07;
     PositionLook = 0x08;
+    // SetHotbarSlot = 0x09;
+    // EntityUsedBed = 0x0a;
+    // SwingAnimation = 0x0b
+    
     CollectItem = 0x0d;
     SpawnObject = 0x0e;
-    SpawnMob = 0x0F;
+    SpawnMob = 0x0f;
+    // SpawnPainting = 0x10;
+    // SpawnExperienceOrb = 0x11;
     EntityVelocity = 0x12;
     DestroyEntites = 0x13;
+    // Entity => 0x14;
     EntityMove = 0x15;
     EntityRotate = 0x16;
     EntityMoveRotate = 0x17;
     EntityTeleport = 0x18;
     EntityYawRotate = 0x19;
+    EntityStatus = 0x1a;
+    EntityAttach = 0x1b;
+    PacketEntityMetadata = 0x1c;
+    AddEffect = 0x1d;
+    RemoveEffect = 0x1e;
+    // SetExperience 0x1f;
     EntityProperties = 0x20;
-    EntityStatus = 0x1A;
-    EntityAttach = 0x1B;
-    PacketEntityMetadata = 0x1C;
-    AddEffect = 0x1D;
-    RemoveEffect = 0x1E;
     ChunkData = 0x21;
+    // MultiBlockChange = 0x22;
     BlockChange = 0x23;
     BlockAction = 0x24;
+    // BlockBreakAnimation = 0x25;
+    // ChunkDataBulk = 0x26;
+    // Explosion = 0x27;
+    // Effect = 0x28
     SoundEffect<'_> = 0x29;
-    Particles = 0x2A;
+    Particles = 0x2a;
+    // ChangeGameState = 0x2b
+    // SpawnGlobalEntity = 0x2c
     OpenWindow = 0x2d;
     CloseWindow = 0x2e;
     SetSlot = 0x2f;
     WindowItems = 0x30;
+    // WindowProperty = 0x31;
     ConfirmTransaction = 0x32;
+    // UpdateSign = 0x33;
+    // Maps = 0x34;
+    // UpdateBlockEntity = 0x35;
+    // SignEditorOpen = 0x36;
+    // Statistics = 0x37;
     PlayerListItem = 0x38;
-    ScoreboardObjective<'_> = 0x3B;
-    UpdateScore = 0x3C;
-    DisplayScoreboard = 0x3D;
-    Teams = 0x3E;
+    // PlayerAbilities = 0x39;
+    // TabCompleteReply = 0x3a
+    ScoreboardObjective<'_> = 0x3b;
+    UpdateScore = 0x3c;
+    DisplayScoreboard = 0x3d;
+    Teams = 0x3e;
     CustomPayload<'_> = 0x3f;
     Disconnect = 0x40;
+    // ServerDifficulty = 0x41;
+    // CombatEvent = 0x42;
+    // Camera = 0x43;
+    // WorldBorder = 0x44;
+    // Title => 0x45;
+    // SetCompression = 0x46;
     PlayerListHeaderFooter = 0x47;
-}
-
-packet_serializable! {
-    pub struct ServerInfo {
-        pub status: String,
-    }
+    // ResourcePackSend = 0x48;
+    // EntityUpdateNBT = 0x49
 }
 
 packet_serializable! {
@@ -78,12 +101,7 @@ packet_serializable! {
     }
 }
 
-packet_serializable! {
-    pub struct LoginSuccess {
-        pub uuid: String,
-        pub name: String,
-    }
-}
+
 
 packet_serializable! {
     pub struct KeepAlive {
@@ -91,11 +109,7 @@ packet_serializable! {
     }
 }
 
-packet_serializable! {
-    pub struct Pong {
-        pub client_time: i64,
-    }
-}
+
 
 packet_serializable! {
     pub struct Chat {
@@ -310,7 +324,7 @@ packet_serializable! {
 packet_serializable! {
     pub struct BlockChange {
         pub block_pos: BlockPos,
-        pub block_state: VarInt,
+        pub block_state: u16 => &VarInt(self.block_state as i32),
     }
 }
 
@@ -346,7 +360,7 @@ packet_serializable! {
         pub offset_z: f32,
         pub speed: f32,
         pub count: i32,
-        // todo maybe figure out args,
+        // maybe figure out args,
         // not sure if we'll ever need them
     }
 }
