@@ -113,7 +113,7 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
-                player.sync_inventory()?;
+                player.sync_inventory();
 
                 let mut attributes = AttributeMap::new();
                 attributes.insert(Attribute::MovementSpeed, 0.4);
@@ -124,8 +124,6 @@ impl Server {
                 });
                 
                 player.flush_packets();
-
-                // let entity = self.world.spawn_entity(spawn_point, Zombie, None)?;
 
                 self.world.players.insert(client_id, player);
                 //

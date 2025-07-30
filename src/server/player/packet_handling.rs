@@ -148,6 +148,8 @@ impl ProcessPacket for CloseWindow {
 
 impl ProcessPacket for ClickWindow {
     fn process_with_player(&self, player: &mut Player) {
+        player.inventory.click_slot(self, &mut player.packet_buffer);
+        player.sync_inventory()
     }
 }
 

@@ -221,7 +221,7 @@ impl Player {
     // }
 
     
-    pub fn sync_inventory(&mut self) -> anyhow::Result<()> {
+    pub fn sync_inventory(&mut self) {
         let network_tx = &self.server_mut().network_tx;
         let mut inv_items = Vec::new();
         
@@ -254,7 +254,6 @@ impl Player {
         //         item_stack: None,
         //     }.send_packet(self.client_id, network_tx)?;
         // }
-        Ok(())
     }
     
     pub fn send_message(&mut self, msg: &str) {
