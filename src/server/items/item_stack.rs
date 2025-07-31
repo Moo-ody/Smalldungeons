@@ -1,10 +1,11 @@
 use crate::net::packets::packet_deserialize::PacketDeserializable;
 use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::server::utils::nbt::decode::deserialize_nbt;
 use crate::server::utils::nbt::encode::serialize_nbt;
 use crate::server::utils::nbt::NBT;
 use bytes::{Buf, BytesMut};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ItemStack {
     pub item: i16,
     pub stack_size: i8,
@@ -37,7 +38,7 @@ impl PacketDeserializable for Option<ItemStack> {
                 item: id,
                 stack_size: buffer.get_i8(),
                 metadata: buffer.get_i16(),
-                tag_compound: None,
+                tag_compound: deserialize_nbt(buffer),
             };
             return Ok(Some(item_stack));
         }

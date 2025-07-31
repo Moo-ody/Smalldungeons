@@ -6,7 +6,7 @@ pub mod decode;
 /// NBT
 /// 
 /// This struct represents the root NBT Tag Compound.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NBT {
     pub root_name: String,
     pub nodes: Vec<(String, NBTNode)>,
@@ -68,7 +68,7 @@ impl NBT {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NBTNode {
     Byte(i8),
     Short(i16),

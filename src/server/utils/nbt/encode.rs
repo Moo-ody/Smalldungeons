@@ -1,5 +1,19 @@
 use crate::server::utils::nbt::{NBTNode, NBT};
 
+pub const TAG_END_ID: u8 = 0;
+pub const TAG_BYTE_ID: u8 = 1;
+pub const TAG_SHORT_ID: u8 = 2;
+pub const TAG_INT_ID: u8 = 3;
+pub const TAG_LONG_ID: u8 = 4;
+pub const TAG_FLOAT_ID: u8 = 5;
+pub const TAG_DOUBLE_ID: u8 = 6;
+pub const TAG_BYTE_ARRAY_ID: u8 = 7;
+pub const TAG_STRING_ID: u8 = 8;
+pub const TAG_LIST_ID: u8 = 9;
+pub const TAG_COMPOUND_ID: u8 = 10;
+pub const TAG_INT_ARRAY_ID: u8 = 11;
+pub const TAG_LONG_ARRAY_ID: u8 = 12;
+
 pub fn serialize_nbt(nbt: &NBT) -> Vec<u8> {
     let mut vec = Vec::new();
     vec.push(TAG_COMPOUND_ID);
@@ -63,7 +77,7 @@ pub fn write_entry(name: &str, node: &NBTNode, vec: &mut Vec<u8>) {
             vec.push(*type_id);
             vec.extend_from_slice(&(children.len() as i32).to_be_bytes());
             for child in children {
-                write_entry_unnamed(child, vec);
+                write_unnamed_entry(child, vec);
             }
         }
         NBTNode::Compound(nodes) => {
@@ -93,7 +107,7 @@ pub fn write_entry(name: &str, node: &NBTNode, vec: &mut Vec<u8>) {
     }
 }
 
-fn write_entry_unnamed(node: &NBTNode, vec: &mut Vec<u8>) {
+fn write_unnamed_entry(node: &NBTNode, vec: &mut Vec<u8>) {
     match node {
         NBTNode::Byte(value) => {
             vec.push(*value as u8);
@@ -124,7 +138,7 @@ fn write_entry_unnamed(node: &NBTNode, vec: &mut Vec<u8>) {
             vec.push(*type_id);
             vec.extend_from_slice(&(children.len() as i32).to_be_bytes());
             for child in children {
-                write_entry_unnamed(child, vec);
+                write_unnamed_entry(child, vec);
             }
         }
         NBTNode::Compound(nodes) => {
@@ -152,17 +166,3 @@ fn write_string(vec: &mut Vec<u8>, name: &str) {
     vec.extend_from_slice(&(name.len() as u16).to_be_bytes());
     vec.extend_from_slice(name.as_bytes());
 }
-
-pub const TAG_END_ID: u8 = 0;
-pub const TAG_BYTE_ID: u8 = 1;
-pub const TAG_SHORT_ID: u8 = 2;
-pub const TAG_INT_ID: u8 = 3;
-pub const TAG_LONG_ID: u8 = 4;
-pub const TAG_FLOAT_ID: u8 = 5;
-pub const TAG_DOUBLE_ID: u8 = 6;
-pub const TAG_BYTE_ARRAY_ID: u8 = 7;
-pub const TAG_STRING_ID: u8 = 8;
-pub const TAG_LIST_ID: u8 = 9;
-pub const TAG_COMPOUND_ID: u8 = 10;
-pub const TAG_INT_ARRAY_ID: u8 = 11;
-pub const TAG_LONG_ARRAY_ID: u8 = 12;

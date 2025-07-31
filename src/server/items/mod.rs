@@ -95,8 +95,15 @@ impl Item {
                 stack_size: 1,
                 metadata: 0,
                 tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound(vec![
+                            NBT::short("lvl", 10),
+                            NBT::short("id", 32),
+                        ])
+                    ]),
+                    NBT::byte("Unbreakable", 1),
+                    NBT::int("HideFlags", 127),
                     NBT::compound("display", vec![
-                        NBT::string("Name", "§9Diamond Pickaxe"),
                         NBT::list_from_string("Lore", indoc! {r#"
                             §8Breaking Power 4
 
@@ -105,14 +112,9 @@ impl Item {
                             §7breaks blocks.
 
                             §9§l§kE§r§9§l RARE PICKAXE §kE
-                        "#})
+                        "#}),
+                        NBT::string("Name", "§9Diamond Pickaxe"),
                     ]),
-                    NBT::list("ench", TAG_COMPOUND_ID, vec![
-                        NBTNode::Compound(vec![
-                            NBT::short("id", 32),
-                            NBT::short("lvl", 10),
-                        ])
-                    ])
                 ])),
             },
             Item::SpiritSceptre => ItemStack {
@@ -122,10 +124,10 @@ impl Item {
                 tag_compound: None,
             },
         };
-        if let Some(ref mut tag) = stack.tag_compound {
-            tag.nodes.push(NBT::byte("Unbreakable", 1));
-            tag.nodes.push(NBT::int("HideFlags", 127));
-        }
+        // if let Some(ref mut tag) = stack.tag_compound {
+        //     tag.nodes.push(NBT::byte("Unbreakable", 1));
+        //     tag.nodes.push(NBT::int("HideFlags", 127));
+        // }
         stack
     }
 }
