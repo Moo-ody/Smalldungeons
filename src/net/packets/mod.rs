@@ -2,8 +2,6 @@ use crate::net::var_int::read_var_int;
 use anyhow::{bail, Context};
 use bytes::BytesMut;
 
-// pub mod server_bound;
-pub mod packet_context;
 pub mod packet_buffer;
 pub mod packet;
 pub mod packet_serialize;
