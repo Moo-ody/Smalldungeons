@@ -245,8 +245,7 @@ impl Dungeon {
         }
         // probably mark room connected to entrance as entered 
     }
-
-    // TODO: all dungeon-ticking happens from here,
+    
     pub fn tick(&mut self) -> anyhow::Result<()> {
         let server = self.server_mut();
 

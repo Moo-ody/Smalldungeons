@@ -30,11 +30,10 @@ pub enum SecretType {
     Bat,
 }
 
-// todo new function that infers spawn_aabb from a range
 pub struct DungeonSecret {
-    pub secret_type: SecretType,
-    pub block_pos: BlockPos,
-    pub spawn_aabb: AABB,
+    secret_type: SecretType,
+    block_pos: BlockPos, // might not even need?
+    spawn_aabb: AABB,
     pub has_spawned: bool,
     pub obtained: bool,
 }
@@ -50,7 +49,27 @@ pub fn tick(dungeon_secret: &Rc<RefCell<DungeonSecret>>, player: &Player) {
 
 impl DungeonSecret {
 
-    fn spawn(dungeon_secret: &Rc<RefCell<DungeonSecret>>, secret: RefMut<DungeonSecret>, world: &mut World) {
+    pub fn new(secret_type: SecretType, position: BlockPos, spawn_radius: f64) -> Self {
+        Self {
+            secret_type,
+            block_pos: position,
+            spawn_aabb: {
+                let (x, y, z) = (position.x as f64, position.y as f64, position.z as f64);
+                AABB {
+                    min: DVec3::new(x - spawn_radius, y - spawn_radius, z - spawn_radius),
+                    max: DVec3::new(x + spawn_radius, y + spawn_radius, z + spawn_radius),
+                }
+            },
+            has_spawned: false,
+            obtained: false,
+        }
+    }
+    
+    fn spawn(
+        secret_rc: &Rc<RefCell<DungeonSecret>>,
+        secret: RefMut<DungeonSecret>,
+        world: &mut World
+    ) {
         match &secret.secret_type {
             SecretType::WitherEssence { .. } => {
                 world.set_block_at(
@@ -60,7 +79,7 @@ impl DungeonSecret {
                     secret.block_pos.z
                 );
                 world.interactable_blocks.insert(secret.block_pos, BlockInteractAction::WitherEssence {
-                    secret: dungeon_secret.clone()
+                    secret: secret_rc.clone()
                 });
             }
             SecretType::Chest { direction } => {
@@ -71,7 +90,7 @@ impl DungeonSecret {
                     secret.block_pos.z,
                 );
                 world.interactable_blocks.insert(secret.block_pos, BlockInteractAction::Chest {
-                    secret: dungeon_secret.clone()
+                    secret: secret_rc.clone()
                 });
             }
             SecretType::Item { item } => {
@@ -93,8 +112,6 @@ impl DungeonSecret {
 }
 
 pub struct ItemSecretEntity;
-
-// todo: implement some form of packet buffer, which writes packets and flushes once
 
 // this isn't necessarily a secret, simply an animation for one, can be re-used for blessings
 impl EntityImpl for ItemSecretEntity {
