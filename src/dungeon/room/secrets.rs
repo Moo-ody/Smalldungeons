@@ -10,7 +10,7 @@ use crate::server::player::player::Player;
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
-use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
+use crate::server::utils::nbt::serialize::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
 use crate::server::world::World;
 use std::cell::{RefCell, RefMut};
@@ -43,7 +43,7 @@ pub fn tick(dungeon_secret: &Rc<RefCell<DungeonSecret>>, player: &Player) {
     let mut secret = dungeon_secret.borrow_mut();
     if !secret.has_spawned && player.collision_aabb().intersects(&secret.spawn_aabb) {
         secret.has_spawned = true;
-        DungeonSecret::spawn(dungeon_secret, secret, player.world_mut())
+        DungeonSecret::spawn_into_world(dungeon_secret, secret, player.world_mut())
     }
 }
 
@@ -65,7 +65,7 @@ impl DungeonSecret {
         }
     }
     
-    fn spawn(
+    fn spawn_into_world(
         secret_rc: &Rc<RefCell<DungeonSecret>>,
         secret: RefMut<DungeonSecret>,
         world: &mut World

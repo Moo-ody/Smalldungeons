@@ -1,6 +1,6 @@
 pub mod inventory;
-pub mod ui;
+pub mod container_ui;
 pub mod scoreboard;
 pub mod player;
 pub mod attribute;
-mod packet_handling;
+pub mod packet_handling;

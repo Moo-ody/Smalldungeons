@@ -8,7 +8,7 @@ use crate::server::items::Item;
 pub enum ItemSlot {
     #[default]
     Empty,
-    Filled(Item, /*ItemStack*/),
+    Filled(Item),
 }
 
 impl ItemSlot {
@@ -61,7 +61,7 @@ impl Inventory {
         &mut self,
         packet: &ClickWindow,
         packet_buffer: &mut PacketBuffer
-    ) {
+    ) -> bool {
         match packet.mode {
             ClickMode::NormalClick => {
                 // if we ever have stackable items. this will need fixing
@@ -135,6 +135,7 @@ impl Inventory {
             ClickMode::Drag => {}
             ClickMode::DoubleClick => {}
         }
+        false
     }
 }
 

@@ -2,6 +2,7 @@ use crate::net::packets::packet::ProcessPacket;
 use crate::net::protocol::play::clientbound::BlockChange;
 use crate::net::protocol::play::serverbound::{ArmSwing, ChatMessage, ClickWindow, ClientSettings, ClientStatus, CloseWindow, ConfirmTransaction, HeldItemChange, KeepAlive, PlayerAction, PlayerActionType, PlayerBlockPlacement, PlayerDigging, PlayerDiggingAction, PlayerLook, PlayerPosition, PlayerPositionLook, PlayerUpdate};
 use crate::server::items::Item;
+use crate::server::player::container_ui::UI;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::player::Player;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,6 +23,8 @@ impl ProcessPacket for ChatMessage {
     fn process_with_player(&self, player: &mut Player) {
         if self.message.as_str() == "/locraw" {
             player.send_message(r#"{"server":"mini237V","gametype":"SKYBLOCK","mode":"dungeon","map":"Dungeon"}"#);
+        } else if self.message.as_str() == "/mort" {
+            player.open_ui(UI::MortReadyUpMenu)
         }
     }
 }
@@ -128,7 +131,6 @@ impl ProcessPacket for HeldItemChange {
 // will be useful if we want to add stuff like mage beam
 impl ProcessPacket for ArmSwing {}
 
-
 impl ProcessPacket for PlayerAction {
     fn process_with_player(&self, player: &mut Player) {
         match self.action {
@@ -139,18 +141,22 @@ impl ProcessPacket for PlayerAction {
     }
 }
 
-
 // todo: re-implement gui stuff
 impl ProcessPacket for CloseWindow {
     fn process_with_player(&self, player: &mut Player) {
+        player.open_ui(UI::None)
     }
 }
 
 impl ProcessPacket for ClickWindow {
     fn process_with_player(&self, player: &mut Player) {
-        println!("item stack: {:?}", self.clicked_item);
-        player.inventory.click_slot(self, &mut player.packet_buffer);
-        player.sync_inventory()
+        if player.current_ui == UI::None
+            || (player.window_id != self.window_id && player.current_ui != UI::Inventory)
+        {
+            player.sync_inventory();
+            return;
+        }
+        player.current_ui.clone().handle_click_window(self, player);
     }
 }
 
@@ -166,7 +172,9 @@ impl ProcessPacket for ClientStatus {
     fn process_with_player(&self, player: &mut Player) {
         // todo gui stuff
         match self {
-            ClientStatus::OpenInventory => {}
+            ClientStatus::OpenInventory => {
+                player.open_ui(UI::Inventory)
+            }
             _ => {}
         }
     }

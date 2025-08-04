@@ -2,11 +2,11 @@ use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::packet::IdentifiedPacket;
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::packets::packet_serialize::PacketSerializable;
-use crate::net::protocol::play::clientbound::{Chat, WindowItems};
+use crate::net::protocol::play::clientbound::{Chat, OpenWindow, SetSlot, WindowItems};
 use crate::server::entity::entity::EntityId;
+use crate::server::player::container_ui::UI;
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::player::scoreboard::Scoreboard;
-use crate::server::player::ui::UI;
 use crate::server::server::Server;
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
@@ -53,18 +53,11 @@ pub struct Player {
     pub inventory: Inventory,
     pub held_slot: u8,
     
-    pub current_window_id: u8,
+    pub window_id: i8,
     pub current_ui: UI,
+    // pub current_ui: UI,
 
     pub sidebar: Scoreboard,
-    
-    // im assuming this is for sending packets for entities inside of player's render distance.
-    // if so, it'd be better to just loop over every player and check if in distance instead
-    // because:
-    // - there is usually (and should) only be 1 player at a time
-    // - most entities would be in render distance already
-    // obviously this would be better if the render distance was much larger and much more entities
-    // pub observed_entities: HashSet<EntityId>,
 }
 
 impl Player {
@@ -99,7 +92,7 @@ impl Player {
             inventory: Inventory::empty(),
             held_slot: 0,
             
-            current_window_id: 1,
+            window_id: 1,
             current_ui: UI::None,
             
             sidebar: Scoreboard::new(),
@@ -194,6 +187,27 @@ impl Player {
         }
     }
     
+    pub fn open_ui(&mut self, ui: UI) {
+        self.current_ui = ui;
+        if let Some(container_data) = ui.get_container_data() {
+            self.window_id += 1;
+            self.write_packet(&OpenWindow {
+                window_id: self.window_id,
+                inventory_type: "minecraft:container".into(),
+                window_title: ChatComponentTextBuilder::new(container_data.title).build(),
+                slot_count: container_data.slot_amount,
+            });
+            self.sync_inventory();
+        }
+    }
+
+    pub fn close_ui(&mut self) {
+        self.current_ui = UI::None;
+        // CloseWindowPacket {
+        //     window_id: self.current_window_id as i8,
+        // }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+    }
+    
     // pub fn open_ui(&mut self, ui: UI) -> anyhow::Result<()> {
     //     self.current_ui = ui;
     //
@@ -222,38 +236,36 @@ impl Player {
 
     
     pub fn sync_inventory(&mut self) {
-        let network_tx = &self.server_mut().network_tx;
         let mut inv_items = Vec::new();
         
         for item in &self.inventory.items {
             inv_items.push(item.get_item_stack())
         }
         
-        // if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
-        //     WindowItems {
-        //         window_id: self.current_window_id,
-        //         items,
-        //     }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-        // }
-        //
+        if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
+            self.write_packet(&WindowItems {
+                window_id: self.window_id,
+                items,
+            });
+        }
+        
         self.write_packet(&WindowItems {
             window_id: 0,
             items: inv_items,
         });
-        
-        // if let UI::Inventory = self.current_ui {
-        //     SetSlot {
-        //         window_id: -1,
-        //         slot: 0,
-        //         item_stack: self.inventory.dragged_item.get_item_stack(),
-        //     }.send_packet(self.client_id, network_tx)?;
-        // } else {
-        //     SetSlot {
-        //         window_id: -1,
-        //         slot: 0,
-        //         item_stack: None,
-        //     }.send_packet(self.client_id, network_tx)?;
-        // }
+        if let UI::Inventory = self.current_ui {
+            self.write_packet(&SetSlot {
+                window_id: -1,
+                slot: 0,
+                item_stack: self.inventory.dragged_item.get_item_stack(),
+            })
+        } else {
+            self.write_packet(&SetSlot {
+                window_id: -1,
+                slot: 0,
+                item_stack: None,
+            })
+        }
     }
     
     pub fn send_message(&mut self, msg: &str) {

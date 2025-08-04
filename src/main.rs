@@ -6,7 +6,6 @@ mod utils;
 use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::dungeon_state::DungeonState::Starting;
 use crate::dungeon::room::room_data::RoomData;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::run_network::run_network_thread;
@@ -16,7 +15,6 @@ use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
-use crate::server::utils::dvec3::DVec3;
 use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
@@ -131,14 +129,11 @@ async fn main() -> Result<()> {
         door.load_into_world(&mut server.world, &door_type_blocks);
     }
 
-
-    server.dungeon.state = Starting { tick_countdown: 100 };
-
-    let zombie_spawn_pos = DVec3 {
-        x: 25.0,
-        y: 69.0,
-        z: 25.0,
-    };
+    // let zombie_spawn_pos = DVec3 {
+    //     x: 25.0,
+    //     y: 69.0,
+    //     z: 25.0,
+    // };
     
     // let zombie = Entity::create_at(EntityType::Zombie, zombie_spawn_pos, server.world.new_entity_id());
     // let path = Pathfinder::find_path(&zombie, &BlockPos { x: 10, y: 69, z: 10 }, &server.world)?;

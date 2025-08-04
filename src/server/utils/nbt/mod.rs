@@ -1,7 +1,7 @@
-use crate::server::utils::nbt::encode::TAG_STRING_ID;
+use crate::server::utils::nbt::serialize::TAG_STRING_ID;
 
-pub mod encode;
-pub mod decode;
+pub mod serialize;
+pub mod deserialize;
 
 /// NBT
 /// 

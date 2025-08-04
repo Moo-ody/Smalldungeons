@@ -35,7 +35,7 @@ pub enum Attribute {
 }
 
 impl Attribute {
-    const fn id(&self) -> &'static str {
+    const fn id(&self) -> &str {
         match self {
             Attribute::MaxHealth => "generic.maxHealth",
             Attribute::KnockbackResistance => "generic.knockbackResistance",

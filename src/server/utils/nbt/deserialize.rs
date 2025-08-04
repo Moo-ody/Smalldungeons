@@ -1,4 +1,4 @@
-use crate::server::utils::nbt::encode::*;
+use crate::server::utils::nbt::serialize::*;
 use crate::server::utils::nbt::{NBTNode, NBT};
 use bytes::{Buf, BytesMut};
 
