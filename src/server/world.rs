@@ -25,7 +25,6 @@ pub struct World {
     pub chunk_grid: ChunkGrid,
     pub interactable_blocks: HashMap<BlockPos, BlockInteractAction>,
 
-
     pub player_info: PlayerList, // might need to be per player, not sure.
 
     // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
@@ -35,6 +34,8 @@ pub struct World {
 
     pub entities_for_removal: VecDeque<EntityId>,
 
+    // pub commands: Vec<Command>
+    
     // pub player_info: PlayerList,
 }
 
@@ -53,6 +54,8 @@ impl World {
             players: HashMap::new(),
             entities: HashMap::new(),
             entities_for_removal: VecDeque::new(),
+
+            // commands: Vec::new()
         }
     }
 
@@ -103,8 +106,8 @@ impl World {
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
         let mut packets: Vec<ClientBoundPacket> = Vec::new();
-        
-        if self.entities_for_removal.len() != 0 {
+
+        if !self.entities_for_removal.is_empty() {
             let mut packet = DestroyEntities {
                 entity_ids: Vec::with_capacity(self.entities_for_removal.len()),
             };

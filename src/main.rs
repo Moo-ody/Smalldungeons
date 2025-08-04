@@ -158,6 +158,7 @@ async fn main() -> Result<()> {
 
     server.world.player_info.set_line(0, cata_line);
 
+    // not a huge fan of the rc refcell stuff. shared mutability can be done via a shared hashmap or something with the mutable data mapped to a key.
     let mut dungeon_secret =  Rc::new(RefCell::new(DungeonSecret {
         secret_type: WitherEssence {
             
@@ -193,7 +194,7 @@ async fn main() -> Result<()> {
     }));
 
     server.world.set_block_at(Blocks::DiamondBlock, 11, 68, 13);
-    
+
     let mut dungeon_secret3 = Rc::new(RefCell::new(DungeonSecret {
         secret_type: SecretType::Chest {
             direction: Direction::North
@@ -208,7 +209,8 @@ async fn main() -> Result<()> {
     }));
 
     server.world.set_block_at(Blocks::DiamondBlock, 15, 68, 13);
-    
+
+    // server.world.commands.append(&mut vec![Command::Mort, Command::Locraw, Command::GFS]);
     
     loop {
         tick_interval.tick().await;
@@ -268,13 +270,13 @@ async fn main() -> Result<()> {
 
             match server.dungeon.state {
                 DungeonState::NotReady => {
-                    for (_, p) in &player.server_mut().world.players {
+                    for p in player.server_mut().world.players.values() {
                         sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
                     }
                     sidebar_lines.new_line();
                 }
                 DungeonState::Starting { tick_countdown } => {
-                    for (_, p) in &player.server_mut().world.players {
+                    for p in player.server_mut().world.players.values() {
                         sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
                     }
                     sidebar_lines.new_line();

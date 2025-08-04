@@ -36,6 +36,7 @@ use crate::net::packets::client_bound::set_slot::SetSlot;
 use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
 use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
+use crate::net::packets::client_bound::tab_complete::TabComplete as CBTabComplete;
 use crate::net::packets::client_bound::teams::Teams;
 use crate::net::packets::client_bound::update_score::UpdateScore;
 use crate::net::packets::client_bound::window_items::WindowItems;
@@ -59,6 +60,7 @@ use crate::net::packets::server_bound::player_position::PlayerPosition;
 use crate::net::packets::server_bound::player_update::PlayerUpdate;
 use crate::net::packets::server_bound::status_request::StatusRequest;
 use crate::net::packets::server_bound::swing_animation::SwingAnimation;
+use crate::net::packets::server_bound::tab_complete::TabComplete as SBTabComplete;
 use crate::{register_clientbound_packets, register_serverbound_packets};
 
 register_clientbound_packets! {
@@ -104,6 +106,7 @@ register_clientbound_packets! {
     DisplayScoreboard,
     Teams,
     OpenWindowPacket,
+    CBTabComplete
 }
 
 register_serverbound_packets! {
@@ -123,6 +126,7 @@ register_serverbound_packets! {
         0x09 => HeldItemChange,
         0x0e => ClickWindow,
         0x07 => PlayerDigging,
+        0x14 => SBTabComplete,
         0x15 => ClientSettings,
         0x16 => ClientStatusPacket,
         0x0F => SBConfirmTransaction,

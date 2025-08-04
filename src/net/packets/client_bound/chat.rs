@@ -12,6 +12,12 @@ pub struct Chat {
     pub typ: i8,
 }
 
+impl Chat {
+    pub fn new(component: ChatComponentText, typ: i8) -> Self {
+        Self { component, typ }
+    }
+}
+
 #[async_trait::async_trait]
 impl ClientBoundPacketImpl for Chat {
     async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> Result<()> {
