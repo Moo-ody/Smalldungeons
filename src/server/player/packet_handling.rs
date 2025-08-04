@@ -141,7 +141,6 @@ impl ProcessPacket for PlayerAction {
     }
 }
 
-// todo: re-implement gui stuff
 impl ProcessPacket for CloseWindow {
     fn process_with_player(&self, player: &mut Player) {
         player.open_ui(UI::None)
@@ -170,7 +169,6 @@ impl ProcessPacket for ClientSettings {
 
 impl ProcessPacket for ClientStatus {
     fn process_with_player(&self, player: &mut Player) {
-        // todo gui stuff
         match self {
             ClientStatus::OpenInventory => {
                 player.open_ui(UI::Inventory)

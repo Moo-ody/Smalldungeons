@@ -105,6 +105,7 @@ impl RoomType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoomData {
     pub name: String,
+    pub id: String,
     pub shape: RoomShape,
     pub room_type: RoomType,
     pub bottom: i32,
@@ -120,6 +121,7 @@ impl RoomData {
         let json_data: Value = serde_json::from_str(raw_data).unwrap();
 
         let name = json_data["name"].as_str().unwrap().to_string();
+        let id = json_data["id"].as_str().unwrap().to_string();
         let shape = RoomShape::from_str(json_data["shape"].as_str().unwrap());
         let room_type = RoomType::from_str(json_data["type"].as_str().unwrap());
         let bottom = json_data["bottom"].as_number().unwrap().as_u64().unwrap() as i32;
@@ -144,6 +146,7 @@ impl RoomData {
 
         RoomData {
             name,
+            id,
             shape,
             room_type,
             bottom,
@@ -158,6 +161,7 @@ impl RoomData {
     pub fn dummy() -> RoomData {
         RoomData {
             name: String::from("Dummy"),
+            id: String::from(""),
             shape: RoomShape::OneByOne,
             room_type: RoomType::Normal,
             bottom: 68,

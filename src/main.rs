@@ -24,7 +24,7 @@ use net::protocol::play::clientbound::AddEffect;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::unbounded_channel;
 
 const STATUS_RESPONSE_JSON: &str = r#"{
@@ -184,24 +184,58 @@ async fn main() -> Result<()> {
 
             let mut sidebar_lines = ScoreboardLines(Vec::new());
 
+            // maybe match time with hypixel,
             let now = Local::now();
             let date = now.format("%m/%d/%y").to_string();
-            // maybe match hypixels sb time?
             let time = now.format("%-I:%M%P").to_string();
 
-            // TODO: handle room id according to current room
+            let current_skyblock_month = {
+                const SKYBLOCK_EPOCH_START_MILLIS: u64 = 1_559_829_300_000;
+                const SKYBLOCK_YEAR_MILLIS: u64 = 124 * 60 * 60 * 1000;
+                const SKYBLOCK_MONTH_MILLIS: u64 = SKYBLOCK_YEAR_MILLIS / 12;
+                const SKYBLOCK_DAY_MILLIS: u64 = SKYBLOCK_MONTH_MILLIS / 31;
+
+                const SKYBLOCK_MONTHS: [&str; 12] = [
+                    "Early Spring", "Spring", "Late Spring",
+                    "Early Summer", "Summer", "Late Summer",
+                    "Early Autumn", "Autumn", "Late Autumn",
+                    "Early Winter", "Winter", "Late Winter",
+                ];
+
+                let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+                let elapsed = now.saturating_sub(SKYBLOCK_EPOCH_START_MILLIS);
+                let day = (elapsed % SKYBLOCK_YEAR_MILLIS) / SKYBLOCK_DAY_MILLIS;
+                let month = (day / 31) as usize;
+                let day_of_month = (day % 31) + 1;
+
+                let suffix = match day_of_month % 100 {
+                    11 | 12 | 13 => "th",
+                    _ => match day_of_month % 10 {
+                        1 => "st",
+                        2 => "nd",
+                        3 => "rd",
+                        _ => "th",
+                    },
+                };
+                format!("{} {}{}", SKYBLOCK_MONTHS[month], day_of_month, suffix)
+            };
+
+            let room_id = if let Some(room) = player.server_mut().dungeon.get_player_room(player) {
+                &room.room_data.id
+            } else {
+                ""
+            };
+
             // maybe fix winter 22nd
             sidebar_lines.push(formatdoc! {r#"
                 §e§lSKYBLOCK
                 §7{date} §8local {room_id}
 
-                Winter 22nd
+                {current_skyblock_month}
                 §7{time}
                  §7⏣ §cThe Catacombs §7(F7)
 
-            "#,
-            room_id = "730,-420",
-            });
+            "#});
 
             match server.dungeon.state {
                 DungeonState::NotReady => {
@@ -253,23 +287,6 @@ async fn main() -> Result<()> {
             sidebar_lines.push_str("§emc.hypixel.net");
             player.sidebar.write_update(sidebar_lines, &mut player.packet_buffer);
             
-            // if player.ticks_existed % 5 == 0 {
-            //     let mut current_index = 1;
-            //     for pos in path.iter() {
-            //         let particle = Particles::new(
-            //             ParticleTypes::Crit,
-            //             DVec3::from(pos),
-            //             DVec3::new(0.1, 0.1, 0.1),
-            //             0.0,
-            //             current_index,
-            //             true,
-            //             None,
-            //         );
-            //         current_index += 1;
-            // 
-            //         particle?.send_packet(player.client_id, &server.network_tx)?;
-            //     }
-            // }
             if player.ticks_existed % 60 == 0 {
                 player.write_packet(&AddEffect {
                     entity_id: VarInt(player.entity_id),
