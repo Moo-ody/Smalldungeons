@@ -12,7 +12,9 @@ use crate::server::utils::aabb::AABB;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
+use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
+use uuid::Uuid;
 
 /// type alias to represent a client's user id.
 ///
@@ -20,9 +22,17 @@ use tokio::sync::mpsc::UnboundedSender;
 pub type ClientId = u32;
 
 // add uuid
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct GameProfileProperty {
+    pub value: String,
+    pub signature: Option<String>
+}
+
+#[derive(Debug, Clone)]
 pub struct GameProfile {
+    pub uuid: Uuid,
     pub username: String,
+    pub properties: HashMap<String, GameProfileProperty>
 }
 
 #[derive(Debug)]

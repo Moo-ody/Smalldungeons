@@ -1,5 +1,5 @@
 use crate::net::protocol::play::serverbound::Play;
-use crate::server::player::player::ClientId;
+use crate::server::player::player::{ClientId, GameProfile};
 
 // too many comments because theres 4 different client disconnect related messages and theyre all needed and do different things...
 
@@ -37,7 +37,7 @@ pub enum MainThreadMessage {
 
     NewPlayer {
         client_id: ClientId,
-        username: String,
+        profile: GameProfile,
     },
 
     ClientDisconnected {

@@ -25,7 +25,6 @@ register_packets! {
     // SetHotbarSlot = 0x09;
     // EntityUsedBed = 0x0a;
     // SwingAnimation = 0x0b
-    
     CollectItem = 0x0d;
     SpawnObject = 0x0e;
     SpawnMob = 0x0f;
@@ -542,8 +541,8 @@ impl PacketSerializable for PlayerListItem {
         for player in self.players.iter() {
             match self.action.0 {
                 ADD_PLAYER => {
-                    player.profile.id.write(buf);
-                    player.profile.name.write(buf);
+                    player.profile.uuid.write(buf);
+                    player.profile.username.write(buf);
 
                     let ref properties = player.profile.properties;
                     write_var_int(buf, properties.len() as i32);
@@ -562,15 +561,15 @@ impl PacketSerializable for PlayerListItem {
                     write_var_int(buf, player.ping);
                 }
                 UPDATE_GAME_MODE => {
-                    player.profile.id.write(buf);
+                    player.profile.uuid.write(buf);
                     write_var_int(buf, player.game_mode.id());
                 }
                 UPDATE_LATENCY => {
-                    player.profile.id.write(buf);
+                    player.profile.uuid.write(buf);
                     write_var_int(buf, player.ping);
                 }
                 UPDATE_NAME | REMOVE_PLAYER => {
-                    player.profile.id.write(buf);
+                    player.profile.uuid.write(buf);
                 }
                 _ => unreachable!()
             }

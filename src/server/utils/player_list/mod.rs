@@ -4,11 +4,13 @@ pub mod footer;
 
 use crate::net::protocol::play::clientbound::PlayerListItem;
 use crate::net::var_int::VarInt;
+use crate::server::player::player::{GameProfile, GameProfileProperty};
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
-use crate::server::utils::player_list::player_profile::{GameProfile, PlayerData};
+use crate::server::utils::player_list::player_profile::PlayerData;
 use std::array;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use uuid::Uuid;
 
 pub struct PlayerList {
     lines: [PlayerData; 80],
@@ -59,7 +61,20 @@ fn generate_default_lines<const N: usize>() -> [PlayerData; N] {
     array::from_fn(|i| {
         let left = index_to_letter(i / 26);
         let right = index_to_letter(i % 26);
-        PlayerData::new(GameProfile::new(format!("!{}-{}", left, right)))
+        // havent tested it
+        PlayerData::new(GameProfile {
+            uuid: Uuid::new_v4(),
+            username: format!("!{}-{}", left, right),
+            properties: HashMap::from(
+                [(
+                    "textures".to_owned(),
+                    GameProfileProperty {
+                        value: player_profile::GRAY.to_owned(),
+                        signature: player_profile::GRAY_SIG.to_owned().into(),
+                    }
+                )]
+            ),
+        })
     })
 }
 

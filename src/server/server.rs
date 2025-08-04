@@ -6,7 +6,7 @@ use crate::net::var_int::VarInt;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap};
 use crate::server::player::inventory::ItemSlot;
-use crate::server::player::player::{GameProfile, Player};
+use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
@@ -37,7 +37,7 @@ impl Server {
 
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {
         match event {
-            MainThreadMessage::NewPlayer { client_id, username } => {
+            MainThreadMessage::NewPlayer { client_id, profile } => {
                 println!("added player with id {client_id}");
 
                 let spawn_point = DVec3 {
@@ -49,10 +49,7 @@ impl Server {
                 let mut player = Player::new(
                     self,
                     client_id,
-                    // todo, add uuid and other stuff
-                    GameProfile {
-                        username
-                    },
+                    profile,
                     spawn_point,
                 );
                 println!("player entity id: {}", player.entity_id);
