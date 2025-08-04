@@ -1,4 +1,4 @@
-use crate::net::protocol::play::clientbound::{PositionLook, SoundEffect};
+use crate::net::protocol::play::clientbound::{Particles, PositionLook, SoundEffect};
 use crate::server::block::blocks::Blocks::Air;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
@@ -47,18 +47,18 @@ pub fn handle_ether_warp(
     };
 
     if let EtherResult::Valid(x, y, z) = traverse_voxels(world, start_pos, end_pos) {
-        // player.write_packet(&Particles {
-        //     particle_id: 0,
-        //     long_distance: true,
-        //     x: 0.0,
-        //     y: 0.0,
-        //     z: 0.0,
-        //     offset_x: 0.0,
-        //     offset_y: 0.0,
-        //     offset_z: 0.0,
-        //     speed: 0.0,
-        //     count: 0,
-        // });
+        player.write_packet(&Particles {
+            particle_id: 17,
+            long_distance: true,
+            x: player.position.x as f32,
+            y: player.position.y as f32,
+            z: player.position.z as f32,
+            offset_x: 0.25,
+            offset_y: 1.0,
+            offset_z: 0.25,
+            speed: 0.0,
+            count: 25,
+        });
         player.write_packet(&PositionLook {
             x: x as f64 + 0.5,
             y: y as f64 + 1.05,

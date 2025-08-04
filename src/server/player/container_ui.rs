@@ -1,6 +1,3 @@
-// there isn't going to be that many uis 
-// so there is no point creating large amounts of abstraction
-
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::dungeon_state::DungeonState::NotReady;
 use crate::net::protocol::play::clientbound::CloseWindow;
