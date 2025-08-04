@@ -1,6 +1,7 @@
+use crate::server::utils::nbt::nbt::{NBTNode, NBT};
 use crate::server::utils::nbt::serialize::*;
-use crate::server::utils::nbt::{NBTNode, NBT};
 use bytes::{Buf, BytesMut};
+use std::collections::HashMap;
 
 // should use anyhow, client can maliciously send invalid nbt data
 // does assume its all correct.
@@ -70,7 +71,7 @@ fn read_entry(buffer: &mut BytesMut, tag: u8) -> NBTNode {
             NBTNode::List { type_id, children: nodes }
         }
         TAG_COMPOUND_ID => {
-            let mut nodes: Vec<(String, NBTNode)> = Vec::new();
+            let mut nodes: HashMap<String, NBTNode> = HashMap::new();
             loop {
                 let tag = buffer.get_u8();
                 if tag == TAG_END_ID {
@@ -78,7 +79,7 @@ fn read_entry(buffer: &mut BytesMut, tag: u8) -> NBTNode {
                 } else {
                     let name = read_string(buffer);
                     let node = read_entry(buffer, tag);
-                    nodes.push((name, node))
+                    nodes.insert(name, node);
                 }
             }
             NBTNode::Compound(nodes)

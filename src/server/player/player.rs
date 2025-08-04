@@ -189,6 +189,17 @@ impl Player {
     
     pub fn open_ui(&mut self, ui: UI) {
         self.current_ui = ui;
+        // kind of temporary solution,
+        // instead of just putting the item in an available slot if it is dragged
+        if ui == UI::Inventory { 
+            if let ItemSlot::Filled(item) = self.inventory.dragged_item { 
+                self.write_packet(&SetSlot {
+                    window_id: -1,
+                    slot: 0,
+                    item_stack: Some(item.get_item_stack()),
+                })
+            }
+        }
         if let Some(container_data) = ui.get_container_data() {
             self.window_id += 1;
             self.write_packet(&OpenWindow {
@@ -200,40 +211,6 @@ impl Player {
             self.sync_inventory();
         }
     }
-
-    pub fn close_ui(&mut self) {
-        self.current_ui = UI::None;
-        // CloseWindowPacket {
-        //     window_id: self.current_window_id as i8,
-        // }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-    }
-    
-    // pub fn open_ui(&mut self, ui: UI) -> anyhow::Result<()> {
-    //     self.current_ui = ui;
-    //
-    //     if let Some(container_data) = ui.get_container_data() {
-    //         self.current_window_id += 1;
-    //
-    //         OpenWindowPacket {
-    //             window_id: self.current_window_id,
-    //             inventory_type: InventoryType::Container,
-    //             window_title: ChatComponentTextBuilder::new(container_data.title).build(),
-    //             slot_count: container_data.slot_amount,
-    //         }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-    //
-    //         self.sync_inventory()?;
-    //     }
-    //     Ok(())
-    // }
-    //
-    // pub fn close_ui(&mut self) -> anyhow::Result<()> {
-    //     self.current_ui = UI::None;
-    //     CloseWindowPacket {
-    //         window_id: self.current_window_id as i8,
-    //     }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-    //     Ok(())
-    // }
-
     
     pub fn sync_inventory(&mut self) {
         let mut inv_items = Vec::new();

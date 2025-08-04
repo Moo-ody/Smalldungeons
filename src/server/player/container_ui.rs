@@ -3,11 +3,12 @@
 
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::dungeon_state::DungeonState::NotReady;
+use crate::net::protocol::play::clientbound::CloseWindow;
 use crate::net::protocol::play::serverbound::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
-use crate::server::utils::nbt::NBT;
+use crate::server::utils::nbt::nbt::NBT;
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -98,10 +99,10 @@ impl UI {
         match self {
             UI::Inventory => {
                 if packet.slot_id == 44 {
+                    player.sync_inventory();
                     return;
                 }
                 if player.inventory.click_slot(&packet, &mut player.packet_buffer) {
-                    // needs re-syncing
                     player.sync_inventory();
                 }
             },
@@ -115,7 +116,12 @@ impl UI {
                             _ => {}
                         }
                     }
-                    // 49 => player.close_ui()?,
+                    49 => {
+                        player.current_ui = UI::None;
+                        player.write_packet(&CloseWindow {
+                            window_id: player.window_id,
+                        });
+                    },
                     _ => {}
                 }
                 player.sync_inventory();

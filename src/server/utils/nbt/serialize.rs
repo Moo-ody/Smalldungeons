@@ -1,4 +1,4 @@
-use crate::server::utils::nbt::{NBTNode, NBT};
+use crate::server::utils::nbt::nbt::{NBTNode, NBT};
 
 pub const TAG_END_ID: u8 = 0;
 pub const TAG_BYTE_ID: u8 = 1;

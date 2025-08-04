@@ -2,9 +2,10 @@ use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::Player;
+use crate::server::utils::nbt::nbt::{NBTNode, NBT};
 use crate::server::utils::nbt::serialize::TAG_COMPOUND_ID;
-use crate::server::utils::nbt::{NBTNode, NBT};
 use indoc::indoc;
+use std::collections::HashMap;
 
 mod etherwarp;
 pub mod item_stack;
@@ -93,10 +94,12 @@ impl Item {
                 metadata: 0,
                 tag_compound: Some(NBT::with_nodes(vec![
                     NBT::list("ench", TAG_COMPOUND_ID, vec![
-                        NBTNode::Compound(vec![
-                            NBT::short("lvl", 10),
-                            NBT::short("id", 32),
-                        ])
+                        NBTNode::Compound({
+                            let mut map = HashMap::new();
+                            map.insert("lvl".into(), NBTNode::Short(10));
+                            map.insert("id".into(), NBTNode::Short(32));
+                            map
+                        })
                     ]),
                     NBT::compound("display", vec![
                         NBT::list_from_string("Lore", indoc! {r#"
@@ -120,8 +123,8 @@ impl Item {
             },
         };
         if let Some(ref mut tag) = stack.tag_compound {
-            tag.nodes.push(NBT::byte("Unbreakable", 1));
-            tag.nodes.push(NBT::int("HideFlags", 127));
+            tag.nodes.insert("Unbreakable".into(), NBTNode::Byte(1));
+            tag.nodes.insert("HideFlags".into(), NBTNode::Int(127));
         }
         stack
     }

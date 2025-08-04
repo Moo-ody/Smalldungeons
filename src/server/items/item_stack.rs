@@ -1,8 +1,8 @@
 use crate::net::packets::packet_deserialize::PacketDeserializable;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::nbt::deserialize::deserialize_nbt;
+use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::nbt::serialize::serialize_nbt;
-use crate::server::utils::nbt::NBT;
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug, Clone, PartialEq)]
