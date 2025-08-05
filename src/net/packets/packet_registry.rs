@@ -26,6 +26,7 @@ use crate::net::packets::client_bound::keep_alive::KeepAlive as CBKeepAlive;
 use crate::net::packets::client_bound::login_success::LoginSuccess;
 use crate::net::packets::client_bound::open_window::OpenWindowPacket;
 use crate::net::packets::client_bound::particles::Particles;
+use crate::net::packets::client_bound::player_abilities::PlayerAbilities;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::player_list_item::PlayerListItem;
 use crate::net::packets::client_bound::pong::Pong;
@@ -99,6 +100,7 @@ register_clientbound_packets! {
     SoundEffect,
     Particles,
     
+    PlayerAbilities,
     PlayerListItem,
     PlayerListHeaderFooter,
     ScoreboardObjective,

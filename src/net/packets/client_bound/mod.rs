@@ -31,3 +31,4 @@ pub mod multi_block_change;
 pub mod collect_item;
 pub mod block_action;
 pub mod tab_complete;
+pub mod player_abilities;

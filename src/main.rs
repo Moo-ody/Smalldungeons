@@ -37,12 +37,6 @@ use std::rc::Rc;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
 
-const STATUS_RESPONSE_JSON: &str = r#"{
-    "version": { "name": "1.8.9", "protocol": 47 },
-    "players": { "max": 1, "online": 0 },
-    "description": { "text": "RustClear", "color": "gold", "extra": [{ "text": " version ", "color": "gray" }, { "text": "0.1.0", "color": "green"}] }
-}"#;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let (network_tx, network_rx) = unbounded_channel::<NetworkThreadMessage>();

@@ -14,9 +14,8 @@ pub struct KeepAlive {
 #[async_trait::async_trait]
 impl ServerBoundPacket for KeepAlive {
     async fn read_from(buf: &mut BytesMut) -> anyhow::Result<Self> {
-        let id = read_var_int(buf).context("Failed to read keep alive id")?;
         Ok(KeepAlive {
-            id
+            id: read_var_int(buf).context("Failed to read keep alive id")?
         })
     }
 

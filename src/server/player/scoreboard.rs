@@ -118,7 +118,7 @@ impl Scoreboard {
             if i == 0 {
                 packets.push(Packet::from(ScoreboardObjective {
                     objective_name: OBJECTIVE_NAME.into(),
-                    objective_value: new_str.clone().into(),
+                    objective_value: new_str.clone(),
                     typ: ScoreboardRenderType::Integer,
                     mode: UPDATE_NAME,
                 }))
