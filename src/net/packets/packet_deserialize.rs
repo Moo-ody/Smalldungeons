@@ -88,9 +88,6 @@ impl<const S : usize> PacketDeserializable for SizedString<S> {
         if len > S * 4 {
             bail!("String too long. {:?} / {}", len, S * 4);
         }
-        if len < 0 {
-            bail!("String length is less than 0???")
-        }
         let string = String::from_utf8(buffer.split_to(len).to_vec())?;
         if string.len() > S {
             bail!("String too long. {:?} > {}", len, S);

@@ -213,7 +213,7 @@ impl PacketDeserializable for TabComplete {
         Ok(Self {
             message: {
                 let msg: SizedString<32767> = SizedString::read(buffer)?;
-                msg.0
+                msg.into_owned()
             },
             target_block: {
                 if u8::read(buffer)? != 0 {

@@ -30,7 +30,7 @@ impl ProcessPacket for LoginStart {
 
         let game_profile = GameProfile {
             uuid: Uuid::parse_str("d74cb748-b23b-4a99-b41e-b85f73d41999")?,
-            username: self.username.0.to_string(),
+            username: self.username.to_string(),
             properties: HashMap::new(),
         };
 

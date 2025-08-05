@@ -22,8 +22,8 @@ impl ProcessPacket for KeepAlive {
 
 impl ProcessPacket for ChatMessage {
     fn process_with_player(&self, player: &mut Player) {
-        if self.message.0.starts_with("/") {
-            let command = self.message.0.strip_prefix("/").unwrap();
+        if self.message.starts_with("/") {
+            let command = self.message.strip_prefix("/").unwrap();
             if let Err(e) = Command::handle(command, player.world_mut(), player) {
                 eprintln!("cmd failed {e}")
             };
@@ -69,7 +69,7 @@ impl ProcessPacket for PlayerDigging {
                 if let Some(ItemSlot::Filled(Item::DiamondPickaxe)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
                     let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
                     player.write_packet(&BlockChange {
-                        block_pos: *&self.position,
+                        block_pos: self.position,
                         block_state: block.get_block_state_id(),
                     })
                 }
@@ -77,7 +77,7 @@ impl ProcessPacket for PlayerDigging {
             PlayerDiggingAction::FinishDestroyBlock => {
                 let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
                 player.write_packet(&BlockChange {
-                    block_pos: *&self.position,
+                    block_pos: self.position,
                     block_state: block.get_block_state_id(),
                 })
             }

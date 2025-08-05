@@ -194,13 +194,12 @@ fn hide_name(key: &str) -> SizedString<40> {
 }
 
 fn first_half(string: &SizedString<32>) -> SizedString<16> {
-    let string = string.as_str();
     string.chars().take(16).collect::<String>().into()
 }
 
 pub fn second_half(string: &SizedString<32>) -> SizedString<16> {
     // this kind of hurts me but im too lazy to try to optimize this
-    let mut result = string.as_str().chars().skip(16).collect::<String>();
+    let mut result = string.chars().skip(16).collect::<String>();
     if let Some(c) = get_last_color_code(&first_half(string)) {
         result = format!("§{}{}", c, result)
     }
@@ -208,7 +207,6 @@ pub fn second_half(string: &SizedString<32>) -> SizedString<16> {
 }
 
 fn get_last_color_code(string: &SizedString<16>) -> Option<char> {
-    let string = string.as_str();
     let mut chars = string.chars().rev().peekable();
     while let Some(c) = chars.next() {
         if c != '§' {

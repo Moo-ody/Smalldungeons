@@ -27,10 +27,6 @@ impl Client {
             connection_state: Handshaking,
         }
     }
-
-    pub const fn client_id(&self) -> ClientId {
-        self.client_id
-    }
 }
 
 pub async fn handle_client(
