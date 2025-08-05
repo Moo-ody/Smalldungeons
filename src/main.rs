@@ -8,6 +8,8 @@ use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::RoomData;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
+use crate::net::protocol::play::clientbound;
+use crate::net::protocol::play::clientbound::AddEffect;
 use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
 use crate::server::block::blocks::Blocks;
@@ -19,8 +21,6 @@ use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
 use indoc::formatdoc;
-use net::protocol::play::clientbound;
-use net::protocol::play::clientbound::AddEffect;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
@@ -239,13 +239,13 @@ async fn main() -> Result<()> {
 
             match server.dungeon.state {
                 DungeonState::NotReady => {
-                    for (_, p) in &player.server_mut().world.players {
+                    for p in player.server_mut().world.players.values() {
                         sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
                     }
                     sidebar_lines.new_line();
                 }
                 DungeonState::Starting { tick_countdown } => {
-                    for (_, p) in &player.server_mut().world.players {
+                    for p in player.server_mut().world.players.values() {
                         sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
                     }
                     sidebar_lines.new_line();

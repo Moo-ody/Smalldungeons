@@ -86,7 +86,7 @@ impl Server {
                 //     player.observe_entity(entity, &self.network_tx)?
                 // }
 
-                // player.send_packet(PlayerListItem::init_packet(self.world.player_info.tab_list()))?;
+                // player.send_packet(self.world.player_info.new_packet())?;
 
                 player.write_packet(&PlayerListHeaderFooter {
                     header: header(),
