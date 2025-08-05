@@ -1,8 +1,8 @@
+use crate::server::commands::argument::Argument;
+use crate::server::commands::command::CommandMetadata;
+use crate::server::commands::outcome::Outcome;
 // use crate::net::packets::client_bound::chat::{Chat, CHAT};
 use crate::server::player::player::Player;
-use crate::server::utils::commands::argument::Argument;
-use crate::server::utils::commands::command::CommandMetadata;
-use crate::server::utils::commands::outcome::Outcome;
 use crate::server::world::World;
 
 pub struct Locraw;

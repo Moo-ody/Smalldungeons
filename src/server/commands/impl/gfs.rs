@@ -1,9 +1,9 @@
+use crate::server::commands::argument::Argument;
+use crate::server::commands::command::CommandMetadata;
+use crate::server::commands::outcome::Outcome;
 use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
-use crate::server::utils::commands::argument::Argument;
-use crate::server::utils::commands::command::CommandMetadata;
-use crate::server::utils::commands::outcome::Outcome;
 use crate::server::world::World;
 
 pub struct GFS;

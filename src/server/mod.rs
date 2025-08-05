@@ -6,3 +6,4 @@ pub mod world;
 pub mod server;
 pub mod player;
 pub mod entity;
+pub mod commands;

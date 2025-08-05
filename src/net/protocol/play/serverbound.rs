@@ -33,7 +33,7 @@ register_serverbound_packets! {
     // EnchantItem = 0x11;
     // SetSign = 0x12;
     // ClientAbilities = 0x13;
-    // TabComplete = 0x14;
+    TabComplete = 0x14;
     ClientSettings = 0x15;
     ClientStatus = 0x16;
     // CustomPayload = 0x17;
@@ -200,6 +200,29 @@ packet_deserializable! {
         pub window_id: i8,
         pub action_number: i16,
         pub accepted: bool,
+    }
+}
+
+pub struct TabComplete {
+    pub message: String,
+    pub target_block: Option<BlockPos>
+}
+
+impl PacketDeserializable for TabComplete {
+    fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
+        Ok(Self {
+            message: {
+                let msg: SizedString<32767> = SizedString::read(buffer)?;
+                msg.0
+            },
+            target_block: {
+                if u8::read(buffer)? != 0 {
+                    Some(BlockPos::read(buffer)?)
+                } else { 
+                    None 
+                }
+            },
+        })
     }
 }
 

@@ -70,7 +70,7 @@ register_packets! {
     // Statistics = 0x37;
     PlayerListItem = 0x38;
     // PlayerAbilities = 0x39;
-    // TabCompleteReply = 0x3a
+    TabCompleteReply = 0x3a;
     ScoreboardObjective<'_> = 0x3b;
     UpdateScore = 0x3c;
     DisplayScoreboard = 0x3d;
@@ -408,6 +408,12 @@ packet_serializable! {
         pub window_id: i8,
         pub action_number: i16,
         pub accepted: bool,
+    }
+}
+
+packet_serializable! {
+    pub struct TabCompleteReply {
+        pub matches: Vec<String>
     }
 }
 
