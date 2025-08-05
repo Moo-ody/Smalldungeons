@@ -7,7 +7,6 @@ use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
 use crate::server::world::World;
-use r#impl::gfs::GFS;
 
 pub mod command;
 pub mod argument;
@@ -17,7 +16,6 @@ mod outcome;
 crate::command_registry! {
     Mort,
     Locraw,
-    GFS,
 }
 
 impl Command {
