@@ -2,7 +2,6 @@ use crate::net::packets::client_bound::particles::Particles;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use crate::net::packets::packet::SendPacket;
-use crate::server::block::blocks::Blocks::Air;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::particles::ParticleTypes::SpellWitch;
@@ -116,10 +115,7 @@ fn traverse_voxels(world: &World, start: DVec3, end: DVec3) -> EtherResult {
         // Check block at current voxel coordinates
         let current_block = world.get_block_at(x, y, z);
 
-        if current_block != Air {
-            if VALID_ETHER_WARP_BLOCK_IDS.contains((current_block.get_block_state_id() >> 4) as usize) {
-                return EtherResult::Failed;
-            }
+        if !VALID_ETHER_WARP_BLOCK_IDS.contains((current_block.get_block_state_id() >> 4) as usize) {
             let block_up1 = world.get_block_at(x, y + 1, z).get_block_state_id() >> 4;
             let block_up2 = world.get_block_at(x, y + 2, z).get_block_state_id() >> 4;
 
