@@ -309,5 +309,13 @@ impl Room {
         }
 
     }
+
+    pub fn get_world_pos(&self, room_pos: &BlockPos) -> BlockPos {
+        let corner = self.get_corner_pos();
+        room_pos.clone()
+            .rotate(self.rotation)
+            .add_x(corner.x)
+            .add_z(corner.z)
+    }
 }
 

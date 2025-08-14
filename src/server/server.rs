@@ -49,9 +49,9 @@ impl Server {
                 println!("added player with id {client_id}");
 
                 let spawn_point = DVec3 {
-                    x: 20.0,
-                    y: 69.0,
-                    z: 20.0,
+                    x: self.world.spawn_point.x as f64 + 0.5,
+                    y: self.world.spawn_point.y as f64,
+                    z: self.world.spawn_point.z as f64 + 0.5,
                 };
 
                 let mut player = Player::new(

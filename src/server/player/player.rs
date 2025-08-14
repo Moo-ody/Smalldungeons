@@ -51,6 +51,9 @@ pub struct Player {
 
     pub is_sneaking: bool,
 
+    // Teleport system fields
+    pub home_position: Option<DVec3>,
+
     pub inventory: Inventory,
     pub held_slot: u8,
     
@@ -95,6 +98,9 @@ impl Player {
             last_keep_alive: -1,
             ping: -1,
             is_sneaking: false,
+
+            // Teleport system fields
+            home_position: None,
 
             inventory: Inventory::empty(),
             held_slot: 0,

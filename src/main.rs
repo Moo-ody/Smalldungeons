@@ -4,9 +4,9 @@ mod dungeon;
 mod utils;
 
 use crate::dungeon::door::DoorType;
+use crate::dungeon::room::room_data::{RoomData, RoomType};
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::room_data::RoomData;
 use crate::dungeon::room::secrets;
 use crate::dungeon::room::secrets::SecretType::WitherEssence;
 use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
@@ -127,6 +127,12 @@ async fn main() -> Result<()> {
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
+        
+        // Set the spawn point to be inside of the spawn room
+        if room.room_data.room_type == RoomType::Entrance {
+            let spawn_pos = room.get_world_pos(&BlockPos::new(16, 72, 16));
+            server.world.set_spawn_point(spawn_pos);
+        }
     }
 
     for door in &dungeon.doors {

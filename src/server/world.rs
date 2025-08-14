@@ -52,7 +52,7 @@ pub struct World {
 
     pub player_info: PlayerList, // might need to be per player, not sure.
 
-    // entity ids are always positive so they could theoretically be unsigned but minecraft uses signed ints in vanilla and casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
+    // entity ids are always positive so they could theoretically be unsigned but maybe casting might cause weird behavior, also assumes we ever reach the end of i32 though so it might be fine
     pub next_entity_id: i32,
     pub players: HashMap<ClientId, Player>,
     pub entities: HashMap<EntityId, (Entity, Box<dyn EntityImpl>)>,
@@ -65,11 +65,11 @@ pub struct World {
     pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
    // pub weirdos: HashMap<u32, crate::dungeon::puzzles::three_weirdos::ThreeWeirdos>,
 
-
     // pub commands: Vec<Command>
     
     // pub player_info: PlayerList,
     pub tick_count: u64,
+    pub spawn_point: BlockPos,
 }
 
 impl World {
@@ -92,6 +92,7 @@ pub fn new() -> World {
 //      weirdos: HashMap::new(),
         tactical_insertions: Vec::new(),
         tick_count: 0,
+        spawn_point: BlockPos::new(0, 0, 0),
     }
 }
 
@@ -254,6 +255,10 @@ pub fn new() -> World {
         iterate_blocks(start, end, |x, y, z| {
             self.set_block_at(block, x, y, z)
         })
+    }
+
+    pub fn set_spawn_point(&mut self, spawn_point: BlockPos) {
+        self.spawn_point = spawn_point;
     }
 }
 

@@ -9,6 +9,7 @@ use crate::server::utils::commands::r#impl::locraw::Locraw;
 use crate::server::utils::commands::r#impl::mort::Mort;
 use crate::server::world::World;
 use r#impl::gfs::GFS;
+use r#impl::teleport::{SetHome, TeleportHome};
 
 pub mod command;
 pub mod argument;
@@ -19,6 +20,8 @@ crate::command_registry! {
     Mort,
     Locraw,
     GFS,
+    SetHome,
+    TeleportHome,
 }
 
 impl Command {
