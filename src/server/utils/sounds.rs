@@ -37,5 +37,8 @@ id_enum! {
         RandomClick("random.click"),
         EnderDragonGrowl("mob.enderdragon.growl"),
         VillagerHaggle("mob.villager.haggle"),
+        NotePling("note.pling"),
+        GuardianScream("mob.ghast.scream"),
+        GuardianElderHit("mob.guardian.elder.hit"),
     }
 }

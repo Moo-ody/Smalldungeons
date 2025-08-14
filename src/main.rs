@@ -83,6 +83,11 @@ async fn main() -> Result<()> {
         (DoorType::ENTRANCE, vec![
             door_data[1].clone(),
         ]),
+        (DoorType::WITHER, vec![
+            door_data[2].clone(),
+            door_data[3].clone(),
+            door_data[4].clone(),
+        ]),
         (DoorType::NORMAL, vec![
             door_data[1].clone(),
             door_data[2].clone(),

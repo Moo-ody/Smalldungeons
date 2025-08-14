@@ -141,6 +141,22 @@ impl Door {
         //     door_index: self.id,
         // });
     }
+
+    pub fn play_idle_sound(&self, world: &mut World) {
+        if self.door_type == DoorType::BLOOD {
+            // Play guardian elder hit sound from the door location
+            for player in world.players.values() {
+                let _ = player.send_packet(crate::net::packets::client_bound::sound_effect::SoundEffect {
+                    sounds: crate::server::utils::sounds::Sounds::GuardianElderHit,
+                    volume: 3.0,
+                    pitch: 0.49,
+                    x: self.x as f64,
+                    y: 70.0, // Door height
+                    z: self.z as f64,
+                });
+            }
+        }
+    }
 }
 
 // this maybe could be used in places other than doors, ie when you flick lever 

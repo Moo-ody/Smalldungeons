@@ -316,6 +316,19 @@ impl Dungeon {
                     }
                 }
 
+                // Play idle sounds for blood doors every second (20 ticks)
+                if *current_ticks % 20 == 0 {
+                    for door in &self.doors {
+                        if door.door_type == DoorType::BLOOD {
+                            // Check if the door is still interactable (not opened)
+                            let door_center = BlockPos::new(door.x, 70, door.z);
+                            if server.world.interactable_blocks.contains_key(&door_center) {
+                                door.play_idle_sound(&mut server.world);
+                            }
+                        }
+                    }
+                }
+
                 // self.test.retain_mut(move |test| {
                 //     test.ticks_left -= 1;
                 //     if test.ticks_left == 0 {

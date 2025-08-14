@@ -32,8 +32,37 @@ pub enum BlockInteractAction {
 impl BlockInteractAction {
     pub fn interact(&self, player: &Player, block_pos: &BlockPos) {
         match self {
-            Self::WitherDoor { door_index: id } |
+            Self::WitherDoor { door_index: id } => {
+                // Play wither door opening sound effect
+                player.send_packet(SoundEffect {
+                    sounds: Sounds::NotePling,
+                    volume: 8.0,
+                    pitch: 4.05,
+                    x: block_pos.x as f64,
+                    y: block_pos.y as f64,
+                    z: block_pos.z as f64,
+                }).unwrap();
+
+                let world = &mut player.server_mut().world;
+                let dungeon = &mut player.server_mut().dungeon;
+
+                if let DungeonState::Started { .. } = dungeon.state {
+                    // todo check if player has a key
+                    let door = &dungeon.doors[*id];
+                    door.open_door(world);
+                }
+            }
+
             Self::BloodDoor { door_index: id } => {
+                // Play blood door opening sound effect (ghast scream)
+                player.send_packet(SoundEffect {
+                    sounds: Sounds::GuardianScream,
+                    volume: 2.0,
+                    pitch: 0.49,
+                    x: block_pos.x as f64,
+                    y: block_pos.y as f64,
+                    z: block_pos.z as f64,
+                }).unwrap();
 
                 let world = &mut player.server_mut().world;
                 let dungeon = &mut player.server_mut().dungeon;
