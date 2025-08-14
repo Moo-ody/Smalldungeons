@@ -1,10 +1,11 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::dungeon::door::Door;
 use crate::dungeon::room::room::Room;
 use crate::server::block::blocks::Blocks;
+use crate::utils::deterministic_hasher::DeterministicHashMap;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::seq::IteratorRandom;
 use serde_json::Value;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
@@ -118,7 +119,7 @@ pub struct RoomData {
 
 impl RoomData {
     pub fn from_raw_json(raw_data: &str) -> RoomData {
-        let json_data: Value = serde_json::from_str(raw_data).unwrap();
+        let json_data: Value = serde_json::from_str(raw_data).unwrap(); // surely we just parse into a struct instead of doing this indexing?
 
         let name = json_data["name"].as_str().unwrap().to_string();
         let id = json_data["id"].as_str().unwrap().to_string();
@@ -177,19 +178,17 @@ impl RoomData {
 pub fn get_random_data_with_type(
     room_type: RoomType,
     room_shape: RoomShape,
-    data_storage: &HashMap<usize, RoomData>,
-    current_rooms: &Vec<Room>,
+    data_storage: &DeterministicHashMap<usize, RoomData>,
+    current_rooms: &[Room],
 ) -> RoomData {
-    let mut rng = rand::rng();
-    
     data_storage.iter()
         .filter(|data| {
             data.1.room_type == room_type &&
-            data.1.shape == room_shape &&
-            !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
+                data.1.shape == room_shape &&
+                !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
         })
         .map(|x| x.1)
-        .choose(&mut rng)
+        .choose(&mut seeded_rng())
         .unwrap_or(&RoomData::dummy())
         .clone()
 }

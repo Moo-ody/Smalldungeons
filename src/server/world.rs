@@ -135,7 +135,7 @@ impl World {
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
         // should maybe write packets to chunk
-        if self.entities_for_removal.len() != 0 {
+        if !self.entities_for_removal.is_empty() {
             let mut packet = DestroyEntites {
                 entities: Vec::with_capacity(self.entities_for_removal.len())
             };

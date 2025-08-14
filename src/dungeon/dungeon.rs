@@ -8,8 +8,8 @@ use crate::server::block::block_position::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::world;
+use crate::utils::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
-use std::collections::HashMap;
 
 // The top leftmost corner of the dungeon
 pub const DUNGEON_ORIGIN: (i32, i32) = (0, 0);
@@ -79,16 +79,15 @@ impl Dungeon {
     // 36 x room ids, two digits long each. 00 = no room, 01 -> 06 are special rooms like spawn, puzzles etc
     // 07 -> ... are normal rooms, with unique ids to differentiate them and preserve layout
     // Doors are 60x single digit numbers in the order left -> right top -> down for every spot they can possibly spawn
-    pub fn from_string(layout_str: &str, room_data_storage: &HashMap<usize, RoomData>) -> anyhow::Result<Dungeon> {
+    pub fn from_string(layout_str: &str, room_data_storage: &DeterministicHashMap<usize, RoomData>) -> anyhow::Result<Dungeon> {
         let mut rooms: Vec<Room> = Vec::new();
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
-        let mut room_id_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
+        let mut room_id_map: DeterministicHashMap<usize, Vec<(usize, usize)>> = DeterministicHashMap::default();
 
         let mut doors: Vec<Door> = Vec::new();
 
-        for i in 0..60usize {
+        for (i, (x, z)) in DOOR_POSITIONS.into_iter().enumerate() {
             let type_str = layout_str.get(i + 72..i+73).unwrap();
-            let (x, z) = DOOR_POSITIONS[i];
 
             let door_type = match type_str {
                 "0" => Some(DoorType::NORMAL),

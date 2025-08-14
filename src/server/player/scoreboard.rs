@@ -129,7 +129,7 @@ impl Scoreboard {
                 let name = format!("{}", i);
                 let team = format!("team_{}", line_index);
 
-                let first_half = first_half(new_str);
+                let (first_half, second_half) = split_string(new_str);
                 
                 if is_size_different {
                     packet_buffer.write_packet(&Teams {
@@ -155,7 +155,7 @@ impl Scoreboard {
                     name: team.clone().into(),
                     display_name: team.clone().into(),
                     prefix: first_half,
-                    suffix: second_half(new_str),
+                    suffix: second_half,
                     name_tag_visibility: "always".into(),
                     color: 15,
                     players: vec![],
@@ -193,27 +193,50 @@ fn hide_name(key: &str) -> SizedString<40> {
     result.into()
 }
 
-fn first_half(string: &SizedString<32>) -> SizedString<16> {
-    string.chars().take(16).collect::<String>().into()
-}
-
-pub fn second_half(string: &SizedString<32>) -> SizedString<16> {
-    // this kind of hurts me but im too lazy to try to optimize this
-    let mut result = string.chars().skip(16).collect::<String>();
-    if let Some(c) = get_last_color_code(&first_half(string)) {
-        result = format!("§{}{}", c, result)
-    }
-    result.into()
-}
-
-fn get_last_color_code(string: &SizedString<16>) -> Option<char> {
-    let mut chars = string.chars().rev().peekable();
-    while let Some(c) = chars.next() {
-        if c != '§' {
-            if let Some('§') = chars.peek() {
-                return Some(c)
+fn split_string(string: &SizedString<32>) -> (SizedString<16>, SizedString<16>) {
+    let mut first_half = String::with_capacity(16);
+    let mut second_half = String::with_capacity(16);
+    let mut last_char = None;
+    let mut last_color_code = None;
+    for (i, c) in string.chars().enumerate() {
+        if i < 16 {
+            if last_char == Some('§') {
+                last_color_code = Some(c);
             }
+            last_char = Some(c);
+            first_half.push(c);
+        } else {
+            if let Some(last_code) = last_color_code {
+                second_half.push('§');
+                second_half.push(last_code);
+                last_color_code = None;
+            }
+            second_half.push(c);
         }
     }
-    None
+
+    (first_half.into(), second_half.into())
 }
+
+// fn first_half(string: &SizedString<32>) -> SizedString<16> {
+//     string.chars().take(16).collect::<String>().into()
+// }
+// 
+// pub fn second_half(string: &SizedString<32>) -> SizedString<16> {
+//     // this kind of hurts me but im too lazy to try to optimize this
+//     let mut result = string.chars().skip(16).collect::<String>();
+//     if let Some(c) = get_last_color_code(&first_half(string)) {
+//         result = format!("§{}{}", c, result)
+//     }
+//     result.into()
+// }
+
+// fn get_last_color_code(string: &SizedString<16>) -> Option<char> {
+//     let mut chars = string.chars().rev().peekable();
+//     while let Some(c) = chars.next() {
+//         if c != '§' && chars.peek() == Some(&'§') {
+//             return Some(c)
+//         }
+//     }
+//     None
+// }

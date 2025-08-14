@@ -126,7 +126,7 @@ impl Player {
     }
     
     pub fn flush_packets(&mut self) {
-        if self.packet_buffer.buffer.len() != 0 {
+        if !self.packet_buffer.buffer.is_empty() {
             let result = self.network_tx.send(self.packet_buffer.get_packet_message(&self.client_id));
             if result.is_err() { 
                 panic!("error happened flushing packets");

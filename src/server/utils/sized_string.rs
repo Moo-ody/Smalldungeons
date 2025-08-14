@@ -12,12 +12,8 @@ pub struct SizedString<const N: usize>(String);
 
 impl<const N: usize> SizedString<N> {
     pub fn truncated_owned(mut text: String) -> Self {
-        // cant just compare lengths because of how utf works >:(
-        for (index, (byte_position, _)) in text.char_indices().enumerate() {
-            if index == N {
-                text.truncate(byte_position);
-                return Self(text)
-            }
+        if let Some((byte_position, _)) = text.char_indices().nth(N) {
+            text.truncate(byte_position);
         }
         Self(text)
     }

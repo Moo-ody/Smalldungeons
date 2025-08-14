@@ -21,6 +21,8 @@ use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
 use crate::server::world::VIEW_DISTANCE;
+use crate::utils::deterministic_hasher::DeterministicHashMap;
+use crate::utils::seeded_rng::SeededRng;
 use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
@@ -46,7 +48,7 @@ async fn main() -> Result<()> {
 
     let rooms_dir = include_dir!("src/room_data/");
 
-    let room_data_storage: HashMap<usize, RoomData> = rooms_dir.entries()
+    let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir.entries()
         .iter()
         .map(|file| {
             let file = file.as_file().unwrap();
@@ -98,6 +100,8 @@ async fn main() -> Result<()> {
         .split("\n")
         .collect::<Vec<&str>>();
 
+    // let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
+    
     let dungeon_str = match args.len() {
         0..=1 => {
             let mut rng = rand::rng();
@@ -105,9 +109,13 @@ async fn main() -> Result<()> {
         },
         _ => args.get(1).unwrap().as_str()
     };
-
     println!("Dungeon String: {}", dungeon_str);
 
+    let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
+
+    println!("Rng Seed: {}", rng_seed);
+    SeededRng::set_seed(rng_seed);
+    
     let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage)?;
     let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
     server.world.server = &mut server;
@@ -255,7 +263,7 @@ async fn main() -> Result<()> {
                 let day_of_month = (day % 31) + 1;
 
                 let suffix = match day_of_month % 100 {
-                    11 | 12 | 13 => "th",
+                    11..=13 => "th",
                     _ => match day_of_month % 10 {
                         1 => "st",
                         2 => "nd",

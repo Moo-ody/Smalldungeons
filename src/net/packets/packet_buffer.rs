@@ -26,7 +26,8 @@ impl PacketBuffer {
         write_var_int(&mut self.buffer, payload.len() as i32);
         self.buffer.extend(payload);
     }
-    
+
+    // this will be faster if we use a bytesmut instead of a vec<u8>
     pub fn copy_from(&mut self, buf: &PacketBuffer) {
         self.buffer.extend(&buf.buffer)
     }

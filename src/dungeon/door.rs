@@ -8,6 +8,7 @@ use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::prelude::IndexedRandom;
 use std::collections::HashMap;
 
@@ -83,8 +84,7 @@ impl Door {
         };
 
         let block_data = door_blocks.get(&door_type).unwrap();
-        let mut rng = rand::rng();
-        let chosen = block_data.choose(&mut rng).unwrap();
+        let chosen = block_data.choose(&mut seeded_rng()).unwrap();
         let self_direction = self.direction.get_direction();
 
         for (i, block) in chosen.iter().enumerate() {

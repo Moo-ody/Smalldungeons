@@ -33,9 +33,9 @@ pub fn handle_teleport(
     };
     
     player.write_packet(&PositionLook {
-        x: end_pos.x as f64 + 0.5,
-        y: end_pos.y as f64 + 1.05,
-        z: end_pos.z as f64 + 0.5,
+        x: end_pos.x + 0.5,
+        y: end_pos.y + 1.05,
+        z: end_pos.z + 0.5,
         yaw: 0.0,
         pitch: 0.0,
         // flags make x y z absolute, and yaw/pitch relative,
