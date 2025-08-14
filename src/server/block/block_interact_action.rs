@@ -66,6 +66,15 @@ impl BlockInteractAction {
 
                     secret.obtained = true;
                 }
+
+                pub enum BlockInteractAction {
+    // ...existing variants...
+    ThreeWeirdosNpc { id: u32, idx: u8 },
+    ThreeWeirdosChest { id: u32, idx: u8 },
+}
+
+
+
                 /*
 [19:37:29] sound random.chestopen, 0.5 0.9206349 -94.0 82.0 -51.0
 [19:37:29] sound random.chestopen, 0.5 0.984127 -93.5 82.5 -50.5
@@ -108,3 +117,4 @@ impl BlockInteractAction {
         }
     }
 }
+

@@ -8,6 +8,7 @@ pub const NON_LIVING: [EntityType; 1] = [
 crate::entity_type_registry! {
     Zombie: zombie,
     Player: player,
+    EnderPearl: ender_pearl,
 }
 
 /// macro to register entity types. this should handle all the unique entity type functions and whatnot.
@@ -28,6 +29,12 @@ macro_rules! entity_type_registry {
                 $name,
             )*
         }
+
+        pub enum EntityType {
+    // ... existing entities
+    EnderPearl,
+}
+
 
         impl EntityType {
             pub const fn get_id(&self) -> i8 {

@@ -16,7 +16,5 @@ impl ServerBoundPacket for PlayerUpdate {
         })
     }
 
-    fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        Ok(())
-    }
+    fn main_process(&self, _: &mut World, _: &mut Player) -> anyhow::Result<()> { Ok(()) }
 }

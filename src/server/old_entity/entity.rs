@@ -197,17 +197,17 @@ impl Entity {
         let rotated = self.last_sent_pitch != self.pitch || self.last_sent_yaw != self.yaw;
         // we may need resync logic if an entity moves more than like 8 blocks in a tick but that seems unlikely
         Some(if self.ticks_existed % 200 == 0 {
-            ClientBoundPacket::from(EntityTeleport::from_entity(self))
-        } else if self.pos != self.last_sent_pos {
-            if rotated {
-                ClientBoundPacket::from(EntityLookMove::from_entity(self))
-            } else {
-                ClientBoundPacket::from(EntityRelMove::from_entity(self))
-            }
-        } else if rotated {
-            ClientBoundPacket::from(EntityLook::from_entity(self))
-        } else { return None })
+            ClientBoundPacket::from(EntityTeleport::from_entity(self));
+       if self.position != self.last_position {
+    // Objects (projectiles, falling blocks, dropped items) should move client-side.
+    // Don’t spam teleports for them—keeps motion smooth.
+    if !self.metadata.variant.is_object() {
+        // TODO: use EntityRelMove when distance < 8 blocks for living mobs
+        packets.push(EntityTeleport::from_entity(entity).into());
     }
+    self.last_position = self.position;
+}
+
 
     pub fn is_in_aabb_i32(
         &self,

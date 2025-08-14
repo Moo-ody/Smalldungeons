@@ -7,8 +7,11 @@ use crate::net::packets::client_bound::join_game::JoinGame;
 use crate::net::packets::client_bound::player_list_header_footer::PlayerListHeaderFooter;
 use crate::net::packets::client_bound::position_look::PositionLook;
 use crate::net::packets::packet::ServerBoundPacket;
+use crate::net::packets::client_bound::custom_payload::CustomPayload;
 use crate::server::items::Item;
+use crate::net::packets::packet::SendPacket; // for .send_packet(client_id, &self.network_tx)
 use crate::server::player::attribute::{Attribute, AttributeMap};
+use crate::net::packets::packet_write::PacketWrite;
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::player::{GameProfile, Player};
 use crate::server::utils::dvec3::DVec3;
@@ -38,6 +41,7 @@ impl Server {
             dungeon,
         }
     }
+    
 
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {
         match event {
@@ -79,6 +83,7 @@ impl Server {
                 //     println!("entity_id: {}, name: {:?}", entity.entity_id, entity.entity_type);
                 //     player.observe_entity(entity, &self.network_tx)?
                 // }
+                
 
                 player.send_packet(self.world.player_info.new_packet())?;
 
@@ -101,9 +106,14 @@ impl Server {
                     hide_particles: true,
                 })?;
 
-                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
-                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
+                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 37);
+                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 38);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SpiritSceptre), 39);
+                player.inventory.set_slot(ItemSlot::Filled(Item::Hyperion), 36);
+                player.inventory.set_slot(ItemSlot::Filled(Item::TacticalInsertion), 41);
+                player.inventory.set_slot(ItemSlot::Filled(Item::EnderPearl), 43);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT), 45);
                 player.sync_inventory()?;
 
                 let mut attributes = AttributeMap::new();
@@ -117,14 +127,14 @@ impl Server {
                 // let entity = self.world.spawn_entity(spawn_point, Zombie, None)?;
 
                 self.world.players.insert(client_id, player);
-                //
-                // let mut buf = Vec::new();
-                // "hypixel".write(&mut buf);
-                //
-                // CustomPayload {
-                //     channel: "MC|Brand".into(),
-                //     data: buf,
-                // }.send_packet(client_id, &self.network_tx)?;
+                
+                 let mut buf = Vec::new();
+                 "hypixel".write(&mut buf);
+                
+                 CustomPayload {
+                     channel: "MC|Brand".into(),
+                     data: buf,
+                 }.send_packet(client_id, &self.network_tx)?;
             },
             MainThreadMessage::ClientDisconnected { client_id } => {
                 self.world.players.remove(&client_id);

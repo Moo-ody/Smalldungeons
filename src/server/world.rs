@@ -2,6 +2,7 @@ use crate::net::packets::client_bound::block_change::BlockChange;
 use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
 use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
 use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
+// use crate::dungeon::puzzles::three_weirdos::ThreeWeirdos;
 use crate::net::packets::packet::SendPacket;
 use crate::net::packets::packet_registry::ClientBoundPacket;
 use crate::server::block::block_interact_action::BlockInteractAction;
@@ -15,6 +16,8 @@ use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
 use std::collections::{HashMap, VecDeque};
+
+
 
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
@@ -34,6 +37,11 @@ pub struct World {
 
     pub entities_for_removal: VecDeque<EntityId>,
 
+        // add below `entities_for_removal`
+    pub weirdos_next_id: u32,
+   // pub weirdos: HashMap<u32, crate::dungeon::puzzles::three_weirdos::ThreeWeirdos>,
+
+
     // pub commands: Vec<Command>
     
     // pub player_info: PlayerList,
@@ -41,23 +49,26 @@ pub struct World {
 
 impl World {
 
-    pub fn new() -> World {
-        World {
-            server: std::ptr::null_mut(),
+pub fn new() -> World {
+    World {
+        server: std::ptr::null_mut(),
 
-            chunk_grid: ChunkGrid::new(14),
-            interactable_blocks: HashMap::new(),
+        chunk_grid: ChunkGrid::new(14),
+        interactable_blocks: HashMap::new(),
 
-            player_info: PlayerList::new(),
+        player_info: PlayerList::new(),
 
-            next_entity_id: 1, // might have to start at 1
-            players: HashMap::new(),
-            entities: HashMap::new(),
-            entities_for_removal: VecDeque::new(),
+        next_entity_id: 1,
+        players: HashMap::new(),
+        entities: HashMap::new(),
+        entities_for_removal: VecDeque::new(),
 
-            // commands: Vec::new()
-        }
+        // 👇 NEW FIELDS
+        weirdos_next_id: 1,
+//      weirdos: HashMap::new(),
     }
+}
+
 
     pub fn server_mut<'a>(&self) -> &'a mut Server {
         unsafe { self.server.as_mut().expect("server is null") }
@@ -184,3 +195,4 @@ where F : FnMut(i32, i32, i32)
         }
     }
 }
+

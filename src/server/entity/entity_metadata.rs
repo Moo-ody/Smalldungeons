@@ -1,42 +1,41 @@
 use crate::net::packets::packet_write::PacketWrite;
 use crate::server::items::item_stack::ItemStack;
 
-/// Represents an entity type in Minecraft.
 #[derive(Debug, Clone)]
 pub enum EntityVariant {
-    DroppedItem {
-        item: ItemStack,
-    },
+    DroppedItem { item: ItemStack },
     ArmorStand,
-    Zombie {
-        is_child: bool,
-        is_villager: bool
-    },
-    Bat {
-        hanging: bool
-    },
+    Zombie { is_child: bool, is_villager: bool },
+    Bat { hanging: bool },
     FallingBlock,
+
+    // NEW: a thrown ender pearl (spawned with Spawn Object)
+    EnderPearl,
 }
 
 impl EntityVariant {
-
-    /// Returns the mc entity id of the variant 
+    /// Returns the mc entity id of the variant
     pub const fn get_id(&self) -> i8 {
         match self {
             EntityVariant::DroppedItem { .. } => 2,
             EntityVariant::ArmorStand => 30,
             EntityVariant::Zombie { .. } => 54,
-            EntityVariant::Bat { .. } => 65,
+            EntityVariant::Bat { .. } => 65,        // mob id (Spawn Mob space)
             EntityVariant::FallingBlock => 70,
+
+            // NEW: object type id for ender pearl (Spawn Object space, 1.8)
+            // It’s OK that this is also 65 — Spawn Object and Spawn Mob use different id spaces.
+            EntityVariant::EnderPearl => 65,
         }
     }
 
-    /// Returns if the variant is an object and needs to be spawned
-    /// using Spawn Object packet instead of Spawn Mob
+    /// Whether to use Spawn Object (true) or Spawn Mob (false)
     pub const fn is_object(&self) -> bool {
         match self {
             EntityVariant::DroppedItem { .. } => true,
             EntityVariant::FallingBlock => true,
+            // NEW
+            EntityVariant::EnderPearl => true,
             _ => false,
         }
     }
@@ -44,17 +43,13 @@ impl EntityVariant {
 
 #[derive(Debug, Clone)]
 pub struct EntityMetadata {
-    // add more needed stuff here
     pub variant: EntityVariant,
-    pub is_invisible: bool
+    pub is_invisible: bool,
 }
 
 impl EntityMetadata {
     pub fn new(variant: EntityVariant) -> Self {
-        Self {
-            variant,
-            is_invisible: false,
-        }
+        Self { variant, is_invisible: false }
     }
 }
 
@@ -73,13 +68,9 @@ fn write_data(buf: &mut Vec<u8>, data_type: u8, id: u8, data: impl PacketWrite) 
 impl PacketWrite for EntityMetadata {
     fn write(&self, buf: &mut Vec<u8>) {
         let mut flags: u8 = 0;
-        
-        if self.is_invisible {
-            flags |= 0b00100000 
-        }
-        
+        if self.is_invisible { flags |= 0b0010_0000; }
         write_data(buf, BYTE, 0, flags);
-        
+
         match &self.variant {
             EntityVariant::DroppedItem { item } => {
                 write_data(buf, ITEM_STACK, 10, Some(item.clone()))
@@ -91,8 +82,10 @@ impl PacketWrite for EntityMetadata {
             EntityVariant::Bat { hanging } => {
                 write_data(buf, BYTE, 16, *hanging);
             }
+            // NEW: Ender pearls don’t carry extra metadata
+            EntityVariant::EnderPearl => { /* no-op */ }
             _ => {}
         }
-        buf.push(127)
+        buf.push(127); // end-of-metadata
     }
 }

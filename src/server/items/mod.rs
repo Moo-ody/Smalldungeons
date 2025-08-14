@@ -9,6 +9,7 @@ use indoc::indoc;
 
 mod etherwarp;
 pub mod item_stack;
+pub mod ender_pearl;
 mod ether_transmission;
 
 /// List of items available to be used
@@ -18,7 +19,12 @@ pub enum Item {
     AspectOfTheVoid,
     DiamondPickaxe,
     SpiritSceptre,
+    EnderPearl,
+    Hyperion,
+    TacticalInsertion,
+    SuperboomTNT,
 }
+
 
 impl Item {
 
@@ -27,6 +33,9 @@ impl Item {
             Item::SkyblockMenu => {
                 player.open_ui(UI::SkyblockMenu)?
             }
+            Item::EnderPearl => {
+                ender_pearl::on_right_click(player)?;
+            }
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();
                 let world = &server.world;
@@ -34,7 +43,7 @@ impl Item {
                 if player.is_sneaking {
                     handle_ether_warp(player, world)?;
                 } else {
-                    handle_teleport(player, &server.network_tx)?;
+                    handle_teleport(player,&server.network_tx)?;
                 }
             }
             Item::SpiritSceptre => {
@@ -45,6 +54,8 @@ impl Item {
         }
         Ok(())
     }
+
+    
     
     /// creates a vanilla item stack, including all nbt data.
     /// 
@@ -91,6 +102,50 @@ impl Item {
                     ]),
                 ])),
             },
+                Item::SpiritSceptre => ItemStack {
+                item: 38, // 38 is the Minecraft ID for red flower
+                stack_size: 1,
+                metadata: 2, // 2 is the data value for poppy, adjust as needed
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§5Spirit Sceptre"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            §7Shoots a spirit bat that explodes
+                            §7on impact, dealing §carea damage§7.
+
+                            §6Ability: Spirit Bomb §e§lRIGHT CLICK
+                            §7Launches a spirit bat that explodes
+                            §7on contact with enemies or blocks.
+
+                            §8Mana Cost: §b250
+
+                            §5§lEPIC WEAPON
+                        "#})
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "SPIRIT_SCEPTRE"),
+                    ]),
+                ])),
+            },
+                        Item::EnderPearl => ItemStack {
+                item: 368,
+                stack_size: 16,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "Ender Pearl"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+
+                            Ender Pearl
+
+                            its true
+                        "#})
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "Ender_Pearl"),
+                    ]),
+                ])),
+            },
             Item::DiamondPickaxe => ItemStack {
                 item: 278,
                 stack_size: 1,
@@ -116,6 +171,100 @@ impl Item {
                     ])
                 ])),
             },
+            Item::Hyperion => ItemStack {
+    item: 267,         
+    stack_size: 1,
+    metadata: 0,
+    tag_compound: Some(NBT::with_nodes(vec![
+        NBT::compound("display", vec![
+            NBT::string("Name", "§dHeroic Hyperion §6✪§6✪§6✪§6✪§6✪"),
+            NBT::list_from_string("Lore", indoc! {r#"
+§7Gear Score: §a12065 §8(§71050§8)
+§7Damage: §c+359 §8(+30)
+§7Strength: §c+245 §8(+30)
+§7Crit Damage: §9+70% §8(+40%)
+§7Intelligence: §b+670 §8(+125)
+§7Ferocity: §c+33 §8(+16.8)
+
+§9Ultimate Wise §b5§7, §9Champion §b10§7, §9Cleave §b5
+§9Critical §b6§7, §9Cubism §b5§7, §9Ender Slayer §b6
+§9Experience §b4§7, §9First Strike §b4§7, §9Giant Killer §b6
+§9Impaling §b3§7, §9Lethality §b6§7, §9Looting §b4
+§9Luck §b6§7, §9Prosecute §b6§7, §9Scavenger §b5
+§9Smite §b7§7, §9Thunderlord §b7§7, §9Vampirism §b6§7, §9Venomous §b5§7, §9Drain §b1
+
+§7Deals §c+50% §7damage to §8Wither §7mobs.
+§7Grants §a+1 §7Damage and §b+2 §7Intelligence per Catacombs level.
+
+§6Scroll Ability: §e§lRIGHT CLICK §6Wither Impact
+§7Teleport §a10 §7blocks ahead, then implode dealing §c10,000 §7damage
+§7to nearby mobs and grant absorption, damage reduction and intel for §a5s.
+
+§8Catacombs Requirement: §a28
+§8Mana Cost: §b135
+
+§d§lMYTHIC DUNGEON SWORD §8§kL
+"#}),
+        ]),
+        NBT::compound("ExtraAttributes", vec![
+            NBT::string("id", "HYPERION"),
+        ]),
+        // Optional vanilla enchants (1.8 format):
+        // NBT::list("ench", vec![
+        //     NBT::compound("", vec![ NBT::short("id", 16), NBT::short("lvl", 5) ]), // Sharpness V
+        // ]),
+    ])),
+},
+Item::TacticalInsertion => ItemStack {
+    item: 369, 
+    stack_size: 16,
+    metadata: 0,
+    tag_compound: Some(NBT::with_nodes(vec![
+        NBT::compound("display", vec![
+            NBT::string("Name", "§6Tactical Insertion"),
+            NBT::list_from_string("Lore", indoc! {r#"
+                §6Ability: Gorilla Tactics §e§lRIGHT CLICK
+                §7Marks your location and teleport back there
+                §7after §a3s§7.
+
+                §7On coming back, §cburn §7enemies within §a3 blocks
+                §7and set your §c❤ Health §7to HALF of what it was.
+
+                §7The §cburn §7deals §c10% §7of ALL damage you dealt
+                §7within the §a3s§7, spread over §a6s§7.
+                §8Mana Cost: §b180
+                §8Cooldown: §a20s
+
+                §d§lRARITY UPGRADED
+                §6§lLEGENDARY §f
+            "#}),
+        ]),
+        NBT::compound("ExtraAttributes", vec![
+            NBT::string("id", "TACTICAL_INSERTION"),
+        ]),
+    ])),
+},
+Item::SuperboomTNT => ItemStack {
+    item: 46, // 46 = Minecraft TNT
+    stack_size: 64,
+    metadata: 0,
+    tag_compound: Some(NBT::with_nodes(vec![
+        NBT::compound("display", vec![
+            NBT::string("Name", "§9Superboom TNT"),
+            NBT::list_from_string("Lore", indoc! {r#"
+                §7Breaks weak walls. Can be used to
+                §7blow up Crypts in §cThe Catacombs §7and
+                §cCrystal Hollows§7.
+
+                §9RARE
+            "#}),
+        ]),
+        NBT::compound("ExtraAttributes", vec![
+            NBT::string("id", "SUPERBOOM_TNT"),
+        ]),
+    ])),
+},
+
             Item::SpiritSceptre => ItemStack {
                 item: 0,
                 stack_size: 0,

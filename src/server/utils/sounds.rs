@@ -29,5 +29,6 @@ id_enum! {
         Orb("random.orb"),
         Pop("random.pop"),
         ChestOpen("random.chestopen"),
+        Portal("mob.portal"),
     }
 }
