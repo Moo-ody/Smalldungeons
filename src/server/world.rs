@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{BlockChange, DestroyEntites, SpawnMob, SpawnObject};
+use crate::net::protocol::play::clientbound::{DestroyEntites, SpawnMob, SpawnObject};
 use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_position::BlockPos;
@@ -12,6 +12,8 @@ use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
 use std::collections::{HashMap, VecDeque};
+
+pub const VIEW_DISTANCE: u8 = 6;
 
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
@@ -163,14 +165,6 @@ impl World {
     }
 
     pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
-        let server = self.server_mut();
-        let packet = BlockChange {
-            block_pos: BlockPos { x, y, z },
-            block_state: block.get_block_state_id(),
-        };
-        for (_, player) in server.world.players.iter_mut() {
-            player.write_packet(&packet);
-        }
         self.chunk_grid.set_block_at(block, x, y, z);
     }
 
@@ -179,25 +173,21 @@ impl World {
     }
 
     pub fn fill_blocks(&mut self, block: Blocks, start: BlockPos, end: BlockPos) {
-        // should probably use a multi block change instead,
-        // however it only applies to one chunk,
-        // so you'd need to track the chunks and im not bothering with that
         iterate_blocks(start, end, |x, y, z| {
             self.set_block_at(block, x, y, z)
         })
     }
 }
 
-// from what ive read. this shouldn't have overhead and should inline the closure (hopefully)
 /// iterates over the blocks in area between start and end
 /// and runs a function
 #[inline(always)]
 pub fn iterate_blocks<F>(
     start: BlockPos,
     end: BlockPos,
-    mut func: F,
-)
-where F : FnMut(i32, i32, i32)
+    mut callback: F,
+) where 
+    F : FnMut(i32, i32, i32)
 {
     let x0 = start.x.min(end.x);
     let y0 = start.y.min(end.y);
@@ -210,7 +200,7 @@ where F : FnMut(i32, i32, i32)
     for x in x0..=x1 {
         for z in z0..=z1 {
             for y in y0..=y1 {
-                func(x, y, z);
+                callback(x, y, z);
             }
         }
     }

@@ -8,15 +8,19 @@ use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::RoomData;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
+use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound;
 use crate::net::protocol::play::clientbound::AddEffect;
 use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
 use crate::server::block::blocks::Blocks;
+use crate::server::chunk::chunk::Chunk;
+use crate::server::chunk::chunk_grid::{for_each_diff, ChunkDiff};
 use crate::server::player::scoreboard::ScoreboardLines;
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
+use crate::server::world::VIEW_DISTANCE;
 use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
@@ -174,13 +178,55 @@ async fn main() -> Result<()> {
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
         // also needs to actually be in a vanilla adjacent way.
         for player in server.world.players.values_mut() {
-            // println!("player ticked: {player:?}");
             player.ticks_existed += 1;
             player.write_packet(&clientbound::ConfirmTransaction {
                 window_id: 0,
                 action_number: -1,
                 accepted: false,
             });
+
+            let chunk_x = (player.position.x.floor() as i32) >> 4;
+            let chunk_z = (player.position.z.floor() as i32) >> 4;
+            let last_chunk_x = (player.last_position.x.floor() as i32) >> 4;
+            let last_chunk_z = (player.last_position.z.floor() as i32) >> 4;
+
+            let delta = (chunk_x - last_chunk_x, chunk_z - last_chunk_z);
+
+            if delta.0 != 0 || delta.1 != 0 {
+                for_each_diff((chunk_x, chunk_z), (last_chunk_x, last_chunk_z), |x, z, diff| {
+                    match diff {
+                        ChunkDiff::New => {
+                            if let Some(chunk) = player.world_mut().chunk_grid.get_chunk(x, z) {
+                                player.packet_buffer.write_packet(&chunk.get_chunk_data(true));
+                            } else {
+                                let chunk_data = Chunk::new(x, z).get_chunk_data(true);
+                                player.write_packet(&chunk_data)
+                            };
+                        },
+                        ChunkDiff::Old => {
+                            let chunk_data = Chunk::new(x, z).get_chunk_data(true);
+                            player.write_packet(&chunk_data)
+                        },
+                    }
+                });
+            }
+
+            {
+                let view_distance = VIEW_DISTANCE as i32;
+                let min_x = chunk_x - view_distance;
+                let min_z = chunk_z - view_distance;
+                let max_x = chunk_x + view_distance;
+                let max_z = chunk_z + view_distance;
+
+                for x in min_x..=max_x {
+                    for z in min_z..=max_z {
+                        if let Some(chunk) = player.world_mut().chunk_grid.get_chunk(x, z) {
+                            player.packet_buffer.copy_from(&chunk.packet_buffer);
+                        }
+                    }
+                }
+            }
+
 
             let mut sidebar_lines = ScoreboardLines(Vec::new());
 
@@ -226,7 +272,6 @@ async fn main() -> Result<()> {
                 ""
             };
 
-            // maybe fix winter 22nd
             sidebar_lines.push(formatdoc! {r#"
                 §e§lSKYBLOCK
                 §7{date} §8local {room_id}
@@ -303,7 +348,11 @@ async fn main() -> Result<()> {
                     hide_particles: true,
                 });
             }
+            player.last_position = player.position;
             player.flush_packets();
+        }
+        for chunk in &mut server.world.chunk_grid.chunks {
+            chunk.packet_buffer = PacketBuffer::new();
         }
         // println!("time elapsed {:?}", start.elapsed());
     }

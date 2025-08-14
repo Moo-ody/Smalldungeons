@@ -25,7 +25,6 @@ pub struct ProcessContext<'a> {
     pub main_thread_tx: &'a UnboundedSender<MainThreadMessage>,
 }
 
-/// 
 pub trait ProcessPacket {
     async fn process<'a>(&self, _: &mut Client, _: ProcessContext<'a>) -> anyhow::Result<()> {
         Ok(())
@@ -60,7 +59,7 @@ macro_rules! register_serverbound_packets {
                                 <$packet_type as crate::net::packets::packet_deserialize::PacketDeserializable>::read(buffer)?
                             )),
                         )*
-                    _ => anyhow::bail!(": invalid packet"),
+                    _ => anyhow::bail!(": invalid packet 0x{:02x}", packet_id),
                     }
                 } else {
                     anyhow::bail!("failed to read var_int")

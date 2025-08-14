@@ -10,6 +10,7 @@ use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
+use crate::server::world;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
 use tokio::sync::mpsc::UnboundedSender;
@@ -72,19 +73,19 @@ impl Server {
                     flags: 0,
                 });
 
-                for chunk in self.world.chunk_grid.chunks.iter() {
-                    player.write_packet(&chunk.get_chunk_data(true));
+                let chunk_x = (player.position.x.floor() as i32) >> 4;
+                let chunk_z = (player.position.z.floor() as i32) >> 4;
+
+                let view_distance = world::VIEW_DISTANCE as i32;
+                for x in (chunk_x - view_distance)..(chunk_x + view_distance) {
+                    for z in (chunk_z - view_distance)..(chunk_z + view_distance) {
+                        if let Some(chunk) = self.world.chunk_grid.get_chunk(x, z) {
+                            player.write_packet(&chunk.get_chunk_data(true))
+                        }
+                    }
                 }
 
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
-
-                // for entity in self.world.entities.values_mut() {
-                //     if entity.entity_id == player.entity_id {
-                //         continue
-                //     }
-                //     println!("entity_id: {}, name: {:?}", entity.entity_id, entity.entity_type);
-                //     player.observe_entity(entity, &self.network_tx)?
-                // }
 
                 // player.send_packet(self.world.player_info.new_packet())?;
 
@@ -123,14 +124,6 @@ impl Server {
                 player.flush_packets();
 
                 self.world.players.insert(client_id, player);
-                //
-                // let mut buf = Vec::new();
-                // "hypixel".write(&mut buf);
-                //
-                // CustomPayload {
-                //     channel: "MC|Brand".into(),
-                //     data: buf,
-                // }.send_packet(client_id, &self.network_tx)?;
             },
             MainThreadMessage::ClientDisconnected { client_id } => {
                 self.world.players.remove(&client_id);

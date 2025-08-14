@@ -121,11 +121,6 @@ impl Player {
         &mut self.server_mut().world
     }
     
-    // /// sends a packet to the player
-    // pub fn send_packet<T>(&self, packet: impl SendPacket<T>) -> anyhow::Result<()> {
-    //     packet.send_packet(self.client_id, &self.network_tx)
-    // }
-    
     pub fn write_packet<P : IdentifiedPacket + PacketSerializable>(&mut self, packet: &P) {
         self.packet_buffer.write_packet(packet);
     }
@@ -146,9 +141,9 @@ impl Player {
     //     Ok(())
     // }
     
-    /// updates player position and sets last position
+    /// updates player position
     pub fn set_position(&mut self, x: f64, y: f64, z: f64) {
-        self.last_position = self.position;
+        // self.last_position = self.position;
         self.position = DVec3::new(x, y, z);
     }
     
@@ -161,36 +156,10 @@ impl Player {
         )
     }
 
-    // /// function to have a player start observing an entity
-    // ///
-    // /// presumably to be called when the entity should be loaded for said player.
-    // /// the player will be added to the entities observing list
-    // /// and the entity to the players observing list. (the latter is for removing themselves from the entities list if the entity should be unloaded for them)
-    // pub fn observe_entity(&mut self, entity: &mut Entity, network_tx: &UnboundedSender<NetworkThreadMessage>) -> anyhow::Result<()> {
-    //     if self.entity_id == entity.entity_id { bail!("Can't observe self") }
-    //     self.observed_entities.insert(entity.entity_id);
-    //     entity.observing_players.insert(self.client_id);
-    // 
-    //     // todo: logic to get the right packet for the entity type. Ie: SpawnObject for objects, SpawnPlayer for players, etc.
-    //     SpawnMob::from_entity(entity)?.send_packet(self.client_id, network_tx)?;
-    //     Ok(())
-    // }
-
-    // /// function to have a player stop observing an entity
-    // ///
-    // /// presumably called when the entity should be unloaded for said player.
-    // ///
-    // /// todo: handling for destroy entities packet sending.
-    // pub fn stop_observing_entity(&mut self, entity: &mut Entity) {
-    //     self.observed_entities.remove(&entity.entity_id);
-    //     entity.observing_players.remove(&self.client_id);
-    // }
-
     pub fn handle_left_click(&mut self) {
         
     }
     
-    /// todo: better interaction, maybe?
     pub fn handle_right_click(&mut self) {
         if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
