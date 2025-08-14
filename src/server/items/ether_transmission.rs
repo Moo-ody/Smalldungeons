@@ -6,12 +6,10 @@ use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use std::f64::consts::PI;
 use tokio::sync::mpsc::UnboundedSender;
-
-const MAX_DISTANCE: f64 = 12.0;
-
 pub fn handle_teleport(
     player: &Player,
     network_tx: &UnboundedSender<NetworkThreadMessage>,
+    max_distance: f64,
 ) -> anyhow::Result<()> {
     // Start from eye position
     let mut start = player.position;
@@ -31,7 +29,7 @@ pub fn handle_teleport(
 
     // Swept ray up to MAX_DISTANCE, track last two-high passable cell
     let step_len = 0.25f64;
-    let steps = (MAX_DISTANCE / step_len).ceil() as i32;
+    let steps = (max_distance / step_len).ceil() as i32;
     let step = DVec3::new(dir.x * step_len, dir.y * step_len, dir.z * step_len);
 
     let mut last_safe_block: Option<(i32, i32, i32)> = None;

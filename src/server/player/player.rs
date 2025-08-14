@@ -171,7 +171,9 @@ impl Player {
     // }
 
     pub fn handle_left_click(&mut self) {
-        
+        if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
+            let _ = item.on_left_click(self);
+        }
     }
     
     /// todo: better interaction, maybe?

@@ -113,7 +113,12 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::TacticalInsertion), 41);
                 player.inventory.set_slot(ItemSlot::Filled(Item::EnderPearl), 43);
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
-                player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT), 45);
+                // Inventory has indices 0..44; place Superboom TNT at 42
+                player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT), 40);
+                // Golden Axe goes to top middle: slot index 4
+                player.inventory.set_slot(ItemSlot::Filled(Item::GoldenAxe), 13);
+                // Terminator bow for testing
+                player.inventory.set_slot(ItemSlot::Filled(Item::Terminator), 42);
                 player.sync_inventory()?;
 
                 let mut attributes = AttributeMap::new();

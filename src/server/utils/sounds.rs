@@ -26,9 +26,12 @@ id_enum! {
     pub enum Sounds: &'static str {
         EnderDragonHit("mob.enderdragon.hit"),
         Harp("note.harp"),
+        NoteHat("note.hat"),
         Orb("random.orb"),
         Pop("random.pop"),
         ChestOpen("random.chestopen"),
         Portal("mob.portal"),
+        FireIgnite("fire.ignite"),
+        ZombieRemedy("mob.zombie.remedy"),
     }
 }

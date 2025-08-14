@@ -11,6 +11,9 @@ pub enum EntityVariant {
 
     // NEW: a thrown ender pearl (spawned with Spawn Object)
     EnderPearl,
+    
+    // NEW: arrow projectile for Terminator bow
+    Arrow,
 }
 
 impl EntityVariant {
@@ -24,8 +27,11 @@ impl EntityVariant {
             EntityVariant::FallingBlock => 70,
 
             // NEW: object type id for ender pearl (Spawn Object space, 1.8)
-            // It’s OK that this is also 65 — Spawn Object and Spawn Mob use different id spaces.
+            // It's OK that this is also 65 — Spawn Object and Spawn Mob use different id spaces.
             EntityVariant::EnderPearl => 65,
+            
+            // NEW: arrow object type id (Spawn Object space, 1.8)
+            EntityVariant::Arrow => 60,
         }
     }
 
@@ -36,6 +42,7 @@ impl EntityVariant {
             EntityVariant::FallingBlock => true,
             // NEW
             EntityVariant::EnderPearl => true,
+            EntityVariant::Arrow => true,
             _ => false,
         }
     }
@@ -82,8 +89,10 @@ impl PacketWrite for EntityMetadata {
             EntityVariant::Bat { hanging } => {
                 write_data(buf, BYTE, 16, *hanging);
             }
-            // NEW: Ender pearls don’t carry extra metadata
+            // NEW: Ender pearls don't carry extra metadata
             EntityVariant::EnderPearl => { /* no-op */ }
+            // NEW: Arrows don't carry extra metadata
+            EntityVariant::Arrow => { /* no-op */ }
             _ => {}
         }
         buf.push(127); // end-of-metadata

@@ -11,6 +11,7 @@ mod etherwarp;
 pub mod item_stack;
 pub mod ender_pearl;
 mod ether_transmission;
+mod terminator;
 
 /// List of items available to be used
 #[derive(Copy, Debug, Clone, PartialEq)]
@@ -23,6 +24,8 @@ pub enum Item {
     Hyperion,
     TacticalInsertion,
     SuperboomTNT,
+    GoldenAxe,
+    Terminator,
 }
 
 
@@ -43,15 +46,62 @@ impl Item {
                 if player.is_sneaking {
                     handle_ether_warp(player, world)?;
                 } else {
-                    handle_teleport(player,&server.network_tx)?;
+                    handle_teleport(player, &server.network_tx, 12.0)?;
                 }
             }
             Item::SpiritSceptre => {
                 // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but
                 // when they hit a solid block they blow up in like 10 block radius (or square) or something
             }
+            Item::Hyperion => {
+                // Wither Impact: teleport up to 10 blocks and implode with 10-block radius
+                let server = &player.server_mut();
+                handle_teleport(player, &server.network_tx, 10.0)?;
+                // TODO: AoE damage + particles/sounds at destination
+            }
+            Item::TacticalInsertion => {
+                // Mark current location; world tick loop will return after 3s
+                let world = &mut player.server_mut().world;
+                let return_after_ticks = 3 * 20; // 3 seconds
+                let marker = crate::server::world::TacticalInsertionMarker {
+                    client_id: player.client_id,
+                    return_tick: world.tick_count + return_after_ticks,
+                    origin: player.position,
+                    damage_echo_window_ticks: 3 * 20,
+                    yaw: player.yaw,
+                    pitch: player.pitch,
+                };
+                // sound timeline relative to now
+                let base = world.tick_count;
+                let schedule = [
+                    (0u64,  crate::server::utils::sounds::Sounds::FireIgnite, 1.00f32, 0.746032f32),
+                    (52,    crate::server::utils::sounds::Sounds::FireIgnite, 1.00f32, 1.095238f32),
+                    (502,   crate::server::utils::sounds::Sounds::NoteHat,    0.80f32, 1.206349f32),
+                    (999,   crate::server::utils::sounds::Sounds::NoteHat,    0.85f32, 1.333333f32),
+                    (1503,  crate::server::utils::sounds::Sounds::NoteHat,    0.90f32, 1.444444f32),
+                    (2007,  crate::server::utils::sounds::Sounds::NoteHat,    0.95f32, 1.571429f32),
+                    (2507,  crate::server::utils::sounds::Sounds::NoteHat,    1.00f32, 1.698413f32),
+                    (2958,  crate::server::utils::sounds::Sounds::ZombieRemedy, 0.70f32, 1.888889f32),
+                    (3002,  crate::server::utils::sounds::Sounds::NoteHat,       1.05f32, 1.809524f32),
+                    (3120,  crate::server::utils::sounds::Sounds::ZombieRemedy, 0.60f32, 1.730159f32),
+                    (3251,  crate::server::utils::sounds::Sounds::ZombieRemedy, 0.50f32, 1.571429f32),
+                ];
+                let sounds: Vec<crate::server::world::ScheduledSound> = schedule.iter().map(|(ms, s, v, p)| {
+                    let ticks = (ms / 50) as u64; // 20 tps approx
+                    crate::server::world::ScheduledSound { due_tick: base + ticks, sound: *s, volume: *v, pitch: *p }
+                }).collect();
+                world.tactical_insertions.push((marker, sounds));
+            }
+            Item::Terminator => {
+                terminator::on_right_click(player)?;
+            }
             _ => {}
         }
+        Ok(())
+    }
+
+    pub fn on_left_click(&self, _player: &mut Player) -> anyhow::Result<()> {
+        // Placeholder: no-op unless we add melee interactions per item
         Ok(())
     }
 
@@ -261,6 +311,78 @@ Item::SuperboomTNT => ItemStack {
         ]),
         NBT::compound("ExtraAttributes", vec![
             NBT::string("id", "SUPERBOOM_TNT"),
+        ]),
+    ])),
+},
+Item::GoldenAxe => ItemStack {
+    item: 286, // golden axe id (1.8)
+    stack_size: 1,
+    metadata: 0,
+    tag_compound: Some(NBT::with_nodes(vec![
+        NBT::compound("display", vec![
+            NBT::string("Name", "§6Golden Axe"),
+            NBT::list_from_string("Lore", indoc! {r#"
+                §7A shiny axe for testing.
+                §7Placed in the top middle slot.
+                
+                §9Efficiency V
+                §7Increases how quickly your tool
+                §7breaks blocks.
+            "#})
+        ]),
+        NBT::compound("ExtraAttributes", vec![
+            NBT::string("id", "GOLDEN_AXE"),
+        ]),
+        // Vanilla enchants (1.8 format)
+        NBT::list("ench", TAG_COMPOUND_ID, vec![
+            NBTNode::Compound(vec![
+                NBT::short("id", 32), // Efficiency
+                NBT::short("lvl", 5),
+            ])
+        ])
+    ])),
+},
+Item::Terminator => ItemStack {
+    item: 261, // bow id
+    stack_size: 1,
+    metadata: 0,
+    tag_compound: Some(NBT::with_nodes(vec![
+        NBT::compound("display", vec![
+            NBT::string("Name", "§dPrecise Terminator §6✪§6✪§6✪§6✪§6✪"),
+            NBT::list_from_string("Lore", indoc! {r#"
+§7Gear Score: §a1010 §8(§7492§8)
+§7Damage: §c+371 §8(+30) §7(§c+2,145§7)
+§7Strength: §c+124 §8(+34) §7(§c+750.89§7)
+§7Crit Chance: §9+30% §8(+15%) §7(§915.8%§7)
+§7Crit Damage: §9+53% §8(+7%) §7(§9+2,503.75%§7)
+§7Bonus Attack Speed: §a+44% §8(+62.1%)
+§7Shot Cooldown: §60.5s
+
+§9Soul Eater §65, §9Chance §64
+§9Dragon Tracer §65, §9Flame §6 2, §9Impaling §63
+§9Infinite Quiver §6 10, §9Overload §6 5, §9Piercing §61
+§9Power §6 6, §9Snipe §6 3, §9Gravity §6 5
+§9Toxophilite §6 10
+
+§7Shoots §a3 §7arrows at once.
+§7Can damage endermen.
+
+§6Divides your §9✧ Crit Chance §6by §c4§6!
+
+§6Ability: Salvation §e§lRIGHT CLICK
+§7Can be cast after landing §a3 §7hits.
+§7Shoot a beam, penetrating up to §a5 §7enemies.
+§7The beam always crits.
+
+§aPrecise Bonus
+§7Deal §a+10% §7extra damage when
+§7arrows hit the head of a mob.
+
+§d§lMYTHIC DUNGEON BOW §9
+            "#})
+        ]),
+        NBT::compound("ExtraAttributes", vec![
+            NBT::string("id", "TERMINATOR"),
         ]),
     ])),
 },
