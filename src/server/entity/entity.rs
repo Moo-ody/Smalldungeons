@@ -77,21 +77,19 @@ impl Entity {
         entity_impl: &mut Box<dyn EntityImpl>,
         packets: &mut PacketBuffer
     ) {
-        // this might not be a good idea
-        let test: *mut Entity = self;
-        let entity = unsafe { test.as_mut().unwrap() };
         entity_impl.tick(self);
         
         if self.position != self.last_position {
             // TODO: if distance is < 8 blocks use entity rel move
+            // ^ not sure if even needed
             packets.write_packet(&EntityTeleport {
-                entity_id: entity.id,
-                pos_x: entity.position.x,
-                pos_y: entity.position.y,
-                pos_z: entity.position.z,
-                yaw: entity.yaw,
-                pitch: entity.pitch,
-                on_ground: entity.on_ground,
+                entity_id: self.id,
+                pos_x: self.position.x,
+                pos_y: self.position.y,
+                pos_z: self.position.z,
+                yaw: self.yaw,
+                pitch: self.pitch,
+                on_ground: self.on_ground,
             });
             self.last_position = self.position;
         }
