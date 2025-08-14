@@ -33,5 +33,9 @@ id_enum! {
         Portal("mob.portal"),
         FireIgnite("fire.ignite"),
         ZombieRemedy("mob.zombie.remedy"),
+        // New sounds for dungeon start
+        RandomClick("random.click"),
+        EnderDragonGrowl("mob.enderdragon.growl"),
+        VillagerHaggle("mob.villager.haggle"),
     }
 }

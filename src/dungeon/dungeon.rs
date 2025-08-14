@@ -8,6 +8,8 @@ use crate::server::block::block_pos::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::world;
+use crate::server::utils::sounds::Sounds;
+use crate::net::packets::client_bound::sound_effect::SoundEffect;
 use anyhow::bail;
 use std::collections::HashMap;
 
@@ -258,6 +260,29 @@ impl Dungeon {
                 if *tick == 0 {
                     self.state = DungeonState::Started { current_ticks: 0 };
                     self.start_dungeon();
+                    
+                    // Play final sounds when dungeon starts
+                    for (_, player) in &server.world.players {
+                        // Ender dragon growl
+                        let _ = player.send_packet(SoundEffect {
+                            sounds: Sounds::EnderDragonGrowl,
+                            volume: 1.0,
+                            pitch: 1.0,
+                            x: player.position.x,
+                            y: player.position.y,
+                            z: player.position.z,
+                        });
+                        
+                        // Villager haggle
+                        let _ = player.send_packet(SoundEffect {
+                            sounds: Sounds::VillagerHaggle,
+                            volume: 1.0,
+                            pitch: 0.6984127,
+                            x: player.position.x,
+                            y: player.position.y,
+                            z: player.position.z,
+                        });
+                    }
                 } else if *tick % 20 == 0 {
 
                     let seconds_remaining = *tick / 20;
@@ -266,6 +291,16 @@ impl Dungeon {
 
                     for (_, player) in &server.world.players {
                         player.send_msg(&str)?;
+                        
+                        // Play random.click sound with specific volume and pitch during countdown
+                        let _ = player.send_packet(SoundEffect {
+                            sounds: Sounds::RandomClick,
+                            volume: 0.55,
+                            pitch: 2.0,
+                            x: player.position.x,
+                            y: player.position.y,
+                            z: player.position.z,
+                        });
                     }
                 }
             }

@@ -4,6 +4,8 @@ use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::nbt::NBT;
+use crate::server::utils::sounds::Sounds;
+use crate::net::packets::client_bound::sound_effect::SoundEffect;
 
 
 // there isn't going to be that many uis 
@@ -75,7 +77,28 @@ impl UI {
                     4 | 13 => {
                         let dung = &mut player.server_mut().dungeon;
                         match dung.state {
-                            NotReady => dung.state = Starting { tick_countdown: 100 },
+                            NotReady => {
+                                // Send "is now ready!" message to all players
+                                let ready_msg = format!("§a{} is now ready!", player.profile.username);
+                                for (_, other_player) in &player.server_mut().world.players {
+                                    let _ = other_player.send_msg(&ready_msg);
+                                }
+                                
+                                // Play first random.click sound when ready
+                                for (_, other_player) in &player.server_mut().world.players {
+                                    let _ = other_player.send_packet(SoundEffect {
+                                        sounds: Sounds::RandomClick,
+                                        volume: 0.55,
+                                        pitch: 2.0,
+                                        x: other_player.position.x,
+                                        y: other_player.position.y,
+                                        z: other_player.position.z,
+                                    });
+                                }
+                                
+                                // Start the dungeon countdown
+                                dung.state = Starting { tick_countdown: 100 };
+                            }
                             Starting { .. } => dung.state = NotReady,
                             _ => {}
                         }

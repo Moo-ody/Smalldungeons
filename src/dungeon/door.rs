@@ -122,6 +122,9 @@ impl Door {
                 world.set_block_at(Blocks::Barrier, x, y, z);
                 world.interactable_blocks.remove(&BlockPos { x, y, z });
                 
+                // Schedule the barrier block to be replaced with air after 20 ticks
+                world.schedule_block_change(x, y, z, Blocks::Air, 20);
+                
                 let id = world.spawn_entity(
                     DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
                     EntityMetadata {

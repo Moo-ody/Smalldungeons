@@ -122,7 +122,7 @@ impl Server {
                 player.sync_inventory()?;
 
                 let mut attributes = AttributeMap::new();
-                attributes.insert(Attribute::MovementSpeed, 0.4);
+                attributes.insert(Attribute::MovementSpeed, 0.5);
 
                 player.send_packet(EntityProperties {
                     entity_id: player.entity_id,

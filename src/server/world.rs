@@ -39,6 +39,14 @@ pub struct ScheduledSound {
     pub pitch: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ScheduledBlockChange {
+    pub due_tick: u64,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub new_block: crate::server::block::blocks::Blocks,
+}
 
 
 pub struct World {
@@ -63,6 +71,8 @@ pub struct World {
     pub weirdos_next_id: u32,
     // Scheduled tactical insertions (teleport back after delay)
     pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
+    // Scheduled block changes (like removing barrier blocks after delay)
+    pub scheduled_block_changes: Vec<ScheduledBlockChange>,
    // pub weirdos: HashMap<u32, crate::dungeon::puzzles::three_weirdos::ThreeWeirdos>,
 
     // pub commands: Vec<Command>
@@ -91,6 +101,7 @@ pub fn new() -> World {
         weirdos_next_id: 1,
 //      weirdos: HashMap::new(),
         tactical_insertions: Vec::new(),
+        scheduled_block_changes: Vec::new(),
         tick_count: 0,
         spawn_point: BlockPos::new(0, 0, 0),
     }
@@ -105,6 +116,16 @@ pub fn new() -> World {
         let id = self.next_entity_id;
         self.next_entity_id += 1;
         id
+    }
+
+    pub fn schedule_block_change(&mut self, x: i32, y: i32, z: i32, new_block: crate::server::block::blocks::Blocks, delay_ticks: u64) {
+        self.scheduled_block_changes.push(ScheduledBlockChange {
+            due_tick: self.tick_count + delay_ticks,
+            x,
+            y,
+            z,
+            new_block,
+        });
     }
 
     pub fn spawn_entity<E : EntityImpl + 'static>(
@@ -165,6 +186,9 @@ pub fn new() -> World {
         }
         // Process scheduled tactical insertions
         self.process_tactical_insertions()?;
+        
+        // Process scheduled block changes
+        self.process_scheduled_block_changes()?;
 
         for player in self.players.values_mut() {
             for packet in &packets {
@@ -226,6 +250,31 @@ pub fn new() -> World {
         }
 
         self.tactical_insertions = remaining;
+        Ok(())
+    }
+
+    fn process_scheduled_block_changes(&mut self) -> anyhow::Result<()> {
+        if self.scheduled_block_changes.is_empty() { return Ok(()); }
+
+        let now = self.tick_count;
+        let mut to_execute: Vec<ScheduledBlockChange> = Vec::new();
+        let mut remaining: Vec<ScheduledBlockChange> = Vec::with_capacity(self.scheduled_block_changes.len());
+
+        // Separate due changes from future changes
+        for block_change in self.scheduled_block_changes.drain(..) {
+            if block_change.due_tick <= now {
+                to_execute.push(block_change);
+            } else {
+                remaining.push(block_change);
+            }
+        }
+
+        // Execute all due block changes
+        for block_change in to_execute {
+            self.set_block_at(block_change.new_block, block_change.x, block_change.y, block_change.z);
+        }
+
+        self.scheduled_block_changes = remaining;
         Ok(())
     }
 
