@@ -279,7 +279,7 @@ impl Room {
     }
 
     pub fn load_into_world(&self, world: &mut World) {
-        if self.room_data.block_data.len() == 0 {
+        if self.room_data.block_data.is_empty() {
             self.load_default(world);
             return;
         }
