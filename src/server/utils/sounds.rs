@@ -40,5 +40,8 @@ id_enum! {
         NotePling("note.pling"),
         GuardianScream("mob.ghast.scream"),
         GuardianElderHit("mob.guardian.elder.hit"),
+        Bow("random.bow"),
+        EndermenPortal("mob.endermen.portal"),
+        RandomExplode("random.explode"),
     }
 }

@@ -5,6 +5,7 @@ use crate::server::player::player::Player;
 use crate::server::player::ui::UI;
 use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
 use crate::server::utils::nbt::{NBTNode, NBT};
+use crate::net::packets::packet::SendPacket;
 use indoc::indoc;
 
 mod etherwarp;
@@ -12,6 +13,7 @@ pub mod item_stack;
 pub mod ender_pearl;
 mod ether_transmission;
 mod terminator;
+mod hyperion;
 
 /// List of items available to be used
 #[derive(Copy, Debug, Clone, PartialEq)]
@@ -46,6 +48,16 @@ impl Item {
                 if player.is_sneaking {
                     handle_ether_warp(player, world)?;
                 } else {
+                    // Play endermen portal sound when not crouching
+                    let _ = crate::net::packets::client_bound::sound_effect::SoundEffect {
+                        sounds: crate::server::utils::sounds::Sounds::EndermenPortal,
+                        volume: 1.0,
+                        pitch: 1.0,
+                        x: player.position.x,
+                        y: player.position.y,
+                        z: player.position.z,
+                    }.send_packet(player.client_id, &player.network_tx);
+                    
                     handle_teleport(player, &server.network_tx, 12.0)?;
                 }
             }
@@ -55,9 +67,7 @@ impl Item {
             }
             Item::Hyperion => {
                 // Wither Impact: teleport up to 10 blocks and implode with 10-block radius
-                let server = &player.server_mut();
-                handle_teleport(player, &server.network_tx, 10.0)?;
-                // TODO: AoE damage + particles/sounds at destination
+                hyperion::on_right_click(player)?;
             }
             Item::TacticalInsertion => {
                 // Mark current location; world tick loop will return after 3s

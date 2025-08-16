@@ -165,6 +165,7 @@ pub fn new() -> World {
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
         self.tick_count = self.tick_count.wrapping_add(1);
+        
         let mut packets: Vec<ClientBoundPacket> = Vec::new();
 
         if !self.entities_for_removal.is_empty() {

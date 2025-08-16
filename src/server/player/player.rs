@@ -151,6 +151,24 @@ impl Player {
         )
     }
 
+    /// Check if player would intersect blocks at a specific position
+    pub fn is_intersecting_blocks_at(&self, x: f64, y: f64, z: f64) -> bool {
+        let world = &self.server_mut().world;
+        
+        // Check feet position (Y) and head position (Y + 1.62)
+        let feet_y = y.floor() as i32;
+        let head_y = (y + 1.62).floor() as i32;
+        let block_x = x.floor() as i32;
+        let block_z = z.floor() as i32;
+
+        // Check if both feet and head positions are blocked
+        let feet_block = world.get_block_at(block_x, feet_y, block_z);
+        let head_block = world.get_block_at(block_x, head_y, block_z);
+
+        // If either position is not passable, player is intersecting
+        !is_block_passable_for_player(feet_block) || !is_block_passable_for_player(head_block)
+    }
+
     // /// function to have a player start observing an entity
     // ///
     // /// presumably to be called when the entity should be loaded for said player.
@@ -257,5 +275,50 @@ impl Player {
             component: ChatComponentTextBuilder::new(msg).build(),
             typ: 0,
         }.send_packet(self.client_id, &self.network_tx)
+    }
+}
+
+/// Check if a block is passable for player movement
+#[inline]
+fn is_block_passable_for_player(block: crate::server::block::blocks::Blocks) -> bool {
+    match block {
+        crate::server::block::blocks::Blocks::Air
+        | crate::server::block::blocks::Blocks::FlowingWater { .. }
+        | crate::server::block::blocks::Blocks::StillWater { .. }
+        | crate::server::block::blocks::Blocks::FlowingLava { .. }
+        | crate::server::block::blocks::Blocks::Lava { .. }
+        | crate::server::block::blocks::Blocks::Tallgrass { .. }
+        | crate::server::block::blocks::Blocks::Deadbush
+        | crate::server::block::blocks::Blocks::Torch { .. }
+        | crate::server::block::blocks::Blocks::UnlitRedstoneTorch { .. }
+        | crate::server::block::blocks::Blocks::RedstoneTorch { .. }
+        | crate::server::block::blocks::Blocks::Redstone { .. }
+        | crate::server::block::blocks::Blocks::YellowFlower
+        | crate::server::block::blocks::Blocks::RedFlower { .. }
+        | crate::server::block::blocks::Blocks::Vine { .. }
+        | crate::server::block::blocks::Blocks::Fire
+        | crate::server::block::blocks::Blocks::Lilypad
+        | crate::server::block::blocks::Blocks::Carpet { .. }
+        | crate::server::block::blocks::Blocks::SnowLayer { .. }
+        | crate::server::block::blocks::Blocks::Skull { .. }
+        | crate::server::block::blocks::Blocks::FlowerPot { .. }
+        | crate::server::block::blocks::Blocks::RedstoneComparator { .. }
+        | crate::server::block::blocks::Blocks::PoweredRedstoneComparator { .. }
+        | crate::server::block::blocks::Blocks::RedstoneRepeater { .. }
+        | crate::server::block::blocks::Blocks::PoweredRedstoneRepeater { .. }
+        | crate::server::block::blocks::Blocks::Rail { .. }
+        | crate::server::block::blocks::Blocks::PoweredRail { .. }
+        | crate::server::block::blocks::Blocks::DetectorRail { .. }
+        | crate::server::block::blocks::Blocks::DaylightSensor { .. }
+        | crate::server::block::blocks::Blocks::InvertedDaylightSensor { .. }
+        | crate::server::block::blocks::Blocks::Ladder { .. }
+        | crate::server::block::blocks::Blocks::Trapdoor { open: true, .. }
+        | crate::server::block::blocks::Blocks::IronTrapdoor { open: true, .. }
+        | crate::server::block::blocks::Blocks::SpruceFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::BirchFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::JungleFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::DarkOakFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::AcaciaFenceGate { open: true, .. } => true,
+        _ => false,
     }
 }
