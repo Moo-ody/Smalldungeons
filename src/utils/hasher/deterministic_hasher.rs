@@ -2,7 +2,7 @@ use crate::utils::hasher::rapidhash::{rapidhash_known, rapidhash_nano};
 use std::collections::HashMap;
 use std::hash::{BuildHasher, Hash, Hasher};
 
-/// reimplementation of rapidhash nano from [GitHub](https://github.com/hoxxep/rapidhash/blob/master/rapidhash/src/v3/rapid_const.rs#L304)  
+/// reimplementation of rapidhash nano from [GitHub](https://github.com/Nicoshev/rapidhash/blob/master/rapidhash.h#L432)  
 /// (nano because were basically never gonna be hashing more than 48 bytes)
 /// probably overkill but its really fast and i was bored.
 #[derive(Default)]
