@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
 
     let rooms_dir = include_dir!("src/room_data/");
 
+    // roomdata first digit (the key) is just a list of numbers 0..etc. this could just be a vec with roomid lookups.
     let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir.entries()
         .iter()
         .map(|file| {

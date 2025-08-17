@@ -22,7 +22,7 @@ impl WyRandRNG {
 
     #[inline(always)]
     fn next_u64_inner(&mut self) -> u64 {
-        self.state += Wrapping(ADD);
+        self.state += ADD;
         mix(self.state.0, self.state.0 ^ XOR)
     }
 }

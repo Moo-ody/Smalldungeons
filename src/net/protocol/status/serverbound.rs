@@ -2,8 +2,11 @@ use crate::net::client::Client;
 use crate::net::packets::packet::{ProcessContext, ProcessPacket};
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::status::clientbound::{StatusPong, StatusResponse};
-use crate::{register_serverbound_packets, STATUS_RESPONSE_JSON};
+use crate::register_serverbound_packets;
+use base64::engine::general_purpose;
+use base64::Engine;
 use blocks::packet_deserializable;
+use once_cell::sync::Lazy;
 
 register_serverbound_packets! {
     Status;
@@ -14,6 +17,21 @@ register_serverbound_packets! {
 packet_deserializable! {
     pub struct StatusRequest;
 }
+
+// not real sure where to put this, but here should be fine for now.
+const FAVICON_BYTES: &[u8] = include_bytes!("../../../assets/favicon.png");
+
+pub static STATUS_RESPONSE_JSON: Lazy<String> = Lazy::new(|| {
+    let encoded_image = general_purpose::STANDARD.encode(FAVICON_BYTES);
+    let version = env!("CARGO_PKG_VERSION");
+
+    format!(r#"{{
+        "version": {{ "name": "1.8.9", "protocol": 47 }},
+        "players": {{ "max": 1, "online": 0 }},
+        "description": {{ "text": "RustClear", "color": "gold", "extra": [{{ "text": " version ", "color": "gray" }}, {{ "text": "{version}", "color": "green" }}] }},
+        "favicon": "data:image/png;base64,{encoded_image}"
+    }}"#)
+});
 
 impl ProcessPacket for StatusRequest {
     async fn process<'a>(&self, client: &mut Client, context: ProcessContext<'a>) -> anyhow::Result<()> {
