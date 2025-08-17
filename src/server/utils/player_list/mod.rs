@@ -9,7 +9,6 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::player_list::player_profile::PlayerData;
 use std::array;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 use uuid::Uuid;
 
 pub struct PlayerList {
@@ -39,19 +38,19 @@ impl PlayerList {
         }
 
         let lines = self.updated.drain().map(|index| {
-            self.lines[index].clone()
+            &self.lines[index]
         }).collect::<Vec<_>>();
 
         Some(PlayerListItem {
             action: VarInt(3),
-            players: Rc::from(lines),
+            players: lines,
         })
     }
 
-    pub fn new_packet(&mut self) -> PlayerListItem {
+    pub fn new_packet(&self) -> PlayerListItem {
         PlayerListItem {
             action: VarInt(0),
-            players: Rc::from(self.lines.clone()), // i dont think rc doesnt anything
+            players: self.lines.iter().collect(), // previously this used an rc to save on clones when the packet was sent, however with writing packets using a borrowed reference, this is unnecessary.
         }
     }
 }

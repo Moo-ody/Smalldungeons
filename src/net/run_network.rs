@@ -11,7 +11,6 @@ pub async fn run_network_thread(
     network_tx: UnboundedSender<NetworkThreadMessage>,
     main_tx: UnboundedSender<MainThreadMessage>,
 ) {
-    
     let listener = TcpListener::bind("127.0.0.1:4972").await.unwrap();
     println!("Network thread listening on 127.0.0.1:4972");
 

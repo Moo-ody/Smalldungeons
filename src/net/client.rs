@@ -79,22 +79,6 @@ pub async fn handle_client(
     println!("handle client for {client_id} closed.");
 }
 
-
-async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
-    if buf.is_empty() {
-        return None;
-    }
-    let (packet_len, varint_len) = peek_var_int(buf)?;
-
-    let packet_len = packet_len as usize;
-    if buf.len() < packet_len + varint_len {
-        return None;
-    }
-
-    buf.advance(varint_len);
-    Some(buf.split_to(packet_len))
-}
-
 async fn read_packets(
     buffer: &mut BytesMut,
     client: &mut Client,
@@ -114,14 +98,12 @@ async fn read_packets(
                             eprintln!("error processing {err}");
                             continue
                         }
-                        main_thread_tx.send(
+                        let _ = main_thread_tx.send(
                             MainThreadMessage::PacketReceived {
-                                client_id: client.client_id,
+                                client_id: client.client_id, 
                                 packet
                             }
-                        ).unwrap_or_else(|err| { 
-                            eprintln!("failed to send packet to main thread: {err}") 
-                        });
+                        );
                     }
                     Err(err) => {
                         eprintln!("Failed to parse packet from {err}")
@@ -130,6 +112,21 @@ async fn read_packets(
             }
         }
     }
+}
+
+async fn read_whole_packet(buf: &mut BytesMut) -> Option<BytesMut> {
+    if buf.is_empty() {
+        return None;
+    }
+    let (packet_len, varint_len) = peek_var_int(buf)?;
+
+    let packet_len = packet_len as usize;
+    if buf.len() < packet_len + varint_len {
+        return None;
+    }
+
+    buf.advance(varint_len);
+    Some(buf.split_to(packet_len))
 }
 
 async fn parse_from_packets<'a, P: PacketDeserializable + ProcessPacket>(

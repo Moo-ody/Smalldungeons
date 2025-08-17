@@ -10,7 +10,6 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::player_list::player_profile::PlayerData;
 use crate::server::utils::sized_string::SizedString;
 use blocks::packet_serializable;
-use std::rc::Rc;
 
 register_packets! {
     KeepAlive = 0x00;
@@ -68,7 +67,7 @@ register_packets! {
     // UpdateBlockEntity = 0x35;
     // SignEditorOpen = 0x36;
     // Statistics = 0x37;
-    PlayerListItem = 0x38;
+    PlayerListItem<'_> = 0x38;
     // PlayerAbilities = 0x39;
     TabCompleteReply = 0x3a;
     ScoreboardObjective<'_> = 0x3b;
@@ -528,12 +527,12 @@ packet_serializable! {
     }
 }
 
-pub struct PlayerListItem {
+pub struct PlayerListItem<'a> {
     pub action: VarInt,
-    pub players: Rc<[PlayerData]>
+    pub players: Vec<&'a PlayerData>
 }
 
-impl PacketSerializable for PlayerListItem {
+impl PacketSerializable for PlayerListItem<'_> {
     fn write(&self, buf: &mut Vec<u8>) {
         self.action.write(buf);
         write_var_int(buf, self.players.len() as i32);
@@ -550,7 +549,7 @@ impl PacketSerializable for PlayerListItem {
                     player.profile.uuid.write(buf);
                     player.profile.username.write(buf);
 
-                    let ref properties = player.profile.properties;
+                    let properties = &player.profile.properties;
                     write_var_int(buf, properties.len() as i32);
                     for (key, property) in properties.iter() {
                         key.write(buf);

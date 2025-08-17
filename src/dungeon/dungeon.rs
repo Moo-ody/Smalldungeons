@@ -8,7 +8,7 @@ use crate::server::block::block_position::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::world;
-use crate::utils::deterministic_hasher::DeterministicHashMap;
+use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
 
 // The top leftmost corner of the dungeon
@@ -83,7 +83,6 @@ impl Dungeon {
         let mut rooms: Vec<Room> = Vec::new();
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
         let mut room_id_map: DeterministicHashMap<usize, Vec<(usize, usize)>> = DeterministicHashMap::default();
-
         let mut doors: Vec<Door> = Vec::new();
 
         for (i, (x, z)) in DOOR_POSITIONS.into_iter().enumerate() {

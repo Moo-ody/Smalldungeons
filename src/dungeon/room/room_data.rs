@@ -1,7 +1,7 @@
 use crate::dungeon::door::Door;
 use crate::dungeon::room::room::Room;
 use crate::server::block::blocks::Blocks;
-use crate::utils::deterministic_hasher::DeterministicHashMap;
+use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use crate::utils::seeded_rng::seeded_rng;
 use rand::seq::IteratorRandom;
 use serde_json::Value;

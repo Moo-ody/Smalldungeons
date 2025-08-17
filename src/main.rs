@@ -21,13 +21,14 @@ use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
 use crate::server::world::VIEW_DISTANCE;
-use crate::utils::deterministic_hasher::DeterministicHashMap;
+use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use crate::utils::seeded_rng::SeededRng;
 use anyhow::Result;
 use chrono::Local;
 use include_dir::include_dir;
 use indoc::formatdoc;
 use rand::seq::IndexedRandom;
+use rand::RngCore;
 use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -100,19 +101,20 @@ async fn main() -> Result<()> {
         .split("\n")
         .collect::<Vec<&str>>();
 
-    // let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
-    
-    let dungeon_str = match args.len() {
-        0..=1 => {
-            let mut rng = rand::rng();
-            dungeon_strings.choose(&mut rng).unwrap()
-        },
-        _ => args.get(1).unwrap().as_str()
-    };
+    let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
+
+    // let dungeon_str = match args.len() {
+    //     0..=1 => {
+    //         let mut rng = rand::rng();
+    //         dungeon_strings.choose(&mut rng).unwrap()
+    //     },
+    //     _ => args.get(1).unwrap().as_str()
+    // };
     println!("Dungeon String: {}", dungeon_str);
 
-    let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
-
+    //let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
+    let rng_seed: u64 = 12946977352813673410;
+    
     println!("Rng Seed: {}", rng_seed);
     SeededRng::set_seed(rng_seed);
     
