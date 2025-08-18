@@ -60,11 +60,11 @@ jobs:
           version=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           mkdir -p dist
           cp target/release/RustClear${{ matrix.ext }} \
-             "dist/RustClear-v${version}${{ matrix.ext }}-${{ matrix.os }}"
+             "dist/RustClear-v${{ steps.get_version.outputs.version }}${{ matrix.ext }}-${{ matrix.os }}"
 
       - name: Upload build artifact
         if: ${{ inputs.upload_artifacts }}
         uses: actions/upload-artifact@v4
         with:
-          name: RustClear-v${version}${{ matrix.ext }}-${{ matrix.os }}
+          name: RustClear-v${{ steps.get_version.outputs.version }}-${{ matrix.os }}
           path: dist/*
