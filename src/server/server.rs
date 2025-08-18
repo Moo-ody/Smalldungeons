@@ -1,10 +1,10 @@
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ProcessPacket;
-use crate::net::protocol::play::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerListHeaderFooter, PositionLook};
+use crate::net::protocol::play::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerAbilities, PlayerListHeaderFooter, PositionLook};
 use crate::net::var_int::VarInt;
 use crate::server::items::Item;
-use crate::server::player::attribute::{Attribute, AttributeMap};
+use crate::server::player::attribute::{Attribute, AttributeMap, AttributeModifier};
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
@@ -14,6 +14,7 @@ use crate::server::world;
 use crate::server::world::World;
 use anyhow::{anyhow, Result};
 use tokio::sync::mpsc::UnboundedSender;
+use uuid::Uuid;
 
 pub struct Server {
     pub network_tx: UnboundedSender<NetworkThreadMessage>,
@@ -84,7 +85,6 @@ impl Server {
                         }
                     }
                 }
-
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
 
                 // player.send_packet(self.world.player_info.new_packet())?;
@@ -113,12 +113,28 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
                 player.sync_inventory();
 
+                let playerspeed: f32 = 500.0 * 0.001;
+
                 let mut attributes = AttributeMap::new();
-                attributes.insert(Attribute::MovementSpeed, 0.4);
+                attributes.insert(Attribute::MovementSpeed, playerspeed as f64);
+                attributes.add_modify(Attribute::MovementSpeed, AttributeModifier {
+                    id: Uuid::parse_str("662a6b8d-da3e-4c1c-8813-96ea6097278d")?,
+                    amount: 0.3, // this is always 0.3 for hypixels speed stuff
+                    operation: 2,
+                });
 
                 player.write_packet(&EntityProperties {
                     entity_id: VarInt(player.entity_id),
-                    properties: attributes,
+                    properties: attributes, // this gets sent every time you sprint for some reason
+                });
+
+                player.write_packet(&PlayerAbilities {
+                    invulnerable: false,
+                    flying: false,
+                    allow_flying: false,
+                    creative_mode: false,
+                    fly_speed: 0.0,
+                    walk_speed: playerspeed,
                 });
                 
                 player.flush_packets();

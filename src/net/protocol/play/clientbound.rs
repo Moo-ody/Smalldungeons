@@ -68,7 +68,7 @@ register_packets! {
     // SignEditorOpen = 0x36;
     // Statistics = 0x37;
     PlayerListItem<'_> = 0x38;
-    // PlayerAbilities = 0x39;
+    PlayerAbilities = 0x39;
     TabCompleteReply = 0x3a;
     ScoreboardObjective<'_> = 0x3b;
     UpdateScore = 0x3c;
@@ -407,6 +407,24 @@ packet_serializable! {
         pub window_id: i8,
         pub action_number: i16,
         pub accepted: bool,
+    }
+}
+
+pub struct PlayerAbilities {
+    pub invulnerable: bool,
+    pub flying: bool,
+    pub allow_flying: bool,
+    pub creative_mode: bool,
+    pub fly_speed: f32,
+    pub walk_speed: f32,
+}
+
+impl PacketSerializable for PlayerAbilities {
+    fn write(&self, buf: &mut Vec<u8>) {
+        let byte = (self.invulnerable as i8) | ((self.flying as i8) << 1) | ((self.allow_flying as i8) << 2) | ((self.creative_mode as i8) << 3);
+        byte.write(buf);
+        self.fly_speed.write(buf);
+        self.walk_speed.write(buf);
     }
 }
 
