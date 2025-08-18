@@ -114,10 +114,10 @@ impl ProcessPacket for PlayerBlockPlacement {
 
             if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
                 interact_block.interact(player, &self.position);
-                return;
             }
+        } else {
+            player.handle_right_click();
         }
-        player.handle_right_click();
         // player.sync_inventory();
     }
 }

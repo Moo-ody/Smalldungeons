@@ -28,7 +28,7 @@ impl BlockPos {
     }
     
     pub const fn is_invalid(&self) -> bool {
-        self.x.is_negative() || self.y.is_negative() || self.z.is_negative()
+        self.y.is_negative()
     }
 
     pub const fn distance_squared(&self, other: &BlockPos) -> i32 {
