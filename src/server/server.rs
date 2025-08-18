@@ -148,7 +148,10 @@ impl Server {
             MainThreadMessage::PacketReceived { client_id, packet } => {
                 let player = self.world.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?;
                 packet.process_with_player(player);
-            }
+            },
+            MainThreadMessage::Abort { reason } => {
+                panic!("Network called for shutdown: {}", reason);
+            },
         }
         Ok(())
     }

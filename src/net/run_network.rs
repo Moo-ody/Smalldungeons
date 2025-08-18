@@ -1,4 +1,5 @@
 use crate::net::client::handle_client;
+use core::panic;
 use std::collections::HashMap;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -6,12 +7,17 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use crate::net::internal_packets::{ClientHandlerMessage, MainThreadMessage, NetworkThreadMessage};
 use crate::server::player::player::ClientId;
 
+/// runs the network thread. It is very important that nothing here panics without alerting the main thread.
+/// if a handle_client panics, it should send a disconnect player to the main thread. (however we dont have anything that could panic there atm)
 pub async fn run_network_thread(
     mut network_rx: UnboundedReceiver<NetworkThreadMessage>,
     network_tx: UnboundedSender<NetworkThreadMessage>,
     main_tx: UnboundedSender<MainThreadMessage>,
 ) {
-    let listener = TcpListener::bind("127.0.0.1:4972").await.unwrap();
+    let listener = TcpListener::bind("127.0.0.1:4972").await.unwrap_or_else(|err| {
+        let _ = main_tx.send(MainThreadMessage::Abort { reason: format!("TCP failed to bind: {}", err) });
+        panic!("{}", err)
+    });
     println!("Network thread listening on 127.0.0.1:4972");
 
     let mut clients: HashMap<ClientId, UnboundedSender<ClientHandlerMessage>> = HashMap::new();

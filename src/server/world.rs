@@ -68,12 +68,7 @@ impl World {
         id
     }
 
-    pub fn spawn_entity<E : EntityImpl + 'static>(
-        &mut self,
-        position: DVec3,
-        metadata: EntityMetadata,
-        mut entity_impl: E,
-    ) -> anyhow::Result<EntityId> {
+    pub fn spawn_entity<E : EntityImpl + 'static>(&mut self,position: DVec3, metadata: EntityMetadata, mut entity_impl: E,) -> anyhow::Result<EntityId> {
         let world_ptr: *mut World = self;
         let mut entity = Entity::new(
             world_ptr,

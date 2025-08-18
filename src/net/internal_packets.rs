@@ -43,4 +43,8 @@ pub enum MainThreadMessage {
     ClientDisconnected {
         client_id: ClientId,
     },
+
+    Abort {
+        reason: String,
+    },
 }

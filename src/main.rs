@@ -28,7 +28,6 @@ use chrono::Local;
 use include_dir::include_dir;
 use indoc::formatdoc;
 use rand::seq::IndexedRandom;
-use rand::RngCore;
 use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
