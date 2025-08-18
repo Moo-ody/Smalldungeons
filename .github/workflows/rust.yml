@@ -13,47 +13,4 @@ env:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Get ClearData Room Data
-      uses: actions/checkout@v4
-      with: 
-        repository: Big-Dungeons/ClearData
-        ref: main
-        path: ClearData
-
-    - name: copy room_data into project
-      shell: bash
-      run: |
-        mkdir =p src/room_data
-        cp -r ClearData/room_data/* src/room_data/
-        
-
-    - name: Cargo Cache
-      uses: actions/cache@v4
-      with:          
-        path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    
-    - name: Build
-      run: cargo build --release --verbose
-    - name: Run tests
-      run: cargo test --verbose
-
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: RustClear-${{ matrix.os }}
-        path: |
-          target/release/RustClear${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+    uses: ./.github/workflows/build.yml
