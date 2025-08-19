@@ -146,9 +146,9 @@ impl World {
                 player.write_packet(&packet)
             }
         }
-        let mut buf = PacketBuffer {
-            buffer: Vec::new(),
-        };
+
+        let mut buf = PacketBuffer::new();
+
         for (entity, entity_impl) in self.entities.values_mut() {
             entity.tick(entity_impl, &mut buf);
         }

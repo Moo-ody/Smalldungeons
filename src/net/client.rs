@@ -134,7 +134,7 @@ async fn parse_from_packets<'a, P: PacketDeserializable + ProcessPacket>(
     client: &mut Client,
     process_context: ProcessContext<'a>
 ) {
-    match <P as PacketDeserializable>::read(buffer) {
+    match P::read(buffer) {
         Ok(packet) => {
             if let Err(e) = packet.process(client, process_context).await {
                 eprintln!("error processing {e}");

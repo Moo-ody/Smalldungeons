@@ -21,7 +21,7 @@ pub async fn run_network_thread(
     println!("Network thread listening on 127.0.0.1:4972");
 
     let mut clients: HashMap<ClientId, UnboundedSender<ClientHandlerMessage>> = HashMap::new();
-    let mut client_id_counter = 1;
+    let mut client_id_counter: ClientId = 1;
 
     loop {
         tokio::select! {

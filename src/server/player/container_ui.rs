@@ -84,8 +84,6 @@ impl UI {
             _ => None
         }
     }
-
-    
     
     /// handles the click window packet for all UI
     pub fn handle_click_window(

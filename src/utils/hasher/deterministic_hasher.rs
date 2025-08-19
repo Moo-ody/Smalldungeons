@@ -1,6 +1,6 @@
 use crate::utils::hasher::rapidhash::{rapidhash_known, rapidhash_nano};
 use std::collections::HashMap;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{BuildHasher, Hasher};
 
 /// reimplementation of rapidhash nano from [GitHub](https://github.com/Nicoshev/rapidhash/blob/master/rapidhash.h#L432)
 /// (nano because were basically never gonna be hashing more than 48 bytes)
@@ -37,6 +37,7 @@ impl Hasher for RapidHasher {
         self.state = rapidhash_nano(bytes)
     }
 
+    // these can be optimized down to not convert to and from their bytes...
     write_num!(write_u8, u8);
     write_num!(write_u16, u16);
     write_num!(write_u32, u32);

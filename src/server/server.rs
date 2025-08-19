@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ProcessPacket;
@@ -12,7 +14,7 @@ use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
 use crate::server::world;
 use crate::server::world::World;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
@@ -146,7 +148,7 @@ impl Server {
                 println!("Client {} disconnected", client_id);
             },
             MainThreadMessage::PacketReceived { client_id, packet } => {
-                let player = self.world.players.get_mut(&client_id).ok_or_else(|| anyhow!("Player not found for id {client_id}"))?;
+                let player = self.world.players.get_mut(&client_id).context(format!("Player not found for id {client_id}"))?;
                 packet.process_with_player(player);
             },
             MainThreadMessage::Abort { reason } => {
