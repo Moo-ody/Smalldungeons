@@ -245,6 +245,7 @@ impl Dungeon {
                 }
             );
         }
+        
         // probably mark room connected to entrance as entered 
     }
 
@@ -258,10 +259,7 @@ impl Dungeon {
             DungeonState::Starting { tick_countdown: tick } => {
                 *tick -= 1;
                 if *tick == 0 {
-                    self.state = DungeonState::Started { current_ticks: 0 };
-                    self.start_dungeon();
-                    
-                    // Play final sounds when dungeon starts
+                    // Play sounds 20 ticks after "Starting in 1 second" message
                     for (_, player) in &server.world.players {
                         // Ender dragon growl
                         let _ = player.send_packet(SoundEffect {
@@ -277,14 +275,31 @@ impl Dungeon {
                         let _ = player.send_packet(SoundEffect {
                             sounds: Sounds::VillagerHaggle,
                             volume: 1.0,
-                            pitch: 0.6984127,
+                            pitch: 0.7,
                             x: player.position.x,
                             y: player.position.y,
                             z: player.position.z,
                         });
+                        
                     }
+                    
+                    // Send Mage stats message 20 ticks after "Starting in 1 second"
+                    for (_, player) in &server.world.players {
+                        player.send_msg("§6Your Mage stats are doubled because")?;
+                        player.send_msg("§6you are the only player using this")?;
+                        player.send_msg("§6class!")?;
+                        player.send_msg("§a[Mage] §fIntelligence §c500 §f-> §a750")?;
+                        player.send_msg("§a[Mage] §fCooldown Reduction §c50% §f-> §a75%")?;
+                    }
+                    
+                    // Send Mort message with slight delay after Mage stats
+                    for (_, player) in &server.world.players {
+                        player.send_msg("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.")?;
+                    }
+                    
+                    self.state = DungeonState::Started { current_ticks: 0 };
+                    self.start_dungeon();
                 } else if *tick % 20 == 0 {
-
                     let seconds_remaining = *tick / 20;
                     let s = if seconds_remaining == 1 { "" } else { "s" };
                     let str = format!("§aStarting in {} second{}.", seconds_remaining, s);
@@ -326,6 +341,41 @@ impl Dungeon {
                                 door.play_idle_sound(&mut server.world);
                             }
                         }
+                    }
+                }
+
+                // Play additional villager haggle sounds after the first one
+                // 2000ms = 40 ticks after dungeon start (first additional sound)
+                if *current_ticks == 40 {
+                    for (_, player) in &server.world.players {
+                        let _ = player.send_packet(SoundEffect {
+                            sounds: Sounds::VillagerHaggle,
+                            volume: 1.0,
+                            pitch: 0.7,
+                            x: player.position.x,
+                            y: player.position.y,
+                            z: player.position.z,
+                        });
+                        
+                        // Send Mort's follow-up message
+                        player.send_msg("§e[NPC] §bMort§f: You should find it useful if you get lost.")?;
+                    }
+                }
+                
+                // 1500ms = 30 ticks after the second sound (70 ticks total)
+                if *current_ticks == 70 {
+                    for (_, player) in &server.world.players {
+                        let _ = player.send_packet(SoundEffect {
+                            sounds: Sounds::VillagerHaggle,
+                            volume: 1.0,
+                            pitch: 0.7,
+                            x: player.position.x,
+                            y: player.position.y,
+                            z: player.position.z,
+                        });
+                        
+                        // Send Mort's final message
+                        player.send_msg("§e[NPC] §bMort§f: Good luck.")?;
                     }
                 }
 

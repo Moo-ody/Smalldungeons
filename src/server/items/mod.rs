@@ -28,6 +28,7 @@ pub enum Item {
     SuperboomTNT,
     GoldenAxe,
     Terminator,
+    DepthStriderBoots,
 }
 
 
@@ -397,11 +398,68 @@ Item::Terminator => ItemStack {
     ])),
 },
 
-            Item::SpiritSceptre => ItemStack {
-                item: 0,
-                stack_size: 0,
+
+            Item::DepthStriderBoots => ItemStack {
+                item: 301, // leather boots id
+                stack_size: 1,
                 metadata: 0,
-                tag_compound: None,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§cNecrotic Storm's Boots §6✪§6✪§6✪§6✪"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            §7Color: §c#901A32
+                            §7Gear Score: §a858 §8(§74880§8)
+                            
+                            §7Health: §a+294.5 §8(+60) §7(§a+1,766.8§7)
+                            §7Defense: §a+121.5 §8(+30) §7(§a+725.65§7)
+                            §7Speed: §a+6 §8(+37.86§7)
+                            §7Intelligence: §a+535 §8(+200) (+60) §7(§a+3,218.1§7)
+                            §7Health Regen: §a+10 §8(+63.1§7)
+                            
+                            §7Enchantments:
+                            §9Wisdom 5
+                            §9Depth Strider 3
+                            §9Feather Falling 10
+                            §9Growth 5
+                            §9Protection 5
+                            §9Rejuvenate 5
+                            §9Sugar Rush 3
+                            §9Thorns 3
+                            
+                            §7Special Effect: §cReduces the damage you take from withers by 10%.
+                            
+                            §7Full Set Bonus: §6Witherborn §8(3/4)
+                            §7Spawns a wither minion every 30 seconds up to a maximum 1 wither.
+                            §7Your withers will travel to and explode on nearby enemies.
+                            
+                            §cRose Dyed
+                            §6RARITY UPGRADED
+                            §6> MYTHIC DUNGEON BOOTS
+                        "#})
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "WISE_WITHER_BOOTS"),
+                    ]),
+                    // Vanilla enchants including Depth Strider 3
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound(vec![
+                            NBT::short("id", 8), // Depth Strider
+                            NBT::short("lvl", 3),
+                        ]),
+                        NBTNode::Compound(vec![
+                            NBT::short("id", 2), // Feather Falling
+                            NBT::short("lvl", 10),
+                        ]),
+                        NBTNode::Compound(vec![
+                            NBT::short("id", 0), // Protection
+                            NBT::short("lvl", 5),
+                        ]),
+                        NBTNode::Compound(vec![
+                            NBT::short("id", 17), // Thorns
+                            NBT::short("lvl", 3),
+                        ])
+                    ])
+                ])),
             },
         };
         if let Some(ref mut tag) = stack.tag_compound {

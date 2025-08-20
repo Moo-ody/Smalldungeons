@@ -19,6 +19,10 @@ use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
 use std::collections::{HashMap, VecDeque};
+
+/// Default view distance in chunks for chunk loading
+pub const VIEW_DISTANCE: u8 = 8;
+
 #[derive(Debug, Clone, Copy)]
 pub struct TacticalInsertionMarker {
     pub client_id: ClientId,
@@ -292,6 +296,12 @@ pub fn new() -> World {
                 .unwrap();
         }
         self.chunk_grid.set_block_at(block, x, y, z);
+        
+        // Automatically make levers interactable
+        if let Blocks::Lever { .. } = block {
+            use crate::server::block::block_interact_action::BlockInteractAction;
+            self.interactable_blocks.insert(BlockPos::new(x, y, z), BlockInteractAction::Lever);
+        }
     }
 
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {

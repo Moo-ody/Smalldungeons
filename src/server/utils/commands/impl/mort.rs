@@ -13,10 +13,6 @@ impl CommandMetadata for Mort {
     const NAME: &'static str = "mort";
 
     fn run(world: &mut World, player: &mut Player, args: &[&str]) -> anyhow::Result<Outcome> {
-        player.send_packet(Chat {
-            typ: CHAT,
-            component: ChatComponentTextBuilder::new("opening menu").build(),
-        })?;
         player.open_ui(UI::MortReadyUpMenu)?;
 
         Ok(Outcome::Success)

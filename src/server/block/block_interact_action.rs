@@ -24,6 +24,7 @@ pub enum BlockInteractAction {
     WitherEssence {
         secret: Rc<RefCell<DungeonSecret>>
     },
+    Lever,
     // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
@@ -50,6 +51,12 @@ impl BlockInteractAction {
                     // todo check if player has a key
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
+                    
+                    // Send message to all players when WITHER door is opened
+                    let message = format!("§b{} §aopened a §8WITHER §adoor!", player.profile.username);
+                    for (_, other_player) in &player.server_mut().world.players {
+                        let _ = other_player.send_msg(&message);
+                    }
                 }
             }
 
@@ -71,6 +78,12 @@ impl BlockInteractAction {
                     // todo check if player has a key
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
+                    
+                    // Send message to all players when BLOOD door is opened
+                    for (_, other_player) in &player.server_mut().world.players {
+                        let _ = other_player.send_msg("§cThe §c§lBLOOD DOOR §chas been opened!");
+                        let _ = other_player.send_msg("§5A shiver runs down your spine...");
+                    }
                 }
             }
 
@@ -138,6 +151,26 @@ impl BlockInteractAction {
                 ).unwrap();
 
                 secret.obtained = true;
+            }
+            
+            Self::Lever => {
+                // Send chat message about hearing something opening
+                player.send_msg("§cYou hear the sound of something").unwrap();
+                player.send_msg("§copening...").unwrap();
+                
+                // Play anvil break sound effect
+                player.send_packet(SoundEffect {
+                    sounds: Sounds::AnvilBreak,
+                    volume: 1.0,
+                    pitch: 1.7,
+                    x: block_pos.x as f64,
+                    y: block_pos.y as f64,
+                    z: block_pos.z as f64,
+                }).unwrap();
+                
+                // Remove this lever from interactable blocks so it can only be used once
+                let world = &mut player.server_mut().world;
+                world.interactable_blocks.remove(block_pos);
             }
             
             Self::Callback(func) => {

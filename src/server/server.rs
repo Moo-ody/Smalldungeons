@@ -119,10 +119,16 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::GoldenAxe), 13);
                 // Terminator bow for testing
                 player.inventory.set_slot(ItemSlot::Filled(Item::Terminator), 42);
+                
                 player.sync_inventory()?;
 
                 let mut attributes = AttributeMap::new();
-                attributes.insert(Attribute::MovementSpeed, 0.5);
+                // Movement speed to match Hypixel Skyblock (22 bps walk, 28 bps sprint)
+                // Base Minecraft walk: ~4.317 bps, sprint: ~5.612 bps
+                // Target: walk ~22 bps, sprint ~28 bps
+                // Multiplier needed: ~5.1x for walk, ~5.0x for sprint
+                // Base Minecraft speed is 0.1, so we need 0.1 * 5.1 = 0.51
+                attributes.insert(Attribute::MovementSpeed, 0.51);
 
                 player.send_packet(EntityProperties {
                     entity_id: player.entity_id,

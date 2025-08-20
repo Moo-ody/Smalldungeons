@@ -53,6 +53,7 @@ pub struct Player {
 
     // Teleport system fields
     pub home_position: Option<DVec3>,
+    pub home_direction: Option<(f32, f32)>, // (yaw, pitch)
 
     pub inventory: Inventory,
     pub held_slot: u8,
@@ -101,6 +102,7 @@ impl Player {
 
             // Teleport system fields
             home_position: None,
+            home_direction: None,
 
             inventory: Inventory::empty(),
             held_slot: 0,
@@ -230,6 +232,59 @@ impl Player {
         CloseWindowPacket {
             window_id: self.current_window_id as i8,
         }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+        Ok(())
+    }
+
+    /// Check if the player is currently in water
+    pub fn is_in_water(&self) -> bool {
+        let world = self.world_mut();
+        let block_pos = (
+            self.position.x.floor() as i32,
+            self.position.y.floor() as i32,
+            self.position.z.floor() as i32,
+        );
+        
+        // Use the world's get_block_at method which handles chunk access properly
+        let block = world.get_block_at(block_pos.0, block_pos.1, block_pos.2);
+        
+        matches!(block, 
+            crate::server::block::blocks::Blocks::FlowingWater { .. } |
+            crate::server::block::blocks::Blocks::StillWater { .. }
+        )
+    }
+
+    /// Check if the player has Depth Strider boots equipped
+    pub fn has_depth_strider(&self) -> bool {
+        // Check if Depth Strider boots are in any inventory slot
+        for slot in &self.inventory.items {
+            if let crate::server::player::inventory::ItemSlot::Filled(item) = slot {
+                if matches!(item, crate::server::items::Item::DepthStriderBoots) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Apply Depth Strider effect if player is in water and has the boots
+    pub fn apply_depth_strider_effect(&mut self) -> anyhow::Result<()> {
+        let is_in_water = self.is_in_water();
+        let has_depth_strider = self.has_depth_strider();
+        
+        let mut attributes = crate::server::player::attribute::AttributeMap::new();
+        
+        // Movement speed to match Hypixel Skyblock (22 bps walk, 28 bps sprint)
+        // Base Minecraft walk: ~4.317 bps, sprint: ~5.612 bps
+        // Target: walk ~22 bps, sprint ~28 bps
+        // Multiplier needed: ~5.1x for walk, ~5.0x for sprint
+        // Base Minecraft speed is 0.1, so we need 0.1 * 5.1 = 0.51
+        attributes.insert(crate::server::player::attribute::Attribute::MovementSpeed, 0.51);
+        
+        self.send_packet(crate::net::packets::client_bound::entity::entity_properties::EntityProperties {
+            entity_id: self.entity_id,
+            properties: attributes,
+        })?;
+        
         Ok(())
     }
 

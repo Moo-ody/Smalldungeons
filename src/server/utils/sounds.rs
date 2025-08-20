@@ -43,5 +43,6 @@ id_enum! {
         Bow("random.bow"),
         EndermenPortal("mob.endermen.portal"),
         RandomExplode("random.explode"),
+        AnvilBreak("random.anvil_break"),
     }
 }
