@@ -99,15 +99,11 @@ packet_serializable! {
     }
 }
 
-
-
 packet_serializable! {
     pub struct KeepAlive {
         pub current_time: i32,
     }
 }
-
-
 
 packet_serializable! {
     pub struct Chat {

@@ -54,7 +54,7 @@ impl UI {
                     tag_compound: Some(NBT::with_nodes(vec![
                         NBT::compound("display", vec![
                             NBT::string("Name", &format!("§7{}", player.profile.username)),
-                            NBT::list_from_string("Lore", &format!("{}", item_name))
+                            NBT::list_from_string("Lore", &item_name.to_string())
                         ]),
                         NBT::string("SkullOwner", &player.profile.username),
                     ])),
@@ -97,7 +97,7 @@ impl UI {
                     player.sync_inventory();
                     return;
                 }
-                if player.inventory.click_slot(&packet, &mut player.packet_buffer) {
+                if player.inventory.click_slot(packet, &mut player.packet_buffer) {
                     player.sync_inventory();
                 }
             },

@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ProcessPacket;
@@ -14,7 +12,7 @@ use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
 use crate::server::world;
 use crate::server::world::World;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 

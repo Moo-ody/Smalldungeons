@@ -120,7 +120,7 @@ impl Scoreboard {
             if i == 0 {
                 packet_buffer.write_packet(&ScoreboardObjective {
                     objective_name: OBJECTIVE_NAME.into(),
-                    objective_value: new_str.clone().into(),
+                    objective_value: new_str.clone(),
                     render_type: "integer",
                     mode: UPDATE_NAME,
                 });

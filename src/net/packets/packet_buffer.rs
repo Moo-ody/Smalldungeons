@@ -1,3 +1,7 @@
+use std::mem::take;
+
+use bytes::BufMut;
+
 use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::packet::IdentifiedPacket;
 use crate::net::packets::packet_serialize::PacketSerializable;
@@ -27,7 +31,6 @@ impl PacketBuffer {
         self.buffer.extend(payload);
     }
 
-    // this will be faster if we use a bytesmut instead of a vec<u8>
     pub fn copy_from(&mut self, buf: &PacketBuffer) {
         self.buffer.extend(&buf.buffer)
     }
@@ -36,7 +39,7 @@ impl PacketBuffer {
     pub fn get_packet_message(&mut self, client_id: &ClientId) -> NetworkThreadMessage {
         NetworkThreadMessage::SendPackets {
             client_id: *client_id,
-            buffer: std::mem::replace(&mut self.buffer, Vec::new()),
+            buffer: take(&mut self.buffer),
         }
     }
 }

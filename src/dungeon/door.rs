@@ -118,7 +118,8 @@ impl Door {
             BlockPos { x: self.x + 1, y: 72, z: self.z + 1 },
 
             |x,y, z| {
-                world.set_block_at(Blocks::Barrier, x, y, z);
+//                world.set_block_at(Blocks::Barrier, x, y, z);
+                world.set_block_at(Blocks::Air, x, y, z);
                 world.interactable_blocks.remove(&BlockPos { x, y, z });
                 
                 let id = world.spawn_entity(

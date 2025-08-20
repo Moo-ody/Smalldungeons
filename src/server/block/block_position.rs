@@ -39,7 +39,7 @@ impl BlockPos {
     }
 
     pub fn distance_to(&self, other: &BlockPos) -> f32 {
-        (self.distance_squared(self) as f32).sqrt()
+        (self.distance_squared(other) as f32).sqrt()
     }
 
     pub fn replace_y(&self, y: i32) -> Self {

@@ -1,44 +1,6 @@
-const DEFAULT_SEED: u64 = 0;
-
-/// rapidhash when the size of the input is known at compile time. This should ensure branches are compiled out.
 #[inline(always)]
-pub const fn rapidhash_known<const SIZE: usize>(bytes: &[u8; SIZE]) -> u64 {
-    rapidhash_known_core::<SIZE>(DEFAULT_SEED, bytes)
-}
-
-/// rapidhash when the size of the input is not known at compile time.
-#[inline(always)]
-pub const fn rapidhash_nano(bytes: &[u8]) -> u64 {
-    rapidhash_nano_core(DEFAULT_SEED, bytes)
-}
-
-#[inline(always)]
-const fn rapidhash_known_core<const SIZE: usize>(mut seed: u64, bytes: &[u8]) -> u64 {
-    let a;
-    let b;
-
-    if SIZE <= 16 && SIZE >= 4 {
-        seed ^= SIZE as u64;
-    }
-
-    match SIZE {
-        0 => return finish(0, 0, seed, SIZE),
-        1..=3 => {
-            a = ((bytes[0] as u64) << 45) | bytes[SIZE - 1] as u64;
-            b = bytes[SIZE >> 1] as u64;
-        }
-        4..=8 => {
-            b = read_u32(bytes, 0) as u64;
-            a = read_u32(bytes, SIZE - 4) as u64;
-        }
-        9..=16 => {
-            a = read_u64(bytes, 0);
-            b = read_u64(bytes, SIZE - 8);
-        }
-        _ => return rapidhash_nano_core(seed, bytes), // this could also get compiled down to 0 branches with known size but its unlikely to matter most of the time.
-    }
-
-    finish(a, b, seed, SIZE)
+pub const fn rapidhash_nano(seed: u64, bytes: &[u8]) -> u64 {
+    rapidhash_nano_core(seed, bytes)
 }
 
 #[inline(always)]
@@ -95,18 +57,18 @@ const fn rapidhash_nano_core(mut seed: u64, bytes: &[u8]) -> u64 {
 }
 
 #[inline(always)]
-pub const fn finish(mut a: u64, mut b: u64, seed: u64, remaining: usize) -> u64 {
+pub(super) const fn finish(mut a: u64, mut b: u64, seed: u64, remaining: usize) -> u64 {
     (a, b) = mum(a ^ RH2, b ^ seed);
     mix(a ^ RH8, b ^ RH1 ^ remaining as u64)
 }
 
 #[inline(always)]
-pub const fn read_u64(slice: &[u8], offset: usize) -> u64 {
+const fn read_u64(slice: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes(*slice.split_at(offset).1.first_chunk::<8>().unwrap())
 }
 
 #[inline(always)]
-pub const fn read_u32(slice: &[u8], offset: usize) -> u32 {
+const fn read_u32(slice: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(*slice.split_at(offset).1.first_chunk::<4>().unwrap())
 }
 
@@ -132,3 +94,39 @@ const RH3: u64 = 0x4b33a62ed433d4a3;
 // const RH6: u64 = 0xe7037ed1a0b428db;
 // const RH7: u64 = 0x90ed1765281c388c;
 const RH8: u64 = 0xaaaaaaaaaaaaaaaa;
+
+///// rapidhash when the size of the input is known at compile time. This should ensure branches are compiled out.
+//#[inline(always)]
+//pub const fn rapidhash_known<const SIZE: usize>(seed: u64, bytes: &[u8; SIZE]) -> u64 {
+//    rapidhash_known_core::<SIZE>(DEFAULT_SEED, bytes)
+//}
+
+
+//#[inline(always)]
+//const fn rapidhash_known_core<const SIZE: usize>(mut seed: u64, bytes: &[u8]) -> u64 {
+//    let a;
+//    let b;
+//
+//    if SIZE <= 16 && SIZE >= 4 {
+//        seed ^= SIZE as u64;
+//    }
+//
+//    match SIZE {
+//        0 => return finish(0, 0, seed, SIZE),
+//        1..=3 => {
+//            a = ((bytes[0] as u64) << 45) | bytes[SIZE - 1] as u64;
+//            b = bytes[SIZE >> 1] as u64;
+//        }
+//        4..=8 => {
+//            b = read_u32(bytes, 0) as u64;
+//            a = read_u32(bytes, SIZE - 4) as u64;
+//        }
+//        9..=16 => {
+//            a = read_u64(bytes, 0);
+//            b = read_u64(bytes, SIZE - 8);
+//        }
+//        _ => return rapidhash_nano_core(seed, bytes), // this could also get compiled down to 0 branches with known size but its unlikely to matter most of the time.
+//    }
+//
+//    finish(a, b, seed, SIZE)
+//}

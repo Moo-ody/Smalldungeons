@@ -92,7 +92,7 @@ async fn read_packets(
             Status => parse_from_packets::<Status>(&mut buffer, client, context).await,
             Login => parse_from_packets::<Login>(&mut buffer, client, context).await,
             Play => {
-                match <Play as PacketDeserializable>::read(&mut buffer) {
+                match Play::read(&mut buffer) {
                     Ok(packet) => {
                         if let Err(err) = packet.process(client, context).await {
                             eprintln!("error processing {err}");
