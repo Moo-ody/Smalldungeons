@@ -134,9 +134,6 @@ impl Door {
         world.server_mut().schedule_move(20, move |server| {
             world::iterate_blocks(start, end, |x,y, z| {
                 server.world.set_block_at(Blocks::Air, x, y, z);
-                for entity in entities.iter() {
-                    server.world.despawn_entity(*entity);
-                }
             });
         })
 
