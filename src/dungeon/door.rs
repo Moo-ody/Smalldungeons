@@ -112,27 +112,34 @@ impl Door {
             assert_ne!(self.door_type, DoorType::NORMAL);
         }
 
-        let mut entities = Vec::new();
-        world::iterate_blocks(
-            BlockPos { x: self.x - 1, y: 69, z: self.z - 1 },
-            BlockPos { x: self.x + 1, y: 72, z: self.z + 1 },
+        let start = BlockPos { x: self.x - 1, y: 69, z: self.z - 1 };
+        let end = BlockPos { x: self.x + 1, y: 72, z: self.z + 1 };
 
-            |x,y, z| {
-//                world.set_block_at(Blocks::Barrier, x, y, z);
-                world.set_block_at(Blocks::Air, x, y, z);
-                world.interactable_blocks.remove(&BlockPos { x, y, z });
-                
-                let id = world.spawn_entity(
-                    DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
-                    EntityMetadata {
-                        variant: EntityVariant::Bat { hanging: false },
-                        is_invisible: true
-                    },
-                    DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
-                ).unwrap();
-                entities.push(id);
-            }
-        );
+        let mut entities = Vec::new();
+        world::iterate_blocks(start, end, |x,y, z| {
+            world.set_block_at(Blocks::Barrier, x, y, z);
+            world.interactable_blocks.remove(&BlockPos { x, y, z });
+
+            let id = world.spawn_entity(
+                DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
+                EntityMetadata {
+                    variant: EntityVariant::Bat { hanging: false },
+                    is_invisible: true
+                },
+                DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
+            ).unwrap();
+            entities.push(id);
+        });
+
+        world.server_mut().schedule_move(20, move |server| {
+            world::iterate_blocks(start, end, |x,y, z| {
+                server.world.set_block_at(Blocks::Air, x, y, z);
+                for entity in entities.iter() {
+                    server.world.despawn_entity(*entity);
+                }
+            });
+        })
+
         // world.server_mut().dungeon.test.push(OpenDoorTask {
         //     ticks_left: 20,
         //     door_index: self.id,

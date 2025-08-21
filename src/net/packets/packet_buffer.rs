@@ -1,7 +1,5 @@
 use std::mem::take;
 
-use bytes::BufMut;
-
 use crate::net::internal_packets::NetworkThreadMessage;
 use crate::net::packets::packet::IdentifiedPacket;
 use crate::net::packets::packet_serialize::PacketSerializable;

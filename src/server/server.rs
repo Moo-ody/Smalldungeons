@@ -10,6 +10,7 @@ use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
+use crate::server::utils::tasks::{Task, TaskType};
 use crate::server::world;
 use crate::server::world::World;
 use anyhow::{Context, Result};
@@ -23,6 +24,8 @@ pub struct Server {
     /// however we don't really need that, so for now only 1 main world will be supported
     pub world: World,
     pub dungeon: Dungeon,
+
+    pub tick_tasks: Vec<Task>,
     // im not sure about having players in server directly.
 }
 impl Server {
@@ -34,7 +37,16 @@ impl Server {
             network_tx,
             world: World::new(),
             dungeon,
+            tick_tasks: Vec::new(),
         }
+    }
+
+    pub fn schedule_move(&mut self, run_in: u32, task: impl FnOnce(&mut Self) + 'static) {
+        self.tick_tasks.push(Task::new(run_in, TaskType::MOVE(Box::new(task))))
+    }
+
+    pub fn schedule_ptr(&mut self, run_in: u32, task: fn(&mut Self)) {
+        self.tick_tasks.push(Task::new(run_in, TaskType::PTR(task)))
     }
 
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {

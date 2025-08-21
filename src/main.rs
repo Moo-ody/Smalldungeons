@@ -177,6 +177,15 @@ async fn main() -> Result<()> {
         //     }
         // }
 
+        for i in 0..server.tick_tasks.len() {
+            if server.tick_tasks[i].run_in == 0 {
+                let task = server.tick_tasks.remove(i);
+                task.run(&mut server)?;
+            } else {
+                server.tick_tasks[i].run_in -= 1;
+            }
+        }
+
         let tab_list_packet = server.world.player_info.get_packet();
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
