@@ -2,32 +2,14 @@ use crate::server::server::Server;
 
 pub struct Task {
     pub run_in: u32,
-    pub task_type: TaskType,
+    pub callback: Box<dyn FnOnce(&mut Server)>,
 }
 
 impl Task {
-    pub const fn new(run_in: u32, task_type: TaskType) -> Self {
+    pub fn new(run_in: u32, task: impl FnOnce(&mut Server) + 'static) -> Self {
         Self {
             run_in,
-            task_type
-        }
-    }
-
-    pub fn run(self, server: &mut Server) {
-        self.task_type.run(server)
-    }
-}
-
-pub enum TaskType {
-    MOVE(Box<dyn FnOnce(&mut Server)>),
-    PTR(fn(&mut Server))
-}
-
-impl TaskType {
-    pub fn run(self, server: &mut Server) {
-        match self {
-            Self::MOVE(f) => f(server),
-            Self::PTR(f) => f(server)
+            callback: Box::new(task)
         }
     }
 }

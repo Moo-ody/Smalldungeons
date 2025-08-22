@@ -25,7 +25,7 @@ pub struct Server {
     pub world: World,
     pub dungeon: Dungeon,
 
-    pub tick_tasks: Vec<Task>,
+    pub tasks: Vec<Task>,
     // im not sure about having players in server directly.
 }
 impl Server {
@@ -37,16 +37,12 @@ impl Server {
             network_tx,
             world: World::new(),
             dungeon,
-            tick_tasks: Vec::new(),
+            tasks: Vec::new(),
         }
     }
 
-    pub fn schedule_move(&mut self, run_in: u32, task: impl FnOnce(&mut Self) + 'static) {
-        self.tick_tasks.push(Task::new(run_in, TaskType::MOVE(Box::new(task))))
-    }
-
-    pub fn schedule_ptr(&mut self, run_in: u32, task: fn(&mut Self)) {
-        self.tick_tasks.push(Task::new(run_in, TaskType::PTR(task)))
+    pub fn schedule(&mut self, run_in: u32, task: impl FnOnce(&mut Self) + 'static) {
+        self.tasks.push(Task::new(run_in, task));
     }
 
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {

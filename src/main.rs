@@ -177,12 +177,12 @@ async fn main() -> Result<()> {
         //     }
         // }
 
-        for i in 0..server.tick_tasks.len() {
-            if server.tick_tasks[i].run_in == 0 {
-                let task = server.tick_tasks.remove(i);
-                task.run(&mut server);
+        for i in 0..server.tasks.len() {
+            if server.tasks[i].run_in == 0 {
+                let task = server.tasks.remove(i);
+                task.task_type.run(&mut server);
             } else {
-                server.tick_tasks[i].run_in -= 1;
+                server.tasks[i].run_in -= 1;
             }
         }
 

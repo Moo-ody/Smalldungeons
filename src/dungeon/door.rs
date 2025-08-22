@@ -131,11 +131,11 @@ impl Door {
             entities.push(id);
         });
 
-        world.server_mut().schedule_move(20, move |server| {
+        world.server_mut().schedule(20, move |server| {
             world::iterate_blocks(start, end, |x,y, z| {
                 server.world.set_block_at(Blocks::Air, x, y, z);
             });
-        })
+        });
 
         // world.server_mut().dungeon.test.push(OpenDoorTask {
         //     ticks_left: 20,
