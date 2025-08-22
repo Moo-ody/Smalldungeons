@@ -10,7 +10,7 @@ use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
-use crate::server::utils::tasks::{Task, TaskType};
+use crate::server::utils::tasks::Task;
 use crate::server::world;
 use crate::server::world::World;
 use anyhow::{Context, Result};
