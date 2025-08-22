@@ -180,7 +180,7 @@ async fn main() -> Result<()> {
         for i in 0..server.tasks.len() {
             if server.tasks[i].run_in == 0 {
                 let task = server.tasks.remove(i);
-                task.task_type.run(&mut server);
+                (task.callback)(&mut server);
             } else {
                 server.tasks[i].run_in -= 1;
             }
