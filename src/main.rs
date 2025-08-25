@@ -30,6 +30,7 @@ use indoc::formatdoc;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
+use std::mem::take;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -177,12 +178,15 @@ async fn main() -> Result<()> {
         //     }
         // }
 
-        for i in 0..server.tasks.len() {
+        let mut i: usize = 0;
+        while i < server.tasks.len() {
             if server.tasks[i].run_in == 0 {
                 let task = server.tasks.remove(i);
                 (task.callback)(&mut server);
+                // index isnt incremented since this entry was removed, shifting the next entry into its place.
             } else {
                 server.tasks[i].run_in -= 1;
+                i += 1;
             }
         }
 

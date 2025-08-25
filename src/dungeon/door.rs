@@ -195,6 +195,7 @@ impl EntityImpl for DoorEntityImpl {
             velocity_y: 0,
             velocity_z: 0,
         };
+
         let attach_packet = EntityAttach {
             entity_id,
             vehicle_id: entity.id,
