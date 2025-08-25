@@ -316,7 +316,15 @@ impl Room {
         }
     }
 
-    pub fn get_world_pos(&self, room_pos: &BlockPos) -> BlockPos {
+    // pub fn get_world_pos(&self, position: DVec3) -> DVec3 {
+    //     let corner = self.get_corner_pos();
+    //     position.clone()
+    //         .rotate(self.rotation)
+    //         .add_x(corner.x as f64)
+    //         .add_z(corner.z as f64)
+    // }
+
+    pub fn get_world_block_pos(&self, room_pos: &BlockPos) -> BlockPos {
         let corner = self.get_corner_pos();
 
         room_pos.clone()

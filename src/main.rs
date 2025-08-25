@@ -15,6 +15,7 @@ use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
+use crate::server::block::rotatable::Rotatable;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::chunk::chunk_grid::{for_each_diff, ChunkDiff};
 use crate::server::player::scoreboard::ScoreboardLines;
@@ -139,11 +140,13 @@ async fn main() -> Result<()> {
         // Set the spawn point to be inside of the spawn room
         if room.room_data.room_type == RoomType::Entrance {
             server.world.set_spawn_point(
-                room.get_world_pos(&BlockPos {
+                room.get_world_block_pos(&BlockPos {
                     x: 15,
                     y: 72,
                     z: 18
-                })
+                }).as_dvec3().add_x(0.5).add_z(0.5),
+                180.0.rotate(room.rotation),
+                0.0
             );
         }
     }

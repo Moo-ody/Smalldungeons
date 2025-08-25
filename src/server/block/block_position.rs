@@ -100,7 +100,7 @@ impl BlockPos {
         }
     }
 
-    pub fn as_vec3f(&self) -> DVec3 {
+    pub fn as_dvec3(&self) -> DVec3 {
             DVec3 {
                 x: self.x as f64,
                 y: self.y as f64,

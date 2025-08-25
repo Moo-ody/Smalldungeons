@@ -49,13 +49,15 @@ impl Server {
             MainThreadMessage::NewPlayer { client_id, profile } => {
                 println!("added player with id {client_id}");
 
-                let spawn_pos = self.world.spawn_point.as_vec3f();
+                let spawn_pos = self.world.spawn_point;
 
                 let mut player = Player::new(
                     self,
                     client_id,
                     profile,
                     spawn_pos,
+                    self.world.spawn_yaw,
+                    self.world.spawn_pitch,
                 );
                 println!("player entity id: {}", player.entity_id);
 

@@ -36,7 +36,9 @@ pub struct World {
     // pub commands: Vec<Command>
     
     // pub player_info: PlayerList,
-    pub spawn_point: BlockPos,
+    pub spawn_point: DVec3,
+    pub spawn_yaw: f32,
+    pub spawn_pitch: f32,
 }
 
 impl World {
@@ -53,12 +55,11 @@ impl World {
             next_entity_id: 1, // might have to start at 1
             players: HashMap::new(),
             entities: HashMap::new(),
-            spawn_point: BlockPos {
-                x: 20,
-                y: 69,
-                z: 20,
-            },
             entities_for_removal: VecDeque::new(),
+
+            spawn_point: DVec3::ZERO,
+            spawn_yaw: 0.0,
+            spawn_pitch: 0.0,
         }
     }
 
@@ -171,8 +172,10 @@ impl World {
         self.chunk_grid.get_block_at(x, y, z)
     }
 
-    pub fn set_spawn_point(&mut self, new_spawn: BlockPos) {
-        self.spawn_point = new_spawn;
+    pub fn set_spawn_point(&mut self, position: DVec3, yaw: f32, pitch: f32) {
+        self.spawn_point = position;
+        self.spawn_yaw = yaw;
+        self.spawn_pitch = pitch;
     }
 
     pub fn fill_blocks(&mut self, block: Blocks, start: BlockPos, end: BlockPos) {

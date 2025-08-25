@@ -1,4 +1,5 @@
 use crate::server::block::block_position::BlockPos;
+use crate::server::utils::direction::Direction;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// Double (f64) Vec3
@@ -74,6 +75,16 @@ impl DVec3 {
             DVec3 { x: 0.0, y: 0.0, z: 0.0 }
         } else {
             DVec3 { x: self.x / len, y: self.y / len, z: self.z / len }
+        }
+    }
+
+    pub fn rotate(&self, rotation: Direction) -> Self {
+        match rotation {
+            Direction::North => Self { x: self.x, y: self.y, z: self.z },
+            Direction::East => Self { x: -self.z, y: self.y, z: self.x },
+            Direction::South => Self { x: -self.x, y: self.y, z: -self.z },
+            Direction::West => Self { x: self.z, y: self.y, z: -self.x },
+            _ => Self { x: self.x, y: self.y, z: self.z },
         }
     }
 

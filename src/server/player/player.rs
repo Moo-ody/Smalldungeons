@@ -77,6 +77,8 @@ impl Player {
         client_id: ClientId,
         profile: GameProfile,
         position: DVec3,
+        yaw: f32,
+        pitch: f32,
     ) -> Self {
         Self {
             server,
@@ -88,8 +90,8 @@ impl Player {
 
             position,
             on_ground: false,
-            yaw: 0.0,
-            pitch: 0.0,
+            yaw,
+            pitch,
             last_position: DVec3::ZERO,
             last_yaw: 0.0,
             last_pitch: 0.0,
