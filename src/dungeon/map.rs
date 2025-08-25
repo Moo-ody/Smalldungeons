@@ -1,3 +1,4 @@
+use crate::dungeon::door::DoorType;
 use crate::dungeon::room::room::Room;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType::*};
 use crate::server::block::block_parameter::Axis;
@@ -118,7 +119,12 @@ impl DungeonMap {
                     let color = get_door_color(room, &*neighbour);
                     self.fill_px(x, y, width, height, color);
                 } else {
-                    self.fill_px(x, y, width, height, GRAY);
+                    let color = match door.door_type {
+                        DoorType::WITHER => BLACK,
+                        DoorType::BLOOD => RED,
+                        _ => GRAY,
+                    };
+                    self.fill_px(x, y, width, height, color);
 
                     let mut x = segment.x * 20;
                     let mut y = segment.z * 20;
