@@ -18,6 +18,7 @@ pub enum Item {
     AspectOfTheVoid,
     DiamondPickaxe,
     SpiritSceptre,
+    SpeedBoots,
 }
 
 impl Item {
@@ -122,6 +123,30 @@ impl Item {
                 metadata: 0,
                 tag_compound: None,
             },
+            Item::SpeedBoots => ItemStack {
+                item: 301,
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::int("color", 0),
+                        NBT::string("Name", "§bSpeedy Boots"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            Why don't these work ):
+                        "#}),
+                    ]),
+                    NBT::list("AttributeModifiers", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound(vec![
+                            NBT::string("Name", "generic.movementSpeed"),
+                            NBT::string("AttributeName", "generic.movementSpeed"),
+                            NBT::double("Amount", 0.4),
+                            NBT::int("Operation", 0),
+                            NBT::long("UUIDLeast", 121742),
+                            NBT::long("UUIDMost", 38678),
+                        ]),
+                    ])
+                ])),
+            }
         };
         if let Some(ref mut tag) = stack.tag_compound {
             tag.nodes.push(NBT::byte("Unbreakable", 1));

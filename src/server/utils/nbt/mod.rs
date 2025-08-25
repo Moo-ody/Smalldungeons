@@ -56,6 +56,14 @@ impl NBT {
     pub fn long(name: &str, value: i64) -> (String, NBTNode) {
         (name.to_string(), NBTNode::Long(value))
     }
+
+    pub fn float(name: &str, value: f32) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Float(value))
+    }
+
+    pub fn double(name: &str, value: f64) -> (String, NBTNode) {
+        (name.to_string(), NBTNode::Double(value))
+    }
     
     /// takes a string,
     /// splits it into lines and creates a list nbt node representing strings.

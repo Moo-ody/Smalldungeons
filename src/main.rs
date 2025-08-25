@@ -6,7 +6,7 @@ mod utils;
 use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::room_data::RoomData;
+use crate::dungeon::room::room_data::{RoomData, RoomType};
 use crate::dungeon::room::secrets;
 use crate::dungeon::room::secrets::SecretType::WitherEssence;
 use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
@@ -97,7 +97,8 @@ async fn main() -> Result<()> {
     let dungeon_strings = include_str!("dungeon_storage/dungeons.txt")
         .split("\n")
         .collect::<Vec<&str>>();
-
+    
+    // Check if a custom dungeon str has been given via cli args
     let dungeon_str = match args.len() {
         0..=1 => {
             let mut rng = rand::rng();
@@ -127,6 +128,17 @@ async fn main() -> Result<()> {
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
+
+        // Set the spawn point to be inside of the spawn room
+        if room.room_data.room_type == RoomType::Entrance {
+            server.world.set_spawn_point(
+                room.get_world_pos(&BlockPos {
+                    x: 15,
+                    y: 72,
+                    z: 18
+                })
+            );
+        }
     }
 
     for door in &dungeon.doors {

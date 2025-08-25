@@ -111,10 +111,8 @@ impl Room {
 
         let mut num: u8 = 0;
         for i in 0..4 {
+            num <<= 1;
             num |= doors_opt[i] as u8;
-            if i < 3 {
-                num <<= 1;
-            }
         }
 
         // println!("{:04b} {:?}", num, doors_opt);
@@ -307,7 +305,15 @@ impl Room {
 
             world.set_block_at(block, corner.x + bp.x, y, corner.z + bp.z);
         }
+    }
 
+    pub fn get_world_pos(&self, room_pos: &BlockPos) -> BlockPos {
+        let corner = self.get_corner_pos();
+
+        room_pos.clone()
+            .rotate(self.rotation)
+            .add_x(corner.x)
+            .add_z(corner.z)
     }
 }
 

@@ -44,11 +44,7 @@ impl Server {
             MainThreadMessage::NewPlayer { client_id, username } => {
                 println!("added player with id {client_id}");
 
-                let spawn_point = DVec3 {
-                    x: 20.0,
-                    y: 69.0,
-                    z: 20.0,
-                };
+                let spawn_pos = self.world.spawn_point.as_vec3f();
 
                 let mut player = Player::new(
                     self,
@@ -57,7 +53,7 @@ impl Server {
                     GameProfile {
                         username
                     },
-                    spawn_point,
+                    spawn_pos,
                 );
                 println!("player entity id: {}", player.entity_id);
 
