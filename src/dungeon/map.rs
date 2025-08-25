@@ -1,5 +1,5 @@
 use crate::dungeon::room::room::Room;
-use crate::dungeon::room::room_data::{RoomData, RoomType::*};
+use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType::*};
 use crate::server::block::block_parameter::Axis;
 
 const RED: u8 = 4 * 4 + 2;
@@ -54,19 +54,16 @@ impl DungeonMap {
 
         for segment in room.segments.iter() {
             let x = segment.x * 20;
-            let mut y = segment.z * 20;
-            let mut width = 16;
-            let mut height = 16;
+            let y = segment.z * 20;
+            
+            self.fill_px(x, y, 16, 16, color);
 
             if room.segments.iter().find(|seg| seg.x == segment.x + 1 && seg.z == segment.z).is_some() {
-                width += 4;
+                self.fill_px(x + 16, y, 4, 16, color);
             }
-            if segment.z != 0 && room.segments.iter().find(|seg| seg.x == segment.x && seg.z == segment.z - 1).is_some() {
-                y -= 4;
-                height += 4;
+            if room.segments.iter().find(|seg| seg.x == segment.x && seg.z == segment.z + 1).is_some() {
+                self.fill_px(x, y + 16, 16, 4, color);
             }
-            self.fill_px(x, y, width, height, color);
-
 
             for (index, neighbour) in segment.neighbours.iter().enumerate() {
                 if neighbour.is_none() {
@@ -102,6 +99,13 @@ impl DungeonMap {
                 }
             }
         }
+        
+        // fill in hole
+        if room.room_data.shape == RoomShape::TwoByTwo { 
+            let x = room.segments[0].x * 20 + 16;
+            let y = room.segments[0].z * 20 + 16;
+            self.fill_px(x, y, 4, 4, color)
+        }
     }
 }
 
@@ -125,7 +129,7 @@ fn get_door_color(room: &Room, neighbour: &Room) -> u8 {
         _ => {}
     };
     match neighbour.room_data.room_type {
-        Puzzle | Trap | Blood | Yellow | Fairy => {
+        Puzzle | Trap | Blood | Yellow => {
             return get_room_color(&neighbour.room_data)
         }
         _ => {}
