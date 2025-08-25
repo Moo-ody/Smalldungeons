@@ -109,8 +109,8 @@ impl Room {
     }
 
     pub fn get_1x1_shape_and_type(segments: &Vec<RoomSegment>, dungeon_doors: &Vec<Door>) -> (RoomShape, Direction) {
-        let center_x = segments[0].x as i32 * 32 + 15;
-        let center_z = segments[0].z as i32 * 32 + 15;
+        let center_x = segments[0].x as i32 * 32 + 15 + DUNGEON_ORIGIN.0;
+        let center_z = segments[0].z as i32 * 32 + 15 + DUNGEON_ORIGIN.1;
 
         // Actual doors found in the world
         let doors_opt = [
@@ -294,8 +294,6 @@ impl Room {
             self.load_default(world);
             return;
         }
-        // self.load_default(world);
-        // return;
 
         let corner = self.get_corner_pos();
 

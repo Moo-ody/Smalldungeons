@@ -85,8 +85,8 @@ impl Dungeon {
             for segment in segments {
                 let x = segment.x as isize;
                 let z = segment.z as isize;
-                let center_x = segment.x as i32 * 32 + 15;
-                let center_z = segment.z as i32 * 32 + 15;
+                let center_x = segment.x as i32 * 32 + 15 + DUNGEON_ORIGIN.0;
+                let center_z = segment.z as i32 * 32 + 15 + DUNGEON_ORIGIN.1;
 
                 let neighbour_options = [
                     (x, z - 1, center_x, center_z - 16),
