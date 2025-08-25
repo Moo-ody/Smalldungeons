@@ -130,11 +130,11 @@ async fn main() -> Result<()> {
     
     for room in &dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
-        room.load_into_world(&mut server.world);
+        room.borrow().load_into_world(&mut server.world);
     }
 
     for door in &dungeon.doors {
-        door.load_into_world(&mut server.world, &door_type_blocks);
+        door.borrow().load_into_world(&mut server.world, &door_type_blocks);
     }
 
     // let zombie_spawn_pos = DVec3 {
@@ -280,7 +280,7 @@ async fn main() -> Result<()> {
             };
 
             let room_id = if let Some(room) = player.server_mut().dungeon.get_player_room(player) {
-                &room.room_data.id
+                &room.borrow().room_data.id
             } else {
                 ""
             };

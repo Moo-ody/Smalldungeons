@@ -15,6 +15,7 @@ dependencies = [
  "indoc",
  "once_cell",
  "rand",
+ "rand_chacha",
  "serde",
  "serde_json",
  "tokio",

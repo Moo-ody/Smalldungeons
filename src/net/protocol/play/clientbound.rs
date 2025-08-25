@@ -63,7 +63,7 @@ register_packets! {
     // WindowProperty = 0x31;
     ConfirmTransaction = 0x32;
     // UpdateSign = 0x33;
-    // Maps = 0x34;
+    Maps = 0x34;
     // UpdateBlockEntity = 0x35;
     // SignEditorOpen = 0x36;
     // Statistics = 0x37;
@@ -421,6 +421,35 @@ impl PacketSerializable for PlayerAbilities {
         byte.write(buf);
         self.fly_speed.write(buf);
         self.walk_speed.write(buf);
+    }
+}
+
+pub struct Maps {
+    pub id: i32,
+    pub scale: i8,
+    // pub visible_players: Vec<u8>, // bvec4
+    pub columns: u8,
+    pub rows: u8,
+    pub x: u8,
+    pub z: u8,
+    pub map_data: Vec<u8>
+}
+
+impl PacketSerializable for Maps {
+    fn write(&self, buf: &mut Vec<u8>) {
+        PacketSerializable::write(&VarInt(self.id), buf);
+        PacketSerializable::write(&self.scale, buf);
+
+        // todo visible players
+        PacketSerializable::write(&VarInt(0), buf);
+
+        PacketSerializable::write(&self.columns, buf);
+        if self.columns > 0 {
+            PacketSerializable::write(&self.rows, buf);
+            PacketSerializable::write(&self.x, buf);
+            PacketSerializable::write(&self.z, buf);
+            PacketSerializable::write(&self.map_data, buf);
+        }
     }
 }
 

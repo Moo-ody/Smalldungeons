@@ -31,9 +31,8 @@ impl DoorType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Door {
-    pub id: usize,
     pub x: i32,
     pub z: i32,
 

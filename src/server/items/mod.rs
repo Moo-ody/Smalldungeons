@@ -15,6 +15,7 @@ mod ether_transmission;
 #[derive(Copy, Debug, Clone, PartialEq)]
 pub enum Item {
     SkyblockMenu,
+    MagicalMap,
     AspectOfTheVoid,
     DiamondPickaxe,
     SpiritSceptre,
@@ -64,6 +65,12 @@ impl Item {
                         "#})
                     ]),
                 ])),
+            },
+            Item::MagicalMap => ItemStack {
+                item: 358,
+                stack_size: 1,
+                metadata: 1,
+                tag_compound: None,
             },
             Item::AspectOfTheVoid => ItemStack {
                 item: 277,

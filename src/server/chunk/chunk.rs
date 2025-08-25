@@ -1,9 +1,6 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound::ChunkData;
-use crate::server::block::block_position::BlockPos;
-use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_section::ChunkSection;
-use std::collections::HashMap;
 
 /// Represents a minecraft chunk.
 ///
@@ -13,7 +10,6 @@ pub struct Chunk {
     pub pos_z: i32,
     pub chunk_sections: [Option<ChunkSection>; 16],
     pub packet_buffer: PacketBuffer,
-    block_changes: HashMap<BlockPos, Blocks>,
 }
 
 impl Chunk {
@@ -30,7 +26,6 @@ impl Chunk {
                 None, None, None, None, None, None, None, None,
             ],
             packet_buffer: PacketBuffer::new(),
-            block_changes: HashMap::new()
         }
     }
 

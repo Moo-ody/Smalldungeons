@@ -66,7 +66,7 @@ impl ProcessPacket for PlayerDigging {
                 // todo:
                 // when block toughness is added,
                 // replace check with if vanilla toughness would match
-                if matches!(player.inventory.get_hotbar_slot(player.held_slot as usize), Some(ItemSlot::Filled(Item::DiamondPickaxe))) {
+                if let Some(ItemSlot::Filled(Item::DiamondPickaxe)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
                     let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
                     player.write_packet(&BlockChange {
                         block_pos: self.position,

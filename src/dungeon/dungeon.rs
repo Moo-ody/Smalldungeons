@@ -1,7 +1,9 @@
 use crate::dungeon::door::{Door, DoorType};
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::room::Room;
+use crate::dungeon::map::DungeonMap;
+use crate::dungeon::room::room::{Room, RoomNeighbour, RoomSegment};
 use crate::dungeon::room::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::net::protocol::play::clientbound::Maps;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
@@ -10,6 +12,8 @@ use crate::server::server::Server;
 use crate::server::world;
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // The top leftmost corner of the dungeon
 pub const DUNGEON_ORIGIN: (i32, i32) = (0, 0);
@@ -23,42 +27,78 @@ pub const DOOR_POSITIONS: [(i32, i32); 60] = [(DUNGEON_ORIGIN.0 + 31, DUNGEON_OR
 // contains a vec of doors (for generation)
 pub struct Dungeon {
     pub server: *mut Server,
-    pub rooms: Vec<Room>,
-    pub doors: Vec<Door>,
+    pub rooms: Vec<Rc<RefCell<Room>>>,
+    pub doors: Vec<Rc<RefCell<Door>>>,
+    
     // The numer in this grid will be 0 if there is no room here, or contain
     // The index - 1 of the room here from &rooms
-    pub index_grid: [usize; 36],
+    pub room_grid: [usize; 36],
     pub state: DungeonState,
-    // pub test: Vec<OpenDoorTask>
+    pub map: DungeonMap,
 }
 
-// Better name?
-// maybe have a global tick queue 
-// currently, what it does is: when ticks left reaches 0 it clears the blocks the door has
-// pub struct OpenDoorTask {
-//     pub ticks_left: usize,
-//     pub door_index: usize,
-//     // pub door_entity_ids: Vec<EntityId>,
-// }
-
 impl Dungeon {
+    
     pub fn with_rooms_and_doors(rooms: Vec<Room>, doors: Vec<Door>) -> anyhow::Result<Dungeon> {
-        let mut index_grid = [0; 36];
+
+        let mut room_grid = [0; 36];
+
+        let rooms = rooms.into_iter().map(|room| Rc::new(RefCell::new(room))).collect::<Vec<Rc<RefCell<Room>>>>();
+        let doors = doors.into_iter().map(|door| Rc::new(RefCell::new(door))).collect::<Vec<Rc<RefCell<Door>>>>();
 
         // populate index grid
-        for (room_index, room) in rooms.iter().enumerate() {
-            for (x, z) in room.segments.iter() {
+        for (room_index, room_rc) in rooms.iter().enumerate() {
+            let room = room_rc.borrow();
+            for segment in room.segments.iter() {
+                let x = segment.x;
+                let z = segment.z;
                 let segment_index = x + z * 6;
 
-                if segment_index > index_grid.len() - 1 {
+                if segment_index > room_grid.len() - 1 {
                     bail!("Segment index for {},{} out of bounds: {}", x, z, segment_index);
                 }
-
-                if index_grid[segment_index] != 0 {
-                    bail!("Segment at {},{} is already occupied by {}!", x, z, index_grid[segment_index]);
+                if room_grid[segment_index] != 0 {
+                    bail!("Segment at {},{} is already occupied by {}!", x, z, room_grid[segment_index]);
                 }
+                room_grid[segment_index] = room_index + 1;
+            }
+        }
 
-                index_grid[segment_index] = room_index + 1;
+        // I hate this so much
+        for room in &rooms {
+            let segments = &mut room.borrow_mut().segments;
+
+            // this is to avoid borrow checking issues
+            let segment_positions = segments.iter()
+                .map(|segment| (segment.x, segment.z))
+                .collect::<Vec<(usize, usize)>>();
+
+            for segment in segments {
+                let x = segment.x as isize;
+                let z = segment.z as isize;
+                let center_x = segment.x as i32 * 32 + 15;
+                let center_z = segment.z as i32 * 32 + 15;
+
+                let neighbour_options = [
+                    (x, z - 1, center_x, center_z - 16),
+                    (x + 1, z, center_x + 16, center_z),
+                    (x, z + 1, center_x, center_z + 16),
+                    (x - 1, z, center_x - 16, center_z),
+                ];
+                for (index, (nx, nz, door_x, door_z)) in neighbour_options.into_iter().enumerate() {
+                    if nx < 0 || nz < 0 || segment_positions.iter().find(|(x, z)| *x as isize == nx && *z as isize == nz).is_some() {
+                        continue;
+                    }
+                    let door = doors.iter().find(|door| {
+                        door.borrow().x == door_x && door.borrow().z == door_z
+                    });
+                    if let Some(door) = door {
+                        segment.neighbours[index] = Some(RoomNeighbour {
+                            door: door.clone(),
+                            room: rooms[room_grid[(nx + nz * 6) as usize] - 1].clone(),
+                        });
+                    }
+                }
             }
         }
 
@@ -66,13 +106,10 @@ impl Dungeon {
             server: std::ptr::null_mut(),
             rooms,
             doors,
-            index_grid,
+            room_grid,
             state: DungeonState::NotReady,
+            map: DungeonMap::new(),
         })
-    }
-
-    pub fn server_mut<'a>(&self) -> &'a mut Server {
-        unsafe { self.server.as_mut().expect("server is null") }
     }
 
     // Layout String:
@@ -82,7 +119,7 @@ impl Dungeon {
     pub fn from_string(layout_str: &str, room_data_storage: &DeterministicHashMap<usize, RoomData>) -> anyhow::Result<Dungeon> {
         let mut rooms: Vec<Room> = Vec::new();
         // For normal rooms which can be larger than 1x1, store their segments and make the whole room in one go later
-        let mut room_id_map: DeterministicHashMap<usize, Vec<(usize, usize)>> = DeterministicHashMap::default();
+        let mut room_id_map: DeterministicHashMap<usize, Vec<RoomSegment>> = DeterministicHashMap::default();
         let mut doors: Vec<Door> = Vec::new();
 
         for (i, (x, z)) in DOOR_POSITIONS.into_iter().enumerate() {
@@ -105,7 +142,6 @@ impl Dungeon {
                 };
 
                 doors.push(Door {
-                    id: doors.len(),
                     x,
                     z,
                     direction,
@@ -159,7 +195,7 @@ impl Dungeon {
                 room_data.room_type = room_type;
 
                 rooms.push(Room::new(
-                    vec![(x, z)],
+                    vec![RoomSegment { x, z, neighbours: [const { None }; 4] }],
                     &doors,
                     room_data
                 ));
@@ -169,7 +205,7 @@ impl Dungeon {
 
             // Normal rooms, add segments to this specific room id
             let entry = room_id_map.entry(id).or_default();
-            entry.push((x, z));
+            entry.push(RoomSegment { x, z, neighbours: [const { None }; 4] });
         }
 
         // Make the normal rooms
@@ -191,7 +227,11 @@ impl Dungeon {
         Dungeon::with_rooms_and_doors(rooms, doors)
     }
 
-    pub fn get_room_at(&mut self, x: i32, z: i32) -> Option<&mut Room> {
+    pub fn server_mut<'a>(&self) -> &'a mut Server {
+        unsafe { self.server.as_mut().expect("server is null") }
+    }
+
+    pub fn get_room_at(&mut self, x: i32, z: i32) -> Option<&mut Rc<RefCell<Room>>> {
         if x < DUNGEON_ORIGIN.0 || z < DUNGEON_ORIGIN.1 {
             return None;
         }
@@ -200,7 +240,7 @@ impl Dungeon {
         let grid_z = ((z - DUNGEON_ORIGIN.1) / 32) as usize;
 
         // The returned number is 0 if no room here, or will return the index + 1 of the room in the rooms vec
-        let entry = self.index_grid.get(grid_x + (grid_z * 6));
+        let entry = self.room_grid.get(grid_x + (grid_z * 6));
 
         if entry.is_none_or(|index| *index == 0) {
             return None;
@@ -209,7 +249,7 @@ impl Dungeon {
         self.rooms.get_mut(*entry.unwrap() - 1)
     }
 
-    pub fn get_player_room(&mut self, player: &Player) -> Option<&mut Room> {
+    pub fn get_player_room(&mut self, player: &Player) -> Option<&mut Rc<RefCell<Room>>> {
         self.get_room_at(
             player.position.x as i32,
             player.position.z as i32
@@ -219,6 +259,7 @@ impl Dungeon {
     pub fn start_dungeon(&mut self) {
         let world = &mut self.server_mut().world;
         for (index, door) in self.doors.iter_mut().enumerate() {
+            let door = door.borrow();
             if door.door_type == DoorType::ENTRANCE {
                 door.open_door(world);
                 continue;
@@ -270,28 +311,32 @@ impl Dungeon {
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
 
-                for (_, player) in &server.world.players  {
+                for (_, player) in &mut server.world.players  {
                     if let Some(room) = server.dungeon.get_player_room(player) {
+
+                        let mut room = room.borrow_mut();
+
                         for crusher in room.crushers.iter_mut() {
                             crusher.tick(player);
                         }
+
+                        if !room.entered {
+                            room.entered = true;
+                            self.map.draw_room(&room);
+                            
+                            // currently temporary, this is suboptimal, i just need to see the map
+                            player.write_packet(&Maps {
+                                id: 1,
+                                scale: 0,
+                                columns: 128,
+                                rows: 128,
+                                x: 0,
+                                z: 0,
+                                map_data: self.map.map_data.to_vec(),
+                            });
+                        }
                     }
                 }
-
-                // self.test.retain_mut(move |test| {
-                //     test.ticks_left -= 1;
-                //     if test.ticks_left == 0 {
-                //         let door = &server.dungeon.doors[test.door_index];
-                //         server.world.fill_blocks(
-                //             Blocks::Air,
-                //             BlockPos { x: door.x - 1, y: 69, z: door.z - 1 },
-                //             BlockPos { x: door.x + 1, y: 72, z: door.z + 1 },
-                //         );
-                //         false
-                //     } else {
-                //         true
-                //     }
-                // });
             }
         }
         Ok(())

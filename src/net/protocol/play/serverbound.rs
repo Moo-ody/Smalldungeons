@@ -212,7 +212,8 @@ impl PacketDeserializable for TabComplete {
     fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
         Ok(Self {
             message: {
-                SizedString::<32767>::read(buffer)?.into_owned()
+                let msg: SizedString<32767> = SizedString::read(buffer)?;
+                msg.into_owned()
             },
             target_block: {
                 if u8::read(buffer)? != 0 {

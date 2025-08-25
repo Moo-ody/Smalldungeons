@@ -1,5 +1,5 @@
 use crate::dungeon::door::Door;
-use crate::dungeon::room::room::Room;
+use crate::dungeon::room::room::{Room, RoomSegment};
 use crate::server::block::blocks::Blocks;
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use crate::utils::seeded_rng::seeded_rng;
@@ -42,14 +42,14 @@ impl RoomShape {
         }
     }
 
-    pub fn from_segments(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> RoomShape {
+    pub fn from_segments(segments: &Vec<RoomSegment>, dungeon_doors: &Vec<Door>) -> RoomShape {
 
         let unique_x = segments.iter()
-            .map(|x| x.0)
+            .map(|segment| segment.x)
             .collect::<HashSet<usize>>();
 
         let unique_z = segments.iter()
-            .map(|x| x.1)
+            .map(|segment| segment.z)
             .collect::<HashSet<usize>>();
 
         let not_long = unique_x.len() > 1 && unique_z.len() > 1;

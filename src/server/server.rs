@@ -116,9 +116,28 @@ impl Server {
                     hide_particles: true,
                 });
 
+                // let mut map = DungeonMap::new();
+                //
+                // for i in 1..36 {
+                //     for j in 0..4 {
+                //         map.fill_px(i * 3, j * 3, 3, 3, ((i * 4) + j) as u8)
+                //     }
+                // }
+                //
+                // player.write_packet(&Maps {
+                //     id: 1,
+                //     scale: 0,
+                //     columns: 128,
+                //     rows: 128,
+                //     x: 0,
+                //     z: 0,
+                //     map_data: map.map_data.to_vec(),
+                // });
+
                 player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
                 player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
-                player.inventory.set_slot(ItemSlot::Filled(Item::SkyblockMenu), 44);
+                player.inventory.set_slot(ItemSlot::Filled(Item::MagicalMap), 44);
+
                 player.sync_inventory();
 
                 let playerspeed: f32 = 500.0 * 0.001;

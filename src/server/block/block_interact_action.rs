@@ -38,7 +38,7 @@ impl BlockInteractAction {
 
                 if let DungeonState::Started { .. } = dungeon.state {
                     // todo check if player has a key
-                    let door = &dungeon.doors[*id];
+                    let door = &dungeon.doors[*id].borrow();
                     door.open_door(world);
                 }
             }
