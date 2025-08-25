@@ -42,6 +42,8 @@ impl Dungeon {
     pub fn with_rooms_and_doors(rooms: Vec<Room>, doors: Vec<Door>) -> anyhow::Result<Dungeon> {
 
         let mut room_grid = [0; 36];
+        let mut grid_max_x = 0;
+        let mut grid_max_y = 0;
 
         let rooms = rooms.into_iter().map(|room| Rc::new(RefCell::new(room))).collect::<Vec<Rc<RefCell<Room>>>>();
         let doors = doors.into_iter().map(|door| Rc::new(RefCell::new(door))).collect::<Vec<Rc<RefCell<Door>>>>();
@@ -61,6 +63,13 @@ impl Dungeon {
                     bail!("Segment at {},{} is already occupied by {}!", x, z, room_grid[segment_index]);
                 }
                 room_grid[segment_index] = room_index + 1;
+                
+                if x > grid_max_x { 
+                    grid_max_x = x;
+                }
+                if z > grid_max_y { 
+                    grid_max_y = z;
+                }
             }
         }
 
@@ -101,14 +110,17 @@ impl Dungeon {
                 }
             }
         }
-
+        
+        let map_offset_x = (128 - (grid_max_x + 1) * 20) / 2;
+        let map_offset_y = (128 - (grid_max_y + 1) * 20) / 2;
+        
         Ok(Dungeon {
             server: std::ptr::null_mut(),
             rooms,
             doors,
             room_grid,
             state: DungeonState::NotReady,
-            map: DungeonMap::new(),
+            map: DungeonMap::new(map_offset_x, map_offset_y),
         })
     }
 
