@@ -6,13 +6,14 @@ mod utils;
 use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::room_data::RoomData;
+use crate::dungeon::room::room_data::{RoomData, RoomType};
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound;
 use crate::net::protocol::play::clientbound::AddEffect;
 use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::chunk::chunk_grid::{for_each_diff, ChunkDiff};
@@ -95,6 +96,8 @@ async fn main() -> Result<()> {
         .split("\n")
         .collect::<Vec<&str>>();
 
+    // Check if a custom dungeon str has been given via cli args
+
     // let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
 
     let dungeon_str = match args.len() {
@@ -108,10 +111,10 @@ async fn main() -> Result<()> {
 
     let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
     // let rng_seed: u64 = 12946977352813673410;
-    
+
     println!("Rng Seed: {}", rng_seed);
     SeededRng::set_seed(rng_seed);
-    
+
     let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage)?;
     let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
     server.world.server = &mut server;
@@ -129,8 +132,20 @@ async fn main() -> Result<()> {
     let dungeon = &server.dungeon;
     
     for room in &dungeon.rooms {
+        let room = room.borrow();
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
-        room.borrow().load_into_world(&mut server.world);
+        room.load_into_world(&mut server.world);
+
+        // Set the spawn point to be inside of the spawn room
+        if room.room_data.room_type == RoomType::Entrance {
+            server.world.set_spawn_point(
+                room.get_world_pos(&BlockPos {
+                    x: 15,
+                    y: 72,
+                    z: 18
+                })
+            );
+        }
     }
 
     for door in &dungeon.doors {
@@ -347,7 +362,7 @@ async fn main() -> Result<()> {
 
             sidebar_lines.push_str("§emc.hypixel.net");
             player.sidebar.write_update(sidebar_lines, &mut player.packet_buffer);
-            
+
             if player.ticks_existed % 60 == 0 {
                 player.write_packet(&AddEffect {
                     entity_id: VarInt(player.entity_id),

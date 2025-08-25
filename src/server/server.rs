@@ -7,7 +7,6 @@ use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap, AttributeModifier};
 use crate::server::player::inventory::ItemSlot;
 use crate::server::player::player::Player;
-use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::footer::footer;
 use crate::server::utils::player_list::header::header;
 use crate::server::utils::tasks::Task;
@@ -50,17 +49,13 @@ impl Server {
             MainThreadMessage::NewPlayer { client_id, profile } => {
                 println!("added player with id {client_id}");
 
-                let spawn_point = DVec3 {
-                    x: 20.0,
-                    y: 69.0,
-                    z: 20.0,
-                };
+                let spawn_pos = self.world.spawn_point.as_vec3f();
 
                 let mut player = Player::new(
                     self,
                     client_id,
                     profile,
-                    spawn_point,
+                    spawn_pos,
                 );
                 println!("player entity id: {}", player.entity_id);
 
