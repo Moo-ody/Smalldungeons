@@ -13,6 +13,10 @@ const BLACK: u8 = 29 * 4;
 const YELLOW: u8 = 30 * 4 + 2;
 const BROWN: u8 = 63;
 
+const QUESTION_MARK_POSITIONS: [(usize, usize); 11] = [
+    (0, 1), (1, 0), (2, 0), (3, 0), (4, 1), (4, 2), (3, 3), (2, 4), (2, 5), (2, 7), (2, 8),
+];
+
 pub struct DungeonMap {
     pub map_data: [u8; 128 * 128]
 }
@@ -28,6 +32,12 @@ impl DungeonMap {
         }
     }
 
+    pub fn set_px(&mut self, x: usize, y: usize, color: u8) {
+        debug_assert!(x <= 128);
+        debug_assert!(y <= 128);
+        self.map_data[y * 128 + x] = color
+    }
+    
     pub fn fill_px(
         &mut self,
         x: usize,
@@ -55,7 +65,7 @@ impl DungeonMap {
         for segment in room.segments.iter() {
             let x = segment.x * 20;
             let y = segment.z * 20;
-            
+
             self.fill_px(x, y, 16, 16, color);
 
             if room.segments.iter().find(|seg| seg.x == segment.x + 1 && seg.z == segment.z).is_some() {
@@ -95,13 +105,30 @@ impl DungeonMap {
                     let color = get_door_color(room, &*neighbour);
                     self.fill_px(x, y, width, height, color);
                 } else {
-                    self.fill_px(x, y, width, height, GRAY)
+                    self.fill_px(x, y, width, height, GRAY);
+
+                    let mut x = segment.x * 20;
+                    let mut y = segment.z * 20;
+
+                    match index {
+                        0 => y -= 20,
+                        1 => x += 20,
+                        2 => y += 20,
+                        3 => x -= 20,
+                        _ => unreachable!()
+                    }
+
+                    self.fill_px(x ,y, 16, 16, GRAY);
+
+                    for (qx, qy) in QUESTION_MARK_POSITIONS {
+                        self.set_px(x + qx + 5, y + qy + 5, BLACK);
+                    }
                 }
             }
         }
-        
+
         // fill in hole
-        if room.room_data.shape == RoomShape::TwoByTwo { 
+        if room.room_data.shape == RoomShape::TwoByTwo {
             let x = room.segments[0].x * 20 + 16;
             let y = room.segments[0].z * 20 + 16;
             self.fill_px(x, y, 4, 4, color)
