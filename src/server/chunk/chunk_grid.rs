@@ -10,20 +10,23 @@ use crate::server::world::VIEW_DISTANCE;
 pub struct ChunkGrid {
     pub chunks: Vec<Chunk>,
     pub size: usize,
+
+    index_offset_x: usize,
+    index_offset_z: usize,
 }
 
 impl ChunkGrid {
 
-    pub fn new(size: usize) -> ChunkGrid {
-        let mut vec = Vec::with_capacity(size * size);
-        for z in 0..size {
-            for x in 0..size {
-                vec.push(Chunk::new(x as i32, z as i32))
-            }
+    pub fn new(size: usize, offset_x: usize, offset_z: usize) -> ChunkGrid {
+        let mut chunks = Vec::with_capacity(size * size);
+        for _ in 0..size * size {
+            chunks.push(Chunk::new());
         }
         ChunkGrid {
-            chunks: vec,
+            chunks,
             size,
+            index_offset_x: offset_x,
+            index_offset_z: offset_z,
         }
     }
 
@@ -71,19 +74,30 @@ impl ChunkGrid {
     /// checks is block is a valid block within the chunk grid.
     fn is_block_valid(&self, x: i32, y: i32, z: i32) -> bool {
         let size = self.size as i32;
-        x >= 0 && (x >> 4) < size && y >= 0 && y < 256 && z >= 0 && (z >> 4) < size
+        let chunk_x = (x >> 4) + self.index_offset_x as i32;
+        let chunk_z = (z >> 4) + self.index_offset_z as i32;
+        y >= 0 && y < 256 && chunk_x >= 0 && chunk_x < size && chunk_z >= 0 && chunk_z < size
     }
 
     /// returns the chunk at the x and z coordinates provided, none if no chunk is present
     pub fn get_chunk(&self, chunk_x: i32, chunk_z: i32) -> Option<&Chunk> {
-        if chunk_x < 0 || chunk_z < 0 { 
+        let size = self.size as i32;
+        let x = chunk_x + self.index_offset_x as i32;
+        let z = chunk_z + self.index_offset_z as i32;
+        if x < 0 || z < 0 || x >= size || z >= size {
             return None
         }
-        self.chunks.get(chunk_z as usize * self.size + chunk_x as usize)
+        self.chunks.get(z as usize * self.size + x as usize)
     }
 
     fn get_chunk_mut(&mut self, chunk_x: i32, chunk_z: i32) -> Option<&mut Chunk> {
-        self.chunks.get_mut(chunk_z as usize * self.size + chunk_x as usize)
+        let size = self.size as i32;
+        let x = chunk_x + self.index_offset_x as i32;
+        let z = chunk_z + self.index_offset_z as i32;
+        if x < 0 || z < 0 || x >= size || z >= size {
+            return None
+        }
+        self.chunks.get_mut(z as usize * self.size + x as usize)
     }
 }
 

@@ -89,7 +89,7 @@ impl Server {
                 for x in (chunk_x - view_distance)..(chunk_x + view_distance) {
                     for z in (chunk_z - view_distance)..(chunk_z + view_distance) {
                         if let Some(chunk) = self.world.chunk_grid.get_chunk(x, z) {
-                            player.write_packet(&chunk.get_chunk_data(true))
+                            player.write_packet(&chunk.get_chunk_data(x, z, true))
                         }
                     }
                 }

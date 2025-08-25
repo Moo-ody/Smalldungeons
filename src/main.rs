@@ -30,7 +30,6 @@ use indoc::formatdoc;
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::env;
-use std::mem::take;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::unbounded_channel;
 
@@ -214,14 +213,14 @@ async fn main() -> Result<()> {
                     match diff {
                         ChunkDiff::New => {
                             if let Some(chunk) = player.world_mut().chunk_grid.get_chunk(x, z) {
-                                player.packet_buffer.write_packet(&chunk.get_chunk_data(true));
+                                player.packet_buffer.write_packet(&chunk.get_chunk_data(x, z,true));
                             } else {
-                                let chunk_data = Chunk::new(x, z).get_chunk_data(true);
+                                let chunk_data = Chunk::new().get_chunk_data(x, z, true);
                                 player.write_packet(&chunk_data)
                             };
                         },
                         ChunkDiff::Old => {
-                            let chunk_data = Chunk::new(x, z).get_chunk_data(true);
+                            let chunk_data = Chunk::new().get_chunk_data(x, z, true);
                             player.write_packet(&chunk_data)
                         },
                     }

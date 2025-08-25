@@ -44,7 +44,7 @@ impl World {
         World {
             server: std::ptr::null_mut(),
 
-            chunk_grid: ChunkGrid::new(14),
+            chunk_grid: ChunkGrid::new(16, 13, 13),
             interactable_blocks: HashMap::new(),
 
             player_info: PlayerList::new(),

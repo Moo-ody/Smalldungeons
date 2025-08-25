@@ -6,8 +6,6 @@ use crate::server::chunk::chunk_section::ChunkSection;
 ///
 /// A chunk is composed of 16 [chunk sections][ChunkSection].
 pub struct Chunk {
-    pub pos_x: i32,
-    pub pos_z: i32,
     pub chunk_sections: [Option<ChunkSection>; 16],
     pub packet_buffer: PacketBuffer,
 }
@@ -17,10 +15,8 @@ impl Chunk {
     /// Creates an empty chunk at the X and Z coordinates provided.
     ///
     /// The chunk is entirely empty, and block data must be added with chunk sections.
-    pub fn new(pos_x: i32, pos_z: i32) -> Chunk {
+    pub fn new() -> Chunk {
         Self {
-            pos_x,
-            pos_z,
             chunk_sections: [
                 None, None, None, None, None, None, None, None,
                 None, None, None, None, None, None, None, None,
@@ -49,7 +45,7 @@ impl Chunk {
     }
 
     
-    pub fn get_chunk_data(&self, new: bool) -> ChunkData {
+    pub fn get_chunk_data(&self, x: i32, z: i32, new: bool) -> ChunkData {
         let mut bitmask = 0u16;
 
         for section_index in 0..16 {
@@ -93,10 +89,9 @@ impl Chunk {
                 offset += 1;
             }
         }
-
         ChunkData {
-            chunk_x: self.pos_x,
-            chunk_z: self.pos_z,
+            chunk_x: x,
+            chunk_z: z,
             is_new_chunk: new,
             bitmask,
             data,
