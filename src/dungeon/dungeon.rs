@@ -336,16 +336,22 @@ impl Dungeon {
                             room.entered = true;
                             self.map.draw_room(&room);
                             
-                            // currently temporary, this is suboptimal, i just need to see the map
-                            player.write_packet(&Maps {
-                                id: 1,
-                                scale: 0,
-                                columns: 128,
-                                rows: 128,
-                                x: 0,
-                                z: 0,
-                                map_data: self.map.map_data.to_vec(),
-                            });
+                            // this needs to happen once a tick, 
+                            // but currently the ticking stuff is a mess
+                            if let Some((region, data)) = self.map.get_updated_area() {
+                                let width = region.max_x - region.min_x;
+                                let height = region.max_y - region.min_y;
+                                
+                                player.write_packet(&Maps {
+                                    id: 1,
+                                    scale: 0,
+                                    columns: width as u8,
+                                    rows: height as u8,
+                                    x: region.min_x as u8,
+                                    z: region.min_y as u8,
+                                    map_data: data,
+                                });
+                            };
                         }
                     }
                 }
