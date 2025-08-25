@@ -45,7 +45,7 @@ pub struct Player {
     pub last_yaw: f32,
     pub last_pitch: f32,
 
-    pub ticks_existed: u64,
+    pub ticks_existed: u32,
     pub last_keep_alive: i32,
     pub ping: i32,
 
@@ -115,7 +115,7 @@ impl Player {
 
     /// gets a reference to the world
     pub fn world_mut<'a>(&self) -> &'a mut World {
-        unsafe { &mut self.server.as_mut().expect("Server is null").world }
+        &mut self.server_mut().world
     }
     
     /// sends a packet to the player

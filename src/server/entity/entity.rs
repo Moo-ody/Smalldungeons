@@ -1,6 +1,6 @@
 use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
 use crate::net::packets::packet_registry::ClientBoundPacket;
-use crate::server::entity::entity_metadata::EntityVariant;
+use crate::server::entity::entity_metadata::EntityMetadata;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 
@@ -38,8 +38,10 @@ pub struct Entity {
     pub last_position: DVec3,
     pub last_yaw: f32,
     pub last_pitch: f32,
+    
+    pub ticks_existed: u32,
 
-    pub variant: EntityVariant,
+    pub metadata: EntityMetadata,
 }
 
 impl Entity {
@@ -48,8 +50,7 @@ impl Entity {
         world: *mut World,
         id: EntityId,
         position: DVec3,
-        variant: EntityVariant,
-        // entity: E
+        metadata: EntityMetadata,
     ) -> Self {
         Self {
             world,
@@ -62,7 +63,8 @@ impl Entity {
             last_position: DVec3::ZERO,
             last_yaw: 0.0,
             last_pitch: 0.0,
-            variant,
+            ticks_existed: 0,
+            metadata,
         }
     }
 
@@ -79,12 +81,13 @@ impl Entity {
         let test: *mut Entity = self;
         let entity = unsafe { test.as_mut().unwrap() };
         entity_impl.tick(self);
-        // self.entity.tick(entity);
         
         if self.position != self.last_position {
-            packets.push(ClientBoundPacket::from(EntityTeleport::from_entity(entity)));
+            // TODO: if distance is < 8 blocks use entity rel move
+            packets.push(EntityTeleport::from_entity(entity).into());
             self.last_position = self.position;
         }
+        self.ticks_existed += 1;
     }
 }
 

@@ -22,8 +22,8 @@ impl EntityTeleport {
             pos_x: (entity.position.x * 32.0) as i32,
             pos_y: (entity.position.y * 32.0) as i32,
             pos_z: (entity.position.z * 32.0) as i32,
-            yaw: (entity.yaw * 256.0 / 360.0) as i8,
-            pitch: (entity.pitch * 256.0 / 360.0) as i8,
+            yaw: (entity.yaw * 256.0 / 360.0) as i32 as i8,
+            pitch: (entity.pitch * 256.0 / 360.0) as i32 as i8,
             on_ground: entity.on_ground,
         }
     }

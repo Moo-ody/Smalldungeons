@@ -1,11 +1,9 @@
-use crate::net::packets::client_bound::chat::{Chat, CHAT};
-use crate::net::packets::packet::{SendPacket, ServerBoundPacket};
-use crate::net::packets::packet_context::PacketContext;
+use crate::net::packets::packet::ServerBoundPacket;
 use crate::net::packets::read_string_from_buf;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
-use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
+use crate::server::utils::commands::Command;
 use crate::server::world::World;
+use anyhow::Context;
 use bytes::BytesMut;
 
 #[derive(Debug)]
@@ -21,48 +19,13 @@ impl ServerBoundPacket for ChatMessage {
         })
     }
 
-    async fn process<'a>(&self, context: PacketContext<'a>) -> anyhow::Result<()> {
-        // idrk if this is handled on tick or not but
-        // if self.message.starts_with("/") {
-        //     if self.message == "/updatezombie" {
-        //
-        //     }
-        // } else {
-        //     // forward to 1v1 player?
-        // }
-        Ok(())
-    }
-
     fn main_process(&self, world: &mut World, player: &mut Player) -> anyhow::Result<()> {
-        if self.message == "/locraw" {
-            Chat {
-                typ: CHAT,
-                component: ChatComponentTextBuilder::new(r#"{"server":"mini237V","gametype":"SKYBLOCK","mode":"dungeon","map":"Dungeon"}"#).build(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
-        } else if self.message == "/mort" {
-            Chat {
-                typ: CHAT,
-                component: ChatComponentTextBuilder::new("opening menu").build(),
-            }.send_packet(player.client_id, &player.server_mut().network_tx)?;
-            player.open_ui(UI::MortReadyUpMenu)?;
-        };
+        if self.message.starts_with("/") {
+            let command = self.message.strip_prefix("/").context("Failed to strip prefix from command")?;
+            Command::handle(command, world, player)?;
+        }
 
-        // if self.message.starts_with("/") && self.message == "/updatezombie" {
-        //     let mut id: Option<EntityId> = None;
-        //     let mut path: Option<Vec<BlockPos>> = None;
-        //     if let Some((entity_id, e)) = world.entities.iter().find(|(_, e)| e.metadata.base.name == "Zombie") {
-        //         path = Pathfinder::find_path(e, &BlockPos { x: 10, y: 1, z: 10 }, world).ok();
-        //         id = Some(*entity_id)
-        //     }
-        //     
-        //     if let Some((id, path)) = id.and_then(|id| path.map(|path| (id, path))) {
-        //         if let Some(e) = world.entities.get_mut(&id) { 
-        //             e.path = Some(path)
-        //         }
-        //     }
-        //     
-        // }
-        // todo
+        // todo normal chat messages maybe?
         Ok(())
     }
 }

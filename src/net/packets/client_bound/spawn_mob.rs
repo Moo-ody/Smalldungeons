@@ -2,7 +2,7 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_metadata::EntityVariant;
+use crate::server::entity::entity_metadata::EntityMetadata;
 use async_trait::async_trait;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -21,14 +21,14 @@ pub struct PacketSpawnMob {
     velocity_x: i16,
     velocity_y: i16,
     velocity_z: i16,
-    metadata: EntityVariant,
+    metadata: EntityMetadata,
 }
 
 impl PacketSpawnMob {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
             entity_id: entity.id,
-            entity_type: entity.variant.get_id(),
+            entity_type: entity.metadata.variant.get_id(),
             x: (entity.position.x * 32.0).floor() as i32,
             y: (entity.position.y * 32.0).floor() as i32,
             z: (entity.position.z * 32.0).floor() as i32,
@@ -38,7 +38,7 @@ impl PacketSpawnMob {
             velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
             velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
             velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-            metadata: entity.variant.clone()
+            metadata: entity.metadata.clone()
         }
     }
 }

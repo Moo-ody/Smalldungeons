@@ -1,4 +1,4 @@
-use crate::net::packets::packet::ClientBoundPacketImpl;
+use crate::net::packets::packet::{finish_packet, ClientBoundPacketImpl};
 use crate::net::packets::packet_write::PacketWrite;
 use crate::net::var_int::write_var_int;
 use crate::server::items::item_stack::ItemStack;
@@ -22,10 +22,6 @@ impl ClientBoundPacketImpl for WindowItems {
             item_stack.write(&mut payload);
         }
 
-        let mut buf = Vec::new();
-        write_var_int(&mut buf, payload.len() as i32); // VarInt packet length
-        buf.extend_from_slice(&payload);
-
-        writer.write_all(&buf).await
+        writer.write_all(&finish_packet(payload)).await
     }
 }

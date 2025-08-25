@@ -24,6 +24,10 @@ impl DVec3 {
             z,
         }
     }
+    
+    pub fn from_centered(block_pos: &BlockPos) -> Self {
+        Self::new(block_pos.x as f64 + 0.5, block_pos.y as f64 + 0.5, block_pos.z as f64 + 0.5)
+    }
 
     pub fn from_x(x: f64) -> DVec3 {
         DVec3 {
@@ -49,8 +53,9 @@ impl DVec3 {
         }
     }
 
-    pub fn add_x(&mut self, amount: f64) {
-        self.x += amount
+    pub fn add_x(&mut self, amount: f64) -> Self {
+        self.x += amount;
+        *self
     }
 
     pub fn add_y(&mut self, amount: f64) -> Self {
@@ -58,8 +63,9 @@ impl DVec3 {
         *self
     }
 
-    pub fn add_z(&mut self, amount: f64) {
-        self.z += amount
+    pub fn add_z(&mut self, amount: f64) -> Self {
+        self.z += amount;
+        *self
     }
 
     pub fn normalize(&self) -> DVec3 {

@@ -4,10 +4,11 @@ use crate::net::var_int::VarInt;
 use crate::server::items::item_stack::ItemStack;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
+#[derive(Debug, Clone)]
 pub struct EntityEquipment {
-    entity_id: i32,
-    item_slot: i16,
-    item_stack: Option<ItemStack>,
+    pub entity_id: i32,
+    pub item_slot: i16,
+    pub item_stack: Option<ItemStack>,
 }
 
 #[async_trait::async_trait]

@@ -181,7 +181,6 @@ pub trait ServerBoundPacket: Send + Sync {
 #[macro_export]
 macro_rules! build_packet {
     ($packet_id:expr $(, $value:expr )* $(,)?) => {{
-        let mut buf = Vec::new();
         let mut payload = Vec::new();
 
         $crate::net::var_int::write_var_int(&mut payload, $packet_id);
@@ -189,11 +188,7 @@ macro_rules! build_packet {
         $(
             $crate::net::packets::packet_write::PacketWrite::write(&$value, &mut payload);
         )*
-
-        $crate::net::var_int::write_var_int(&mut buf, payload.len() as i32);
-        buf.extend_from_slice(&payload);
-
-        buf
+        $crate::net::packets::packet::finish_packet(payload)
     }};
 }
 
@@ -207,9 +202,9 @@ macro_rules! partial_packet {
 }
 
 /// appends the length of the payload and then the payload to the returned buffer.
-pub fn finish_packet(payload: Vec<u8>) -> Vec<u8> {
-    let mut buf = Vec::new();
+pub fn finish_packet(mut payload: Vec<u8>) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(payload.len() + 5);
     write_var_int(&mut buf, payload.len() as i32);
-    buf.extend_from_slice(&payload);
+    buf.append(&mut payload);
     buf
 }

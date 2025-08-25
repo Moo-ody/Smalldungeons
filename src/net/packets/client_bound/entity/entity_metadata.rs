@@ -2,20 +2,20 @@ use crate::build_packet;
 use crate::net::packets::packet::ClientBoundPacketImpl;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::Entity;
-use crate::server::entity::entity_metadata::EntityVariant;
+use crate::server::entity::entity_metadata::EntityMetadata;
 use tokio::io::{AsyncWrite, AsyncWriteExt, Result};
 
 #[derive(Debug, Clone)]
 pub struct PacketEntityMetadata {
-    entity_id: i32,
-    metadata: EntityVariant,
+    pub entity_id: i32,
+    pub metadata: EntityMetadata,
 }
 
 impl PacketEntityMetadata {
     pub fn from_entity(entity: &Entity) -> Self {
         Self {
             entity_id: entity.id,
-            metadata: entity.variant.clone(),
+            metadata: entity.metadata.clone(),
         }
     }
 }

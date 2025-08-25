@@ -19,6 +19,12 @@ impl AABB {
             max,
         }
     }
+    
+    pub fn intersects(&self, other: &AABB) -> bool {
+        self.min.x <= other.max.x && self.max.x >= other.min.x &&
+        self.min.y <= other.max.y && self.max.y >= other.min.y &&
+        self.min.z <= other.max.z && self.max.z >= other.min.z
+    }
 
     pub const fn from_height_width(height: f64, width: f64) -> Self {
         Self { 
