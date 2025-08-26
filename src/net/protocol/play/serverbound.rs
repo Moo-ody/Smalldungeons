@@ -6,6 +6,7 @@ use crate::net::var_int::VarInt;
 use crate::register_serverbound_packets;
 use crate::server::block::block_position::BlockPos;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::utils::fvec3::FVec3;
 use crate::server::utils::sized_string::SizedString;
 use anyhow::bail;
 use blocks::packet_deserializable;
@@ -15,7 +16,7 @@ register_serverbound_packets! {
     Play;
     KeepAlive = 0x00;
     ChatMessage = 0x01;
-    // UseEntity = 0x02;
+    UseEntity = 0x02;
     PlayerUpdate = 0x03;
     PlayerPosition = 0x04;
     PlayerLook = 0x05;
@@ -50,6 +51,42 @@ packet_deserializable! {
 packet_deserializable! {
     pub struct ChatMessage {
         pub message: SizedString<100>
+    }
+}
+
+packet_deserializable! {
+    #[derive(Debug, PartialEq)]
+    pub enum EntityInteractAction {
+        Interact,
+        Attack,
+        InteractAt, // used in armor stands
+    }
+}
+
+pub struct UseEntity {
+    pub entity_id: VarInt,
+    pub action: EntityInteractAction,
+    pub hit_vec: Option<FVec3>
+}
+
+impl PacketDeserializable for UseEntity {
+    fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
+        let entity_id: VarInt = PacketDeserializable::read(buffer)?;
+        let action: EntityInteractAction = PacketDeserializable::read(buffer)?;
+        let hit_vec = if action == EntityInteractAction::InteractAt { 
+            Some(FVec3::new(
+                PacketDeserializable::read(buffer)?,
+                PacketDeserializable::read(buffer)?,
+                PacketDeserializable::read(buffer)?,
+            ))
+        } else {
+            None
+        };
+        Ok(Self {
+            entity_id,
+            action,
+            hit_vec, 
+        })
     }
 }
 

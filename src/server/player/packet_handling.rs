@@ -1,6 +1,6 @@
 use crate::net::packets::packet::ProcessPacket;
 use crate::net::protocol::play::clientbound::{BlockChange, TabCompleteReply};
-use crate::net::protocol::play::serverbound::{ArmSwing, ChatMessage, ClickWindow, ClientSettings, ClientStatus, CloseWindow, ConfirmTransaction, HeldItemChange, KeepAlive, PlayerAction, PlayerActionType, PlayerBlockPlacement, PlayerDigging, PlayerDiggingAction, PlayerLook, PlayerPosition, PlayerPositionLook, PlayerUpdate, TabComplete};
+use crate::net::protocol::play::serverbound::*;
 use crate::server::commands::Command;
 use crate::server::items::Item;
 use crate::server::player::container_ui::UI;
@@ -28,6 +28,12 @@ impl ProcessPacket for ChatMessage {
                 eprintln!("cmd failed {e}")
             };
         }
+    }
+}
+
+impl ProcessPacket for UseEntity {
+    fn process_with_player(&self, player: &mut Player) {
+        player.send_message(format!("hi {:?}", self.action).as_str())
     }
 }
 
