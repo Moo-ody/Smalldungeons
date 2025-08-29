@@ -2,7 +2,7 @@ use crate::net::protocol::play::clientbound::BlockChange;
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk::Chunk;
-use crate::server::world::VIEW_DISTANCE;
+use std::cmp::{max, min};
 
 /// Chunk grid
 ///
@@ -13,6 +13,11 @@ pub struct ChunkGrid {
 
     index_offset_x: usize,
     index_offset_z: usize,
+}
+
+pub enum ChunkDiff {
+    New,
+    Old,
 }
 
 impl ChunkGrid {
@@ -90,7 +95,7 @@ impl ChunkGrid {
         self.chunks.get(z as usize * self.size + x as usize)
     }
 
-    fn get_chunk_mut(&mut self, chunk_x: i32, chunk_z: i32) -> Option<&mut Chunk> {
+    pub fn get_chunk_mut(&mut self, chunk_x: i32, chunk_z: i32) -> Option<&mut Chunk> {
         let size = self.size as i32;
         let x = chunk_x + self.index_offset_x as i32;
         let z = chunk_z + self.index_offset_z as i32;
@@ -99,54 +104,73 @@ impl ChunkGrid {
         }
         self.chunks.get_mut(z as usize * self.size + x as usize)
     }
-}
-
-pub enum ChunkDiff {
-    New,
-    Old,
-}
-
-// maybe clamp bounds
-pub fn for_each_diff<F>(
-    new: (i32, i32),
-    old: (i32, i32),
-    mut callback: F,
-) where
-    F: FnMut(i32, i32, ChunkDiff),
-{
-    let view_distance = VIEW_DISTANCE as i32;
-
-    let min_x = new.0 - view_distance;
-    let min_z = new.1 - view_distance;
-    let max_x = new.0 + view_distance;
-    let max_z = new.1 + view_distance;
-
-    let old_min_x = old.0 - view_distance;
-    let old_min_z = old.1 - view_distance;
-    let old_max_x = old.0 + view_distance;
-    let old_max_z = old.1 + view_distance;
     
-    // it would be more optimal to loop over chunks that are only different
-    for x in min_x..=max_x {
-        for z in min_z..=max_z {
-            let in_old_range =
-                x >= old_min_x && x <= old_max_x &&
-                z >= old_min_z && z <= old_max_z;
-
-            if !in_old_range {
-                callback(x, z, ChunkDiff::New);
+    pub fn for_each_in_view<F>(
+        &mut self,
+        chunk_x: i32,
+        chunk_z: i32,
+        view_distance: i32,
+        mut callback: F,
+    ) where
+        F: FnMut(&mut Chunk, i32, i32)
+    {
+        let min_x = max(chunk_x - view_distance + self.index_offset_x as i32, 0);
+        let min_z = max(chunk_z - view_distance + self.index_offset_z as i32, 0);
+        let max_x = min(chunk_x + view_distance + self.index_offset_x as i32, self.size as i32);
+        let max_z = min(chunk_z + view_distance + self.index_offset_z as i32, self.size as i32);
+        
+        for x in min_x..max_x {
+            for z in min_z..max_z {
+                if let Some(chunk) = self.chunks.get_mut(z as usize * self.size + x as usize) {
+                    callback(chunk, x - self.index_offset_x as i32, z - self.index_offset_z as i32)
+                }
             }
         }
     }
-    
-    for x in old_min_x..=old_max_x {
-        for z in old_min_z..=old_max_z {
-            let in_new_range =
-                x >= min_x && x <= max_x &&
-                z >= min_z && z <= max_z;
-    
-            if !in_new_range {
-                callback(x, z, ChunkDiff::Old);
+
+    pub fn for_each_diff<F>(
+        &mut self,
+        new: (i32, i32),
+        old: (i32, i32),
+        view_distance: i32,
+        mut callback: F,
+    ) where
+        F: FnMut(i32, i32, ChunkDiff),
+    {
+        let (nx, nz) = (new.0 + self.index_offset_x as i32, new.1 + self.index_offset_z as i32);
+        let min_x = max(nx - view_distance, 0);
+        let min_z = max(nz - view_distance, 0);
+        let max_x = min(nx + view_distance, self.size as i32);
+        let max_z = min(nz + view_distance, self.size as i32);
+
+        let (ox, oz) = (old.0 + self.index_offset_x as i32, old.1 + self.index_offset_z as i32);
+        let old_min_x = max(ox - view_distance, 0);
+        let old_min_z = max(oz - view_distance, 0);
+        let old_max_x = min(ox + view_distance, self.size as i32);
+        let old_max_z = min(oz + view_distance, self.size as i32);
+
+        // it would be more optimal to loop over chunks that are only different
+        for x in min_x..=max_x {
+            for z in min_z..=max_z {
+                let in_old_range =
+                    x >= old_min_x && x <= old_max_x &&
+                    z >= old_min_z && z <= old_max_z;
+
+                if !in_old_range {
+                    callback(x - self.index_offset_x as i32, z - self.index_offset_z as i32, ChunkDiff::New);
+                }
+            }
+        }
+
+        for x in old_min_x..=old_max_x {
+            for z in old_min_z..=old_max_z {
+                let in_new_range =
+                    x >= min_x && x <= max_x &&
+                    z >= min_z && z <= max_z;
+
+                if !in_new_range {
+                    callback(x - self.index_offset_x as i32, z - self.index_offset_z as i32, ChunkDiff::Old);
+                }
             }
         }
     }

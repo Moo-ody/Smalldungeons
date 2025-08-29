@@ -1,4 +1,5 @@
-use crate::net::protocol::play::clientbound::{EntityAttach, SpawnObject};
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::{DestroyEntites, EntityAttach, SpawnObject};
 use crate::net::var_int::VarInt;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
@@ -171,7 +172,7 @@ pub const DOOR_ENTITY_OFFSET: f64 = 0.65;
 
 impl EntityImpl for DoorEntityImpl {
 
-    fn spawn(&mut self, entity: &mut Entity) {
+    fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
         let world = entity.world_mut();
         let entity_id = world.new_entity_id();
 
@@ -182,49 +183,38 @@ impl EntityImpl for DoorEntityImpl {
             block_id | (metadata << 12)
         };
 
-        let spawn_packet = SpawnObject {
+        buffer.write_packet(&SpawnObject {
             entity_id: VarInt(entity_id),
             entity_variant: 70,
-            x: (entity.position.x * 32.0).floor() as i32,
-            y: ((entity.position.y + DOOR_ENTITY_OFFSET) * 32.0).floor() as i32,
-            z: (entity.position.z * 32.0).floor() as i32,
-            yaw: 0,
-            pitch: 0,
+            x: entity.position.x,
+            y: entity.position.y + DOOR_ENTITY_OFFSET,
+            z: entity.position.z,
+            yaw: 0.0,
+            pitch: 0.0,
             data: object_data,
-            velocity_x: 0,
-            velocity_y: 0,
-            velocity_z: 0,
-        };
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
+        });
 
-        let attach_packet = EntityAttach {
+        buffer.write_packet(&EntityAttach {
             entity_id,
             vehicle_id: entity.id,
             leash: false,
-        };
-
-        for player in world.players.values_mut() {
-            player.write_packet(&spawn_packet);
-            player.write_packet(&attach_packet);
-        }
+        });
     }
 
-    fn tick(&mut self, entity: &mut Entity) {
+    fn despawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        buffer.write_packet(&DestroyEntites {
+            entities: vec![VarInt(entity.id + 1)],
+        });
+    }
+
+    fn tick(&mut self, entity: &mut Entity, _: &mut PacketBuffer) {
         entity.position.y -= self.distance_per_tick;
         self.ticks_left -= 1;
         if self.ticks_left == 0 {
             entity.world_mut().despawn_entity(entity.id);
         }
-    }
-
-    fn despawn(&mut self, entity: &mut Entity) {
-        // // next entity id is always the one riding on top of it
-        // let destroy_packet = DestroyEntities {
-        //     entity_ids: vec![entity.id + 1],
-        // };
-        // next entity id is always the one riding on top of it
-        entity.world_mut().despawn_entity(entity.id + 1);
-        // for player in entity.world_mut().players.values() {
-        //     player.send_packet(destroy_packet.clone()).unwrap();
-        // }
     }
 }

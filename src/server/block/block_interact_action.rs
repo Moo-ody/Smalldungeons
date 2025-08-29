@@ -1,8 +1,9 @@
 use crate::dungeon::dungeon_state::DungeonState;
-use crate::dungeon::room::secrets::{DungeonSecret, EssenceEntity};
+use crate::dungeon::room::secrets::DungeonSecret;
 use crate::net::protocol::play::clientbound::{BlockAction, SoundEffect};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
+use crate::server::entity::entity::NoEntityImpl;
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
@@ -93,7 +94,7 @@ impl BlockInteractAction {
                         variant: EntityVariant::ArmorStand,
                         is_invisible: true,
                     },
-                    EssenceEntity,
+                    NoEntityImpl,
                 ).unwrap();
 
                 secret.obtained = true;

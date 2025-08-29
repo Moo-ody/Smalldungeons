@@ -1,6 +1,7 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound::ChunkData;
 use crate::server::chunk::chunk_section::ChunkSection;
+use crate::server::entity::entity::EntityId;
 
 /// Represents a minecraft chunk.
 ///
@@ -8,6 +9,7 @@ use crate::server::chunk::chunk_section::ChunkSection;
 pub struct Chunk {
     pub chunk_sections: [Option<ChunkSection>; 16],
     pub packet_buffer: PacketBuffer,
+    pub entities: Vec<EntityId>
 }
 
 impl Chunk {
@@ -22,6 +24,7 @@ impl Chunk {
                 None, None, None, None, None, None, None, None,
             ],
             packet_buffer: PacketBuffer::new(),
+            entities: Vec::new(),
         }
     }
 
@@ -42,6 +45,16 @@ impl Chunk {
             self.chunk_sections[index] = Some(ChunkSection::new());
         }
         &mut self.chunk_sections[index]
+    }
+
+    pub fn insert_entity(&mut self, entity_id: EntityId) {
+        self.entities.push(entity_id);
+    }
+    
+    pub fn remove_entity(&mut self, entity_id: &EntityId) {
+        if let Some(index) = self.entities.iter().position(|id| *id == *entity_id) {
+            self.entities.remove(index);
+        }
     }
 
     

@@ -56,7 +56,7 @@ packet_deserializable! {
 
 packet_deserializable! {
     #[derive(Debug, PartialEq)]
-    pub enum EntityInteractAction {
+    pub enum EntityInteractionType {
         Interact,
         Attack,
         InteractAt, // used in armor stands
@@ -65,15 +65,15 @@ packet_deserializable! {
 
 pub struct UseEntity {
     pub entity_id: VarInt,
-    pub action: EntityInteractAction,
+    pub action: EntityInteractionType,
     pub hit_vec: Option<FVec3>
 }
 
 impl PacketDeserializable for UseEntity {
     fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
         let entity_id: VarInt = PacketDeserializable::read(buffer)?;
-        let action: EntityInteractAction = PacketDeserializable::read(buffer)?;
-        let hit_vec = if action == EntityInteractAction::InteractAt { 
+        let action: EntityInteractionType = PacketDeserializable::read(buffer)?;
+        let hit_vec = if action == EntityInteractionType::InteractAt { 
             Some(FVec3::new(
                 PacketDeserializable::read(buffer)?,
                 PacketDeserializable::read(buffer)?,

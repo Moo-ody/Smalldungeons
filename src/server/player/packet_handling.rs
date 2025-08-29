@@ -33,7 +33,9 @@ impl ProcessPacket for ChatMessage {
 
 impl ProcessPacket for UseEntity {
     fn process_with_player(&self, player: &mut Player) {
-        player.send_message(format!("hi {:?}", self.action).as_str())
+        if let Some((entity, entity_impl)) = player.world_mut().entities.get_mut(&self.entity_id.0) {
+            entity_impl.interact(entity, player, &self.action)
+        }
     }
 }
 

@@ -81,15 +81,26 @@ impl Server {
 
                 let chunk_x = (player.position.x.floor() as i32) >> 4;
                 let chunk_z = (player.position.z.floor() as i32) >> 4;
-
-                let view_distance = world::VIEW_DISTANCE as i32;
-                for x in (chunk_x - view_distance)..(chunk_x + view_distance) {
-                    for z in (chunk_z - view_distance)..(chunk_z + view_distance) {
-                        if let Some(chunk) = self.world.chunk_grid.get_chunk(x, z) {
-                            player.write_packet(&chunk.get_chunk_data(x, z, true))
-                        }
+                
+                let view_distance = world::VIEW_DISTANCE as i32 + 1;
+                
+                self.world.chunk_grid.for_each_in_view(
+                    chunk_x, 
+                    chunk_z,
+                    view_distance,
+                    |chunk, x, z| {
+                        player.write_packet(&chunk.get_chunk_data(x, z, true));
+    
+                        for entity_id in chunk.entities.iter_mut() {
+                            let (entity, entity_impl) = &mut self.world.entities.get_mut(&entity_id).unwrap();
+                            let buffer = &mut chunk.packet_buffer;
+                            entity.write_spawn_packet(buffer);
+                            entity_impl.spawn(entity, buffer);
+                        } 
                     }
-                }
+                );
+
+                
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
 
                 // player.send_packet(self.world.player_info.new_packet())?;

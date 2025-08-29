@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{DestroyEntites, SpawnMob, SpawnObject};
+use crate::net::protocol::play::clientbound::DestroyEntites;
 use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_position::BlockPos;
@@ -11,7 +11,8 @@ use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::mem::take;
 
 pub const VIEW_DISTANCE: u8 = 6;
 
@@ -31,7 +32,7 @@ pub struct World {
     pub players: HashMap<ClientId, Player>,
     pub entities: HashMap<EntityId, (Entity, Box<dyn EntityImpl>)>,
 
-    pub entities_for_removal: VecDeque<EntityId>,
+    pub entities_for_removal: Vec<EntityId>,
 
     // pub commands: Vec<Command>
     
@@ -55,7 +56,7 @@ impl World {
             next_entity_id: 1, // might have to start at 1
             players: HashMap::new(),
             entities: HashMap::new(),
-            entities_for_removal: VecDeque::new(),
+            entities_for_removal: Vec::new(),
 
             spawn_point: DVec3::ZERO,
             spawn_yaw: 0.0,
@@ -82,47 +83,15 @@ impl World {
             metadata,
         );
 
-        const MOTION_CLAMP: f64 = 3.9;
+        let chunk_x = (entity.position.x.floor() as i32) >> 4;
+        let chunk_z = (entity.position.z.floor() as i32) >> 4;
         
-        if entity.metadata.variant.is_object() {
-            let packet = SpawnObject {
-                entity_id: VarInt(entity.id),
-                entity_variant: entity.metadata.variant.get_id(),
-                x: (entity.position.x * 32.0).floor() as i32,
-                y: (entity.position.y * 32.0).floor() as i32,
-                z: (entity.position.z * 32.0).floor() as i32,
-                yaw: (entity.yaw * 256.0 / 360.0) as i8,
-                pitch: (entity.pitch * 256.0 / 360.0) as i8,
-                data: 0,
-                velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-                velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-                velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-            };
-            for player in self.players.values_mut() {
-                player.write_packet(&packet);
-            }
-        } else {
-            let packet = SpawnMob {
-                entity_id: VarInt(entity.id),
-                entity_variant: entity.metadata.variant.get_id(),
-                x: (entity.position.x * 32.0).floor() as i32,
-                y: (entity.position.y * 32.0).floor() as i32,
-                z: (entity.position.z * 32.0).floor() as i32,
-                yaw: (entity.yaw * 256.0 / 360.0) as i8,
-                pitch: (entity.pitch * 256.0 / 360.0) as i8,
-                head_pitch: (entity.yaw * 256.0 / 360.0) as i8, // head yaw for head pitch here is vanilla mappings. Maybe the mapping is wrong?
-                velocity_x: (entity.velocity.x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-                velocity_y: (entity.velocity.y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-                velocity_z: (entity.velocity.z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16,
-                metadata: entity.metadata.clone(),
-            };
-            for player in self.players.values_mut() {
-                player.write_packet(&packet);
-            }
+        if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+            chunk.insert_entity(entity.id);
+            entity.write_spawn_packet(&mut chunk.packet_buffer);
+            entity_impl.spawn(&mut entity, &mut chunk.packet_buffer);
         }
 
-        entity_impl.spawn(&mut entity);
-        
         let id = entity.id;
         self.entities.insert(id, (entity, Box::new(entity_impl)));
         Ok(id)
@@ -130,36 +99,34 @@ impl World {
 
     /// adds the entity id to 
     pub fn despawn_entity(&mut self, entity_id: EntityId) {
-        self.entities_for_removal.push_back(entity_id)
+        self.entities_for_removal.push(entity_id)
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
-        // should maybe write packets to chunk
         if !self.entities_for_removal.is_empty() {
-            let mut packet = DestroyEntites {
-                entities: Vec::with_capacity(self.entities_for_removal.len())
-            };
-            
-            while let Some(entity_id) = self.entities_for_removal.pop_front() {
+            for entity_id in take(&mut self.entities_for_removal) {
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
-                    entity_impl.despawn(&mut entity);
+                    if let Some(chunk) = entity.chunk_mut() {
+                        chunk.packet_buffer.write_packet(&DestroyEntites {
+                            entities: vec![VarInt(entity.id)],
+                        });
+                        entity_impl.despawn(&mut entity, &mut chunk.packet_buffer);
+                        chunk.remove_entity(&entity_id);
+                    }
                 }
-                packet.entities.push(VarInt(entity_id))
-            }
-            
-            for player in self.players.values_mut() {
-                player.write_packet(&packet)
             }
         }
-
-        let mut buf = PacketBuffer::new();
 
         for (entity, entity_impl) in self.entities.values_mut() {
-            entity.tick(entity_impl, &mut buf);
-        }
-        for player in self.players.values_mut() {
-            player.packet_buffer.copy_from(&buf);
-            // player.flush_packets();
+            let packet_buffer = if let Some(chunk) = entity.chunk_mut() {
+                &mut chunk.packet_buffer
+            } else {
+                // throwaway packet buffer, doesn't feel like a good idea
+                // however there is a chance that an entity might end up outside chunk grid 
+                // and end up stuck if we tick only inside a valid chunk
+                &mut PacketBuffer::new()
+            };
+            entity.tick(entity_impl, packet_buffer);
         }
         Ok(())
     }

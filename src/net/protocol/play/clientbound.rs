@@ -10,6 +10,7 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::player_list::player_profile::PlayerData;
 use crate::server::utils::sized_string::SizedString;
 use blocks::packet_serializable;
+use uuid::Uuid;
 
 register_packets! {
     KeepAlive = 0x00;
@@ -24,6 +25,7 @@ register_packets! {
     // SetHotbarSlot = 0x09;
     // EntityUsedBed = 0x0a;
     // SwingAnimation = 0x0b
+    SpawnPlayer = 0x0c;
     CollectItem = 0x0d;
     SpawnObject = 0x0e;
     SpawnMob = 0x0f;
@@ -139,40 +141,56 @@ packet_serializable! {
 }
 
 packet_serializable! {
+    pub struct SpawnPlayer {
+        pub entity_id: VarInt,
+        pub uuid: Uuid,
+        pub x: f64 => &((self.x * 32.0).floor() as i32),
+        pub y: f64 => &((self.y * 32.0).floor() as i32),
+        pub z: f64 => &((self.z * 32.0).floor() as i32),
+        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i8),
+        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i8),
+        pub current_item: i16,
+        pub metadata: EntityMetadata,
+    }
+}
+
+packet_serializable! {
     pub struct CollectItem {
         pub item_entity_id: VarInt,
         pub entity_id: VarInt,
     }
 }
 
+const MOTION_CLAMP: f64 = 3.9;
+
 pub struct SpawnObject {
     pub entity_id: VarInt,
     pub entity_variant: i8,
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-    pub yaw: i8,
-    pub pitch: i8,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub yaw: f32,
+    pub pitch: f32,
     pub data: i32,
-    pub velocity_x: i16,
-    pub velocity_y: i16,
-    pub velocity_z: i16,
+    pub velocity_x: f64,
+    pub velocity_y: f64,
+    pub velocity_z: f64,
 }
 
 impl PacketSerializable for SpawnObject {
     fn write(&self, buf: &mut Vec<u8>) {
         self.entity_id.write(buf);
         self.entity_variant.write(buf);
-        self.x.write(buf);
-        self.y.write(buf);
-        self.z.write(buf);
-        self.pitch.write(buf);
-        self.yaw.write(buf);
+        ((self.x * 32.0).floor() as i32).write(buf);
+        ((self.y * 32.0).floor() as i32).write(buf);
+        ((self.z * 32.0).floor() as i32).write(buf);
+        ((self.pitch * 256.0 / 360.0) as i8).write(buf);
+        ((self.yaw * 256.0 / 360.0) as i8).write(buf);
         self.data.write(buf);
         if self.data > 0 {
-            self.velocity_x.write(buf);
-            self.velocity_y.write(buf);
-            self.velocity_z.write(buf);
+            ((self.velocity_x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16).write(buf);
+            ((self.velocity_y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16).write(buf);
+            ((self.velocity_z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16).write(buf);
         }
     }
 }
@@ -181,15 +199,15 @@ packet_serializable! {
     pub struct SpawnMob {
         pub entity_id: VarInt,
         pub entity_variant: i8,
-        pub x: i32,
-        pub y: i32,
-        pub z: i32,
-        pub yaw: i8,
-        pub pitch: i8,
-        pub head_pitch: i8,
-        pub velocity_x: i16,
-        pub velocity_y: i16,
-        pub velocity_z: i16,
+        pub x: f64 => &((self.x * 32.0).floor() as i32),
+        pub y: f64 => &((self.y * 32.0).floor() as i32),
+        pub z: f64 => &((self.z * 32.0).floor() as i32),
+        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i8),
+        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i8),
+        pub head_yaw: f32 => &((self.head_yaw * 256.0 / 360.0) as i8),
+        pub velocity_x: f64 => &((self.velocity_x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
+        pub velocity_y: f64 => &((self.velocity_y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
+        pub velocity_z: f64 => &((self.velocity_z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
         pub metadata: EntityMetadata,
     }
 }
