@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
     println!("Rng Seed: {}", rng_seed);
     SeededRng::set_seed(rng_seed);
 
-    let dungeon = Dungeon::from_string(dungeon_str, &room_data_storage)?;
+    let dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
     let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
     server.world.server = &mut server;
     server.dungeon.server = &mut server;
@@ -145,7 +145,6 @@ async fn main() -> Result<()> {
     let dungeon = &server.dungeon;
 
     for room in &dungeon.rooms {
-        let room = room.borrow();
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
 
@@ -192,7 +191,7 @@ async fn main() -> Result<()> {
     }
 
     for door in &dungeon.doors {
-        door.borrow().load_into_world(&mut server.world, &door_type_blocks);
+        door.load_into_world(&mut server.world, &door_type_blocks);
     }
 
     // let zombie_spawn_pos = DVec3 {
@@ -356,8 +355,8 @@ async fn main() -> Result<()> {
                 format!("{} {}{}", SKYBLOCK_MONTHS[month], day_of_month, suffix)
             };
 
-            let room_id = if let Some(room) = player.server_mut().dungeon.get_player_room(player) {
-                &room.borrow().room_data.id
+            let room_id = if let Some(room) = server.dungeon.get_player_room(player) {
+                &server.dungeon.rooms[room].room_data.id
             } else {
                 ""
             };

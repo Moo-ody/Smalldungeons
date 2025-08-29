@@ -1,7 +1,8 @@
 use crate::dungeon::dungeon::Dungeon;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ProcessPacket;
-use crate::net::protocol::play::clientbound::{AddEffect, EntityProperties, JoinGame, PlayerAbilities, PlayerListHeaderFooter, PositionLook};
+use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::net::protocol::play::clientbound::{AddEffect, CustomPayload, EntityProperties, JoinGame, PlayerAbilities, PlayerListHeaderFooter, PositionLook};
 use crate::net::var_int::VarInt;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap, AttributeModifier};
@@ -103,7 +104,7 @@ impl Server {
                 
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
 
-                // player.send_packet(self.world.player_info.new_packet())?;
+                // player.write_packet(&self.world.player_info.new_packet());
 
                 player.write_packet(&PlayerListHeaderFooter {
                     header: header(),
@@ -171,6 +172,14 @@ impl Server {
                     fly_speed: 0.0,
                     walk_speed: playerspeed,
                 });
+                
+                // let mut buf = Vec::new();
+                // "hypixel".write(&mut buf);
+                
+                // player.write_packet(&CustomPayload {
+                //     channel: "MC|Brand".into(),
+                //     data: &buf,
+                // });
                 
                 player.flush_packets();
 
