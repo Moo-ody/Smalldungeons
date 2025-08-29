@@ -1,6 +1,4 @@
-use crate::net::packets::client_bound::position_look::PositionLook;
-use crate::net::packets::packet::SendPacket;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::player::Player;
 use crate::server::utils::direction::Direction;
@@ -99,14 +97,14 @@ impl Crusher {
                         // let entity = player.get_entity_mut(world).unwrap();
 
                         if self.is_in_way(player, x, y, z) {
-                            PositionLook {
-                                x: player.position.x + dx as f64,
-                                y: player.position.y,
-                                z: player.position.z + dz as f64,
-                                yaw: player.yaw,
-                                pitch: player.pitch,
-                                flags: 0,
-                            }.send_packet(*id, &server.network_tx).unwrap();
+                            // PositionLook {
+                            //     x: player.position.x + dx as f64,
+                            //     y: player.position.y,
+                            //     z: player.position.z + dz as f64,
+                            //     yaw: player.yaw,
+                            //     pitch: player.pitch,
+                            //     flags: 0,
+                            // }.send_packet(*id, &server.network_tx).unwrap();
                         }
                     }
                 } else {

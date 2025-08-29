@@ -1,14 +1,15 @@
-use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
-use crate::net::packets::client_bound::entity::entity_attach::EntityAttach;
-use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::{DestroyEntites, EntityAttach, SpawnObject};
+use crate::net::var_int::VarInt;
 use crate::server::block::block_parameter::Axis;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::{Entity, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::prelude::IndexedRandom;
 use std::collections::HashMap;
 
@@ -31,9 +32,8 @@ impl DoorType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Door {
-    pub id: usize,
     pub x: i32,
     pub z: i32,
 
@@ -84,8 +84,7 @@ impl Door {
         };
 
         let block_data = door_blocks.get(&door_type).unwrap();
-        let mut rng = rand::rng();
-        let chosen = block_data.choose(&mut rng).unwrap();
+        let chosen = block_data.choose(&mut seeded_rng()).unwrap();
         let self_direction = self.direction.get_direction();
 
         for (i, block) in chosen.iter().enumerate() {
@@ -113,26 +112,31 @@ impl Door {
             assert_ne!(self.door_type, DoorType::NORMAL);
         }
 
-        let mut entities = Vec::new();
-        world::iterate_blocks(
-            BlockPos { x: self.x - 1, y: 69, z: self.z - 1 },
-            BlockPos { x: self.x + 1, y: 72, z: self.z + 1 },
+        let start = BlockPos { x: self.x - 1, y: 69, z: self.z - 1 };
+        let end = BlockPos { x: self.x + 1, y: 72, z: self.z + 1 };
 
-            |x,y, z| {
-                world.set_block_at(Blocks::Barrier, x, y, z);
-                world.interactable_blocks.remove(&BlockPos { x, y, z });
-                
-                let id = world.spawn_entity(
-                    DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
-                    EntityMetadata {
-                        variant: EntityVariant::Bat { hanging: false },
-                        is_invisible: true
-                    },
-                    DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
-                ).unwrap();
-                entities.push(id);
-            }
-        );
+        let mut entities = Vec::new();
+        world::iterate_blocks(start, end, |x,y, z| {
+            world.set_block_at(Blocks::Barrier, x, y, z);
+            world.interactable_blocks.remove(&BlockPos { x, y, z });
+
+            let id = world.spawn_entity(
+                DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
+                EntityMetadata {
+                    variant: EntityVariant::Bat { hanging: false },
+                    is_invisible: true
+                },
+                DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
+            ).unwrap();
+            entities.push(id);
+        });
+
+        world.server_mut().schedule(20, move |server| {
+            world::iterate_blocks(start, end, |x,y, z| {
+                server.world.set_block_at(Blocks::Air, x, y, z);
+            });
+        });
+
         // world.server_mut().dungeon.test.push(OpenDoorTask {
         //     ticks_left: 20,
         //     door_index: self.id,
@@ -168,7 +172,7 @@ pub const DOOR_ENTITY_OFFSET: f64 = 0.65;
 
 impl EntityImpl for DoorEntityImpl {
 
-    fn spawn(&mut self, entity: &mut Entity) {
+    fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
         let world = entity.world_mut();
         let entity_id = world.new_entity_id();
 
@@ -179,45 +183,38 @@ impl EntityImpl for DoorEntityImpl {
             block_id | (metadata << 12)
         };
 
-        let spawn_packet = PacketSpawnObject::new(
-            entity_id,
-            EntityVariant::FallingBlock,
-            entity.position.clone().add_y(DOOR_ENTITY_OFFSET),
-            DVec3::ZERO,
-            0.0,
-            0.0,
-            object_data
-        );
+        buffer.write_packet(&SpawnObject {
+            entity_id: VarInt(entity_id),
+            entity_variant: 70,
+            x: entity.position.x,
+            y: entity.position.y + DOOR_ENTITY_OFFSET,
+            z: entity.position.z,
+            yaw: 0.0,
+            pitch: 0.0,
+            data: object_data,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
+        });
 
-        let attach_packet = EntityAttach {
+        buffer.write_packet(&EntityAttach {
             entity_id,
             vehicle_id: entity.id,
             leash: false,
-        };
-
-        for player in world.players.values() {
-            player.send_packet(spawn_packet.clone()).unwrap();
-            player.send_packet(attach_packet.clone()).unwrap();
-        }
+        });
     }
 
-    fn tick(&mut self, entity: &mut Entity) {
+    fn despawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        buffer.write_packet(&DestroyEntites {
+            entities: vec![VarInt(entity.id + 1)],
+        });
+    }
+
+    fn tick(&mut self, entity: &mut Entity, _: &mut PacketBuffer) {
         entity.position.y -= self.distance_per_tick;
         self.ticks_left -= 1;
         if self.ticks_left == 0 {
             entity.world_mut().despawn_entity(entity.id);
         }
-    }
-
-    fn despawn(&mut self, entity: &mut Entity) {
-        // // next entity id is always the one riding on top of it
-        // let destroy_packet = DestroyEntities {
-        //     entity_ids: vec![entity.id + 1],
-        // };
-        // next entity id is always the one riding on top of it
-        entity.world_mut().despawn_entity(entity.id + 1);
-        // for player in entity.world_mut().players.values() {
-        //     player.send_packet(destroy_packet.clone()).unwrap();
-        // }
     }
 }

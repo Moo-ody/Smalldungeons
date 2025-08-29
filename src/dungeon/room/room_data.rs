@@ -1,10 +1,11 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::dungeon::door::Door;
-use crate::dungeon::room::room::Room;
+use crate::dungeon::room::room::{Room, RoomSegment};
 use crate::server::block::blocks::Blocks;
+use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::seq::IteratorRandom;
 use serde_json::Value;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoomShape {
@@ -41,14 +42,14 @@ impl RoomShape {
         }
     }
 
-    pub fn from_segments(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> RoomShape {
+    pub fn from_segments(segments: &Vec<RoomSegment>, dungeon_doors: &Vec<Door>) -> RoomShape {
 
         let unique_x = segments.iter()
-            .map(|x| x.0)
+            .map(|segment| segment.x)
             .collect::<HashSet<usize>>();
 
         let unique_z = segments.iter()
-            .map(|x| x.1)
+            .map(|segment| segment.z)
             .collect::<HashSet<usize>>();
 
         let not_long = unique_x.len() > 1 && unique_z.len() > 1;
@@ -105,6 +106,7 @@ impl RoomType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RoomData {
     pub name: String,
+    pub id: String,
     pub shape: RoomShape,
     pub room_type: RoomType,
     pub bottom: i32,
@@ -117,9 +119,10 @@ pub struct RoomData {
 
 impl RoomData {
     pub fn from_raw_json(raw_data: &str) -> RoomData {
-        let json_data: Value = serde_json::from_str(raw_data).unwrap();
+        let json_data: Value = serde_json::from_str(raw_data).unwrap(); // surely we just parse into a struct instead of doing this indexing?
 
         let name = json_data["name"].as_str().unwrap().to_string();
+        let id = json_data["id"].as_str().unwrap().to_string();
         let shape = RoomShape::from_str(json_data["shape"].as_str().unwrap());
         let room_type = RoomType::from_str(json_data["type"].as_str().unwrap());
         let bottom = json_data["bottom"].as_number().unwrap().as_u64().unwrap() as i32;
@@ -144,6 +147,7 @@ impl RoomData {
 
         RoomData {
             name,
+            id,
             shape,
             room_type,
             bottom,
@@ -158,6 +162,7 @@ impl RoomData {
     pub fn dummy() -> RoomData {
         RoomData {
             name: String::from("Dummy"),
+            id: String::from(""),
             shape: RoomShape::OneByOne,
             room_type: RoomType::Normal,
             bottom: 68,
@@ -173,19 +178,17 @@ impl RoomData {
 pub fn get_random_data_with_type(
     room_type: RoomType,
     room_shape: RoomShape,
-    data_storage: &HashMap<usize, RoomData>,
-    current_rooms: &Vec<Room>,
+    data_storage: &DeterministicHashMap<usize, RoomData>,
+    current_rooms: &[Room],
 ) -> RoomData {
-    let mut rng = rand::rng();
-    
     data_storage.iter()
         .filter(|data| {
             data.1.room_type == room_type &&
-            data.1.shape == room_shape &&
-            !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
+                data.1.shape == room_shape &&
+                !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
         })
         .map(|x| x.1)
-        .choose(&mut rng)
+        .choose(&mut seeded_rng())
         .unwrap_or(&RoomData::dummy())
         .clone()
 }

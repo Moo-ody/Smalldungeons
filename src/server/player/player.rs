@@ -1,20 +1,20 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::client_bound::chat::Chat;
-use crate::net::packets::client_bound::close_window::CloseWindowPacket;
-use crate::net::packets::client_bound::open_window::{InventoryType, OpenWindowPacket};
-use crate::net::packets::client_bound::set_slot::SetSlot;
-use crate::net::packets::client_bound::window_items::WindowItems;
-use crate::net::packets::packet::SendPacket;
+use crate::net::packets::packet::IdentifiedPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::net::protocol::play::clientbound::{Chat, OpenWindow, SetSlot, WindowItems};
 use crate::server::entity::entity::EntityId;
+use crate::server::player::container_ui::UI;
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::player::scoreboard::Scoreboard;
-use crate::server::player::ui::UI;
 use crate::server::server::Server;
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
+use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
+use uuid::Uuid;
 
 /// type alias to represent a client's user id.
 ///
@@ -22,14 +22,23 @@ use tokio::sync::mpsc::UnboundedSender;
 pub type ClientId = u32;
 
 // add uuid
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct GameProfileProperty {
+    pub value: String,
+    pub signature: Option<String>
+}
+
+#[derive(Debug, Clone)]
 pub struct GameProfile {
+    pub uuid: Uuid,
     pub username: String,
+    pub properties: HashMap<String, GameProfileProperty>
 }
 
 #[derive(Debug)]
 pub struct Player {
     pub server: *mut Server,
+    pub packet_buffer: PacketBuffer,
     pub network_tx: UnboundedSender<NetworkThreadMessage>,
     
     pub profile: GameProfile,
@@ -54,18 +63,11 @@ pub struct Player {
     pub inventory: Inventory,
     pub held_slot: u8,
     
-    pub current_window_id: u8,
+    pub window_id: i8,
     pub current_ui: UI,
+    // pub current_ui: UI,
 
     pub sidebar: Scoreboard,
-    
-    // im assuming this is for sending packets for entities inside of player's render distance.
-    // if so, it'd be better to just loop over every player and check if in distance instead
-    // because:
-    // - there is usually (and should) only be 1 player at a time
-    // - most entities would be in render distance already
-    // obviously this would be better if the render distance was much larger and much more entities
-    // pub observed_entities: HashSet<EntityId>,
 }
 
 impl Player {
@@ -75,9 +77,12 @@ impl Player {
         client_id: ClientId,
         profile: GameProfile,
         position: DVec3,
+        yaw: f32,
+        pitch: f32,
     ) -> Self {
         Self {
             server,
+            packet_buffer: PacketBuffer::new(),
             network_tx: server.network_tx.clone(),
             profile,
             client_id,
@@ -85,8 +90,8 @@ impl Player {
 
             position,
             on_ground: false,
-            yaw: 0.0,
-            pitch: 0.0,
+            yaw,
+            pitch,
             last_position: DVec3::ZERO,
             last_yaw: 0.0,
             last_pitch: 0.0,
@@ -99,7 +104,7 @@ impl Player {
             inventory: Inventory::empty(),
             held_slot: 0,
             
-            current_window_id: 1,
+            window_id: 1,
             current_ui: UI::None,
             
             sidebar: Scoreboard::new(),
@@ -118,9 +123,14 @@ impl Player {
         &mut self.server_mut().world
     }
     
-    /// sends a packet to the player
-    pub fn send_packet<T>(&self, packet: impl SendPacket<T>) -> anyhow::Result<()> {
-        packet.send_packet(self.client_id, &self.network_tx)
+    pub fn write_packet<P : IdentifiedPacket + PacketSerializable>(&mut self, packet: &P) {
+        self.packet_buffer.write_packet(packet);
+    }
+    
+    pub fn flush_packets(&mut self) {
+        if !self.packet_buffer.buffer.is_empty() {
+            let _ = self.network_tx.send(self.packet_buffer.get_packet_message(&self.client_id));
+        }
     }
     
     // todo: tick function here?, 
@@ -130,9 +140,9 @@ impl Player {
     //     Ok(())
     // }
     
-    /// updates player position and sets last position
+    /// updates player position
     pub fn set_position(&mut self, x: f64, y: f64, z: f64) {
-        self.last_position = self.position;
+        // self.last_position = self.position;
         self.position = DVec3::new(x, y, z);
     }
     
@@ -145,71 +155,42 @@ impl Player {
         )
     }
 
-    // /// function to have a player start observing an entity
-    // ///
-    // /// presumably to be called when the entity should be loaded for said player.
-    // /// the player will be added to the entities observing list
-    // /// and the entity to the players observing list. (the latter is for removing themselves from the entities list if the entity should be unloaded for them)
-    // pub fn observe_entity(&mut self, entity: &mut Entity, network_tx: &UnboundedSender<NetworkThreadMessage>) -> anyhow::Result<()> {
-    //     if self.entity_id == entity.entity_id { bail!("Can't observe self") }
-    //     self.observed_entities.insert(entity.entity_id);
-    //     entity.observing_players.insert(self.client_id);
-    // 
-    //     // todo: logic to get the right packet for the entity type. Ie: SpawnObject for objects, SpawnPlayer for players, etc.
-    //     SpawnMob::from_entity(entity)?.send_packet(self.client_id, network_tx)?;
-    //     Ok(())
-    // }
-
-    // /// function to have a player stop observing an entity
-    // ///
-    // /// presumably called when the entity should be unloaded for said player.
-    // ///
-    // /// todo: handling for destroy entities packet sending.
-    // pub fn stop_observing_entity(&mut self, entity: &mut Entity) {
-    //     self.observed_entities.remove(&entity.entity_id);
-    //     entity.observing_players.remove(&self.client_id);
-    // }
-
     pub fn handle_left_click(&mut self) {
         
     }
     
-    /// todo: better interaction, maybe?
     pub fn handle_right_click(&mut self) {
         if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
     }
     
-    pub fn open_ui(&mut self, ui: UI) -> anyhow::Result<()> {
+    pub fn open_ui(&mut self, ui: UI) {
         self.current_ui = ui;
-        
+        // kind of temporary solution,
+        // instead of just putting the item in an available slot if it is dragged
+        if ui == UI::Inventory { 
+            if let ItemSlot::Filled(item) = self.inventory.dragged_item { 
+                self.write_packet(&SetSlot {
+                    window_id: -1,
+                    slot: 0,
+                    item_stack: Some(item.get_item_stack()),
+                })
+            }
+        }
         if let Some(container_data) = ui.get_container_data() {
-            self.current_window_id += 1;
-            
-            OpenWindowPacket {
-                window_id: self.current_window_id,
-                inventory_type: InventoryType::Container,
+            self.window_id += 1;
+            self.write_packet(&OpenWindow {
+                window_id: self.window_id,
+                inventory_type: "minecraft:container".into(),
                 window_title: ChatComponentTextBuilder::new(container_data.title).build(),
                 slot_count: container_data.slot_amount,
-            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-            
-            self.sync_inventory()?;
+            });
+            self.sync_inventory();
         }
-        Ok(()) 
     }
     
-    pub fn close_ui(&mut self) -> anyhow::Result<()> {
-        self.current_ui = UI::None;
-        CloseWindowPacket {
-            window_id: self.current_window_id as i8,
-        }.send_packet(self.client_id, &self.server_mut().network_tx)?;
-        Ok(())
-    }
-
-    
-    pub fn sync_inventory(&mut self) -> anyhow::Result<()> {
-        let network_tx = &self.server_mut().network_tx;
+    pub fn sync_inventory(&mut self) {
         let mut inv_items = Vec::new();
         
         for item in &self.inventory.items {
@@ -217,37 +198,35 @@ impl Player {
         }
         
         if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
-            WindowItems {
-                window_id: self.current_window_id,
+            self.write_packet(&WindowItems {
+                window_id: self.window_id,
                 items,
-            }.send_packet(self.client_id, &self.server_mut().network_tx)?;
+            });
         }
         
-        WindowItems {
+        self.write_packet(&WindowItems {
             window_id: 0,
             items: inv_items,
-        }.send_packet(self.client_id, network_tx)?;
-        
-        if let UI::Inventory = self.current_ui { 
-            SetSlot {
+        });
+        if let UI::Inventory = self.current_ui {
+            self.write_packet(&SetSlot {
                 window_id: -1,
                 slot: 0,
                 item_stack: self.inventory.dragged_item.get_item_stack(),
-            }.send_packet(self.client_id, network_tx)?;
+            })
         } else {
-            SetSlot {
+            self.write_packet(&SetSlot {
                 window_id: -1,
                 slot: 0,
                 item_stack: None,
-            }.send_packet(self.client_id, network_tx)?;
+            })
         }
-        Ok(())
     }
     
-    pub fn send_msg(&self, msg: &str) -> anyhow::Result<()> {
-        Chat {
+    pub fn send_message(&mut self, msg: &str) {
+        self.write_packet(&Chat {
             component: ChatComponentTextBuilder::new(msg).build(),
-            typ: 0,
-        }.send_packet(self.client_id, &self.network_tx)
+            chat_type: 0 
+        })
     }
 }

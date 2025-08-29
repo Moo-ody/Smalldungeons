@@ -2,11 +2,14 @@ pub mod player_profile;
 pub mod header;
 pub mod footer;
 
-use crate::net::packets::client_bound::player_list_item::{PlayerListAction, PlayerListItem};
+use crate::net::protocol::play::clientbound::PlayerListItem;
+use crate::net::var_int::VarInt;
+use crate::server::player::player::{GameProfile, GameProfileProperty};
 use crate::server::utils::chat_component::chat_component_text::ChatComponentText;
-use crate::server::utils::player_list::player_profile::{GameProfile, PlayerData};
+use crate::server::utils::player_list::player_profile::PlayerData;
 use std::array;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
 pub struct PlayerList {
     lines: [PlayerData; 80],
@@ -35,14 +38,20 @@ impl PlayerList {
         }
 
         let lines = self.updated.drain().map(|index| {
-            self.lines[index].clone()
+            &self.lines[index]
         }).collect::<Vec<_>>();
 
-        Some(PlayerListItem::new(PlayerListAction::UpdateDisplayName, lines))
+        Some(PlayerListItem {
+            action: VarInt(3),
+            players: lines,
+        })
     }
 
-    pub fn new_packet(&mut self) -> PlayerListItem {
-        PlayerListItem::new(PlayerListAction::AddPlayer, self.lines.clone())
+    pub fn new_packet(&self) -> PlayerListItem {
+        PlayerListItem {
+            action: VarInt(0),
+            players: self.lines.iter().collect(), // previously this used an rc to save on clones when the packet was sent, however with writing packets using a borrowed reference, this is unnecessary.
+        }
     }
 }
 
@@ -51,7 +60,20 @@ fn generate_default_lines<const N: usize>() -> [PlayerData; N] {
     array::from_fn(|i| {
         let left = index_to_letter(i / 26);
         let right = index_to_letter(i % 26);
-        PlayerData::new(GameProfile::new(format!("!{}-{}", left, right)))
+        // havent tested it
+        PlayerData::new(GameProfile {
+            uuid: Uuid::new_v4(),
+            username: format!("!{}-{}", left, right),
+            properties: HashMap::from(
+                [(
+                    "textures".to_owned(),
+                    GameProfileProperty {
+                        value: player_profile::GRAY.to_owned(),
+                        signature: player_profile::GRAY_SIG.to_owned().into(),
+                    }
+                )]
+            ),
+        })
     })
 }
 

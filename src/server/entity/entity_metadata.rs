@@ -1,9 +1,10 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::items::item_stack::ItemStack;
 
 /// Represents an entity type in Minecraft.
 #[derive(Debug, Clone)]
 pub enum EntityVariant {
+    Player,
     DroppedItem {
         item: ItemStack,
     },
@@ -23,6 +24,8 @@ impl EntityVariant {
     /// Returns the mc entity id of the variant 
     pub const fn get_id(&self) -> i8 {
         match self {
+            // players need to be spawned with SpawnPlayer packet
+            EntityVariant::Player => unreachable!(),
             EntityVariant::DroppedItem { .. } => 2,
             EntityVariant::ArmorStand => 30,
             EntityVariant::Zombie { .. } => 54,
@@ -31,6 +34,13 @@ impl EntityVariant {
         }
     }
 
+    pub const fn is_player(&self) -> bool {
+        match self { 
+            EntityVariant::Player => true,
+            _ => false,
+        }
+    }
+    
     /// Returns if the variant is an object and needs to be spawned
     /// using Spawn Object packet instead of Spawn Mob
     pub const fn is_object(&self) -> bool {
@@ -65,21 +75,21 @@ const FLOAT: u8 = 3;
 const STRING: u8 = 4;
 const ITEM_STACK: u8 = 5;
 
-fn write_data(buf: &mut Vec<u8>, data_type: u8, id: u8, data: impl PacketWrite) {
+fn write_data(buf: &mut Vec<u8>, data_type: u8, id: u8, data: impl PacketSerializable) {
     buf.push((data_type << 5 | id & 31) & 255);
     data.write(buf);
 }
 
-impl PacketWrite for EntityMetadata {
+impl PacketSerializable for EntityMetadata {
     fn write(&self, buf: &mut Vec<u8>) {
         let mut flags: u8 = 0;
-        
+
         if self.is_invisible {
-            flags |= 0b00100000 
+            flags |= 0b00100000
         }
-        
+
         write_data(buf, BYTE, 0, flags);
-        
+
         match &self.variant {
             EntityVariant::DroppedItem { item } => {
                 write_data(buf, ITEM_STACK, 10, Some(item.clone()))

@@ -1,9 +1,11 @@
-use crate::net::packets::packet_write::PacketWrite;
-use crate::server::utils::nbt::encode::serialize_nbt;
-use crate::server::utils::nbt::NBT;
+use crate::net::packets::packet_deserialize::PacketDeserializable;
+use crate::net::packets::packet_serialize::PacketSerializable;
+use crate::server::utils::nbt::deserialize::deserialize_nbt;
+use crate::server::utils::nbt::nbt::NBT;
+use crate::server::utils::nbt::serialize::serialize_nbt;
 use bytes::{Buf, BytesMut};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ItemStack {
     pub item: i16,
     pub stack_size: i8,
@@ -11,7 +13,7 @@ pub struct ItemStack {
     pub tag_compound: Option<NBT>,
 }
 
-impl PacketWrite for Option<ItemStack> {
+impl PacketSerializable for Option<ItemStack> {
     fn write(&self, buf: &mut Vec<u8>) {
         if let Some(item_stack) = self {
             item_stack.item.write(buf);
@@ -28,16 +30,18 @@ impl PacketWrite for Option<ItemStack> {
     }
 }
 
-pub fn read_item_stack(buf: &mut BytesMut) -> Option<ItemStack> {
-    let id = buf.get_i16();
-    if id >= 0 {
-        let item_stack = ItemStack {
-            item: id,
-            stack_size: buf.get_i8(),
-            metadata: buf.get_i16(),
-            tag_compound: None,
-        };
-        return Some(item_stack);
+impl PacketDeserializable for Option<ItemStack> {
+    fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
+        let id = buffer.get_i16();
+        if id >= 0 {
+            let item_stack = ItemStack {
+                item: id,
+                stack_size: buffer.get_i8(),
+                metadata: buffer.get_i16(),
+                tag_compound: deserialize_nbt(buffer),
+            };
+            return Ok(Some(item_stack));
+        }
+        Ok(None)
     }
-    None
 }

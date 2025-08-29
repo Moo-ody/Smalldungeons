@@ -1,210 +1,94 @@
-use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::packet_context::PacketContext;
-use crate::net::var_int::write_var_int;
-use crate::server::player::player::ClientId;
-use anyhow::Result;
-use bytes::BytesMut;
-use tokio::io::AsyncWrite;
+use crate::net::client::Client;
+use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
+use crate::server::player::player::Player;
 use tokio::sync::mpsc::UnboundedSender;
 
-#[macro_export]
-macro_rules! register_clientbound_packets {
-    { $($packet_ty:ident),* $(,)? } => {
+/// used for client bound packets, to identify them
+pub trait IdentifiedPacket {
+    const PACKET_ID: i32;
+}
 
-        #[derive(Debug, Clone)]
-        pub enum ClientBoundPacket {
-            $(
-                $packet_ty($packet_ty),
-            )*
-        }
-        
+/// Implements IdentifiedPacket for all entries with the corresponding packet id.
+#[macro_export]
+macro_rules! register_packets {
+    ($($packet:ty = $id:expr);* $(;)?) => {
         $(
-            impl From<$packet_ty> for ClientBoundPacket {
-                fn from(pkt: $packet_ty) -> Self {
-                    ClientBoundPacket::$packet_ty(pkt)
-                }
-            }
-        
-            impl $crate::net::packets::packet::SendPacket<$packet_ty> for $packet_ty {
-                fn send_packet(self, client_id: $crate::server::player::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
-                    // println!("Sending packet {:?} to client {}", self, client_id);
-                    ClientBoundPacket::$packet_ty(self).send_packet(client_id, network_tx)
-                    
-                }
+            impl IdentifiedPacket for $packet {
+                const PACKET_ID: i32 = $id;
             }
         )*
+    };
+}
 
-        #[async_trait::async_trait]
-        impl crate::net::packets::packet::ClientBoundPacketImpl for ClientBoundPacket {
-            async fn write_to<W: tokio::io::AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()> {
-                match self {
-                    $(
-                        ClientBoundPacket::$packet_ty(pkt) => pkt.write_to(writer).await,
-                    )*
-                }
-            }
+pub struct ProcessContext<'a> {
+    pub network_thread_tx: &'a UnboundedSender<NetworkThreadMessage>,
+    pub main_thread_tx: &'a UnboundedSender<MainThreadMessage>,
+}
 
-            async fn encode(&self) -> anyhow::Result<Vec<u8>> {
-                match self {
-                    $(
-                        ClientBoundPacket::$packet_ty(pkt) => pkt.encode().await,
-                    )*
-                }
-            }
-        }
-
-        impl ClientBoundPacket {
-            pub fn send_packet(self, client_id: crate::server::player::player::ClientId, network_tx: &tokio::sync::mpsc::UnboundedSender<$crate::net::internal_packets::NetworkThreadMessage>) -> anyhow::Result<()> {
-                network_tx.send($crate::net::internal_packets::NetworkThreadMessage::SendPacket {
-                    client_id,
-                    packet: self
-                })?;
-                Ok(())
-            }
-        }
+pub trait ProcessPacket {
+    async fn process<'a>(&self, _: &mut Client, _: ProcessContext<'a>) -> anyhow::Result<()> {
+        Ok(())
+    }
+    
+    /// processes (play) packet sent by the player.
+    /// 
+    /// this must be run on the main thread.
+    fn process_with_player(&self, player: &mut Player) {
     }
 }
 
-pub trait SendPacket<T> where T: Sized {
-    fn send_packet(self, client_id: ClientId, network_tx: &UnboundedSender<NetworkThreadMessage>) -> anyhow::Result<()>;
-}
-
-#[async_trait::async_trait]
-pub trait ClientBoundPacketImpl: Send + Sync {
-    async fn write_to<W: AsyncWrite + Unpin + Send>(&self, writer: &mut W) -> tokio::io::Result<()>;
-
-    async fn encode(&self) -> anyhow::Result<Vec<u8>> {
-        let mut buf = Vec::new();
-        self.write_to(&mut buf).await?;
-        Ok(buf)
-    }
-}
-
+// since this doesn't need to be imported often (unlike client bound packets)
+// it can use an enum just fine, (no annoying importing)
 #[macro_export]
 macro_rules! register_serverbound_packets {
     (
-        $(
-            $state:path {
-                $(
-                    $id:expr => $packet_ty:ident,
-                )*
-            }
-        ),* $(,)?
+        $enum_name:ident;
+        $( $packet_type:ident = $id:literal );* $(;)?
     ) => {
-        use crate::net::packets::packet_context::PacketContext;
-        use crate::net::client::Client;
-        use crate::net::packets::packet::ServerBoundPacket;
-        use crate::net::var_int::read_var_int;
-        use anyhow::{bail, Context};
-        use bytes::BytesMut;
-
-        #[derive(Debug)]
-        pub enum ServerBoundPackets {
-            $(
-                $(
-                    $packet_ty($packet_ty),
-                )*
-            )*
+        pub enum $enum_name {
+            $( $packet_type($packet_type), )*
         }
-
-        #[async_trait::async_trait]
-        impl ServerBoundPacket for ServerBoundPackets {
-            async fn read_from(_buf: &mut BytesMut) -> anyhow::Result<Self> {
-                unimplemented!("Use parse_packet instead");
-            }
-
-            async fn process<'a> (&self, context: PacketContext<'a>) -> anyhow::Result<()> {
-                match self {
-                    $(
+        
+        impl crate::net::packets::packet_deserialize::PacketDeserializable for $enum_name {
+            fn read(buffer: &mut bytes::BytesMut) -> anyhow::Result<Self> {
+                if let Some(packet_id) = crate::net::var_int::read_var_int(buffer) {
+                    // println!("packet id {}", packet_id);
+                    match packet_id {
                         $(
-                            ServerBoundPackets::$packet_ty(pkt) => pkt.process(context).await,
+                            $id => Ok($enum_name::$packet_type(
+                                <$packet_type as crate::net::packets::packet_deserialize::PacketDeserializable>::read(buffer)?
+                            )),
                         )*
-                    )*
-                }
-            }
-
-            fn main_process(&self, world: &mut $crate::server::world::World, player: &mut $crate::server::player::player::Player) -> anyhow::Result<()> {
-                match self {
-                    $(
-                        $(
-                            ServerBoundPackets::$packet_ty(pkt) => pkt.main_process(world, player),
-                        )*
-                    )*
+                    _ => anyhow::bail!(": invalid packet 0x{:02x}", packet_id),
+                    }
+                } else {
+                    anyhow::bail!("failed to read var_int")
                 }
             }
         }
-
-        pub async fn parse_packet(buf: &mut BytesMut, client: &mut Client) -> anyhow::Result<ServerBoundPackets> {
-            //let _packet_len = read_var_int(buf).ok_or_else(|| anyhow::anyhow!("Failed to read packet length"))?; this gets consumed by the read_whole_packet call
-            let packet_id = read_var_int(buf).context("Failed to read packet id")?;
-            match client.connection_state {
-                $(
-                    $state => match packet_id {
-                        $(
-                            $id => {
-                                // println!("Received from {} packet id {} for state {:?}", client.client_id, packet_id, stringify!($state));
-                                let pkt = $packet_ty::read_from(buf).await?;
-                                let packet = ServerBoundPackets::$packet_ty(pkt);
-                                Ok(packet)
-                            }
-                        )*
-                        _ => bail!("Unknown packet id {} for state {:?}", packet_id, stringify!($state)),
-                    },
-                )*
+        
+        impl crate::net::packets::packet::ProcessPacket for $enum_name {
+            async fn process<'a>(&self, client: &mut Client, ctx: crate::net::packets::packet::ProcessContext<'a>) -> anyhow::Result<()> {
+                use crate::net::packets::packet::ProcessPacket;
+                match self {
+                    $(
+                        $enum_name::$packet_type(inner) => {
+                            <_ as ProcessPacket>::process(inner, client, ctx).await
+                        }
+                    )*
+                }
+            }
+            
+            fn process_with_player(&self, player: &mut crate::server::player::player::Player) {
+                match self {
+                    $(
+                        $enum_name::$packet_type(inner) => {
+                            <_ as ProcessPacket>::process_with_player(inner, player)
+                        }
+                    )*
+                }
             }
         }
     };
 }
 
-#[macro_export]
-macro_rules! print_bytes_hex {
-    ($ident:tt, $buf:expr) => {
-        println!("Raw bytes for {} [{}]: {}", $ident, $buf.len(), $buf.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<String>>()
-            .join(" "));};
-}
-
-#[async_trait::async_trait]
-pub trait ServerBoundPacket: Send + Sync {
-    async fn read_from(buf: &mut BytesMut) -> Result<Self> where Self: Sized;
-
-    async fn process<'a>(&self, _: PacketContext<'a>) -> Result<()> {
-        Ok(())
-    }
-
-    fn main_process(&self, _: &mut crate::server::world::World, _: &mut crate::server::player::player::Player) -> Result<()> {
-        Ok(())
-    }
-}
-
-#[macro_export]
-macro_rules! build_packet {
-    ($packet_id:expr $(, $value:expr )* $(,)?) => {{
-        let mut payload = Vec::new();
-
-        $crate::net::var_int::write_var_int(&mut payload, $packet_id);
-
-        $(
-            $crate::net::packets::packet_write::PacketWrite::write(&$value, &mut payload);
-        )*
-        $crate::net::packets::packet::finish_packet(payload)
-    }};
-}
-
-#[macro_export]
-macro_rules! partial_packet {
-    ($buf:expr => $($value:expr),* $(,)?) => {{
-        $(
-            $crate::net::packets::packet_write::PacketWrite::write(&$value, &mut $buf);
-        )*
-    }}
-}
-
-/// appends the length of the payload and then the payload to the returned buffer.
-pub fn finish_packet(mut payload: Vec<u8>) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(payload.len() + 5);
-    write_var_int(&mut buf, payload.len() as i32);
-    buf.append(&mut payload);
-    buf
-}

@@ -1,6 +1,10 @@
-use crate::net::packets::client_bound::entity::entity_teleport::EntityTeleport;
-use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::{EntityTeleport, SpawnMob, SpawnObject};
+use crate::net::protocol::play::serverbound::EntityInteractionType;
+use crate::net::var_int::VarInt;
+use crate::server::chunk::chunk::Chunk;
 use crate::server::entity::entity_metadata::EntityMetadata;
+use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 
@@ -8,20 +12,16 @@ pub type EntityId = i32;
 
 /// provides functionality to an entity
 pub trait EntityImpl {
-
-    /// runs when an entity is spawned
-    /// used to initialize more complex stuff
-    fn spawn(&mut self, entity: &mut Entity) {}
+    
+    fn spawn(&mut self, _: &mut Entity, _: &mut PacketBuffer) {}
+    
+    fn despawn(&mut self, _: &mut Entity, _: &mut PacketBuffer) {}
 
     /// runs when an entity is ticked
     /// used to add custom functionality to an entity
-    fn tick(&mut self, entity: &mut Entity);
-
-    // todo: semi-despawn, i.e goes out of render distance
+    fn tick(&mut self, entity: &mut Entity, packet_buffer: &mut PacketBuffer);
     
-    /// runs when an entity is despawned
-    /// used to clean up more complicated stuff
-    fn despawn(&mut self, entity: &mut Entity) {}
+    fn interact(&mut self, _: &mut Entity, _: &mut Player, _: &EntityInteractionType) {}
 }
 
 /// represents an entity, its position, rotation, and its variant
@@ -40,7 +40,7 @@ pub struct Entity {
     pub last_pitch: f32,
     
     pub ticks_existed: u32,
-
+    
     pub metadata: EntityMetadata,
 }
 
@@ -71,23 +71,87 @@ impl Entity {
     pub fn world_mut<'a>(&self) -> &'a mut World {
         unsafe { self.world.as_mut().unwrap() }
     }
-
+    
+    pub fn enter_view() {
+        
+    }
+    
+    pub fn write_spawn_packet(&self, buffer: &mut PacketBuffer) {
+        let variant = &self.metadata.variant;
+        if variant.is_player() {
+            // needs player list item
+            // buffer.write_packet(&SpawnPlayer {
+            //     entity_id: VarInt(self.id),
+            //     uuid,
+            //     x: self.position.x,
+            //     y: self.position.y,
+            //     z: self.position.z,
+            //     yaw: self.yaw,
+            //     pitch: self.pitch,
+            //     current_item: 0,
+            //     metadata: self.metadata.clone(),
+            // });
+        } else if variant.is_object() { 
+            buffer.write_packet(&SpawnObject {
+                entity_id: VarInt(self.id),
+                entity_variant: variant.get_id(),
+                x: self.position.x,
+                y: self.position.y,
+                z: self.position.z,
+                yaw: self.yaw,
+                pitch: self.pitch,
+                data: 0,
+                velocity_x: self.velocity.x,
+                velocity_y: self.velocity.y,
+                velocity_z: self.velocity.z,
+            })
+        } else {
+            buffer.write_packet(&SpawnMob {
+                entity_id: VarInt(self.id),
+                entity_variant: variant.get_id(),
+                x: self.position.x,
+                y: self.position.y,
+                z: self.position.z,
+                yaw: self.yaw,
+                pitch: self.pitch,
+                head_yaw: self.yaw,
+                velocity_x: self.velocity.x,
+                velocity_y: self.velocity.y,
+                velocity_z: self.velocity.z,
+                metadata: self.metadata.clone(),
+            });
+        }
+    } 
+    
     pub fn tick(
         &mut self,
         entity_impl: &mut Box<dyn EntityImpl>,
-        packets: &mut Vec<ClientBoundPacket>
+        packet_buffer: &mut PacketBuffer
     ) {
-        // this might not be a good idea
-        let test: *mut Entity = self;
-        let entity = unsafe { test.as_mut().unwrap() };
-        entity_impl.tick(self);
+        entity_impl.tick(self, packet_buffer);
         
         if self.position != self.last_position {
-            // TODO: if distance is < 8 blocks use entity rel move
-            packets.push(EntityTeleport::from_entity(entity).into());
+            packet_buffer.write_packet(&EntityTeleport {
+                entity_id: self.id,
+                pos_x: self.position.x,
+                pos_y: self.position.y,
+                pos_z: self.position.z,
+                yaw: self.yaw,
+                pitch: self.pitch,
+                on_ground: self.on_ground,
+            });
             self.last_position = self.position;
         }
         self.ticks_existed += 1;
+    }
+    
+    pub fn chunk_position(&self) -> (i32, i32) {
+        ((self.position.x.floor() as i32) >> 4, (self.position.z.floor() as i32) >> 4)
+    }
+    
+    pub fn chunk_mut<'a>(&self) -> Option<&'a mut Chunk> {
+        let (x, z) = self.chunk_position();
+        self.world_mut().chunk_grid.get_chunk_mut(x, z)
     }
 }
 
@@ -96,7 +160,5 @@ impl Entity {
 pub struct NoEntityImpl;
 
 impl EntityImpl for NoEntityImpl {
-    fn spawn(&mut self, entity: &mut Entity) {}
-    fn tick(&mut self, entity: &mut Entity) {}
-    fn despawn(&mut self, entity: &mut Entity) {}
+    fn tick(&mut self, _: &mut Entity, _: &mut PacketBuffer) {}
 }

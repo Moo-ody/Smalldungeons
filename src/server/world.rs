@@ -1,11 +1,8 @@
-use crate::net::packets::client_bound::block_change::BlockChange;
-use crate::net::packets::client_bound::entity::destroy_entities::DestroyEntities;
-use crate::net::packets::client_bound::spawn_mob::PacketSpawnMob;
-use crate::net::packets::client_bound::spawn_object::PacketSpawnObject;
-use crate::net::packets::packet::SendPacket;
-use crate::net::packets::packet_registry::ClientBoundPacket;
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::DestroyEntites;
+use crate::net::var_int::VarInt;
 use crate::server::block::block_interact_action::BlockInteractAction;
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::chunk::chunk_grid::ChunkGrid;
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
@@ -14,7 +11,10 @@ use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::mem::take;
+
+pub const VIEW_DISTANCE: u8 = 6;
 
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
@@ -32,12 +32,14 @@ pub struct World {
     pub players: HashMap<ClientId, Player>,
     pub entities: HashMap<EntityId, (Entity, Box<dyn EntityImpl>)>,
 
-    pub entities_for_removal: VecDeque<EntityId>,
+    pub entities_for_removal: Vec<EntityId>,
 
     // pub commands: Vec<Command>
     
     // pub player_info: PlayerList,
-    pub spawn_point: BlockPos,
+    pub spawn_point: DVec3,
+    pub spawn_yaw: f32,
+    pub spawn_pitch: f32,
 }
 
 impl World {
@@ -46,7 +48,7 @@ impl World {
         World {
             server: std::ptr::null_mut(),
 
-            chunk_grid: ChunkGrid::new(14),
+            chunk_grid: ChunkGrid::new(16, 13, 13),
             interactable_blocks: HashMap::new(),
 
             player_info: PlayerList::new(),
@@ -54,12 +56,11 @@ impl World {
             next_entity_id: 1, // might have to start at 1
             players: HashMap::new(),
             entities: HashMap::new(),
-            spawn_point: BlockPos {
-                x: 20,
-                y: 69,
-                z: 20,
-            },
-            entities_for_removal: VecDeque::new(),
+            entities_for_removal: Vec::new(),
+
+            spawn_point: DVec3::ZERO,
+            spawn_yaw: 0.0,
+            spawn_pitch: 0.0,
         }
     }
 
@@ -73,12 +74,7 @@ impl World {
         id
     }
 
-    pub fn spawn_entity<E : EntityImpl + 'static>(
-        &mut self,
-        position: DVec3,
-        metadata: EntityMetadata,
-        mut entity_impl: E,
-    ) -> anyhow::Result<EntityId> {
+    pub fn spawn_entity<E : EntityImpl + 'static>(&mut self,position: DVec3, metadata: EntityMetadata, mut entity_impl: E,) -> anyhow::Result<EntityId> {
         let world_ptr: *mut World = self;
         let mut entity = Entity::new(
             world_ptr,
@@ -86,18 +82,16 @@ impl World {
             position,
             metadata,
         );
-        if entity.metadata.variant.is_object() {
-            for player in self.players.values() {
-                player.send_packet(PacketSpawnObject::from_entity(&entity))?;
-            }
-        } else {
-            for player in self.players.values() {
-                player.send_packet(PacketSpawnMob::from_entity(&entity))?;
-            }
+
+        let chunk_x = (entity.position.x.floor() as i32) >> 4;
+        let chunk_z = (entity.position.z.floor() as i32) >> 4;
+        
+        if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+            chunk.insert_entity(entity.id);
+            entity.write_spawn_packet(&mut chunk.packet_buffer);
+            entity_impl.spawn(&mut entity, &mut chunk.packet_buffer);
         }
 
-        entity_impl.spawn(&mut entity);
-        
         let id = entity.id;
         self.entities.insert(id, (entity, Box::new(entity_impl)));
         Ok(id)
@@ -105,45 +99,39 @@ impl World {
 
     /// adds the entity id to 
     pub fn despawn_entity(&mut self, entity_id: EntityId) {
-        self.entities_for_removal.push_back(entity_id)
+        self.entities_for_removal.push(entity_id)
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
-        let mut packets: Vec<ClientBoundPacket> = Vec::new();
-
         if !self.entities_for_removal.is_empty() {
-            let mut packet = DestroyEntities {
-                entity_ids: Vec::with_capacity(self.entities_for_removal.len()),
-            };
-            
-            while let Some(entity_id) = self.entities_for_removal.pop_front() {
+            for entity_id in take(&mut self.entities_for_removal) {
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
-                    entity_impl.despawn(&mut entity);
+                    if let Some(chunk) = entity.chunk_mut() {
+                        chunk.packet_buffer.write_packet(&DestroyEntites {
+                            entities: vec![VarInt(entity.id)],
+                        });
+                        entity_impl.despawn(&mut entity, &mut chunk.packet_buffer);
+                        chunk.remove_entity(&entity_id);
+                    }
                 }
-                packet.entity_ids.push(entity_id)
             }
-            
-            packets.push(packet.into());
         }
+
         for (entity, entity_impl) in self.entities.values_mut() {
-            entity.tick(entity_impl, &mut packets);
-        }
-        for player in self.players.values_mut() {
-            for packet in &packets {
-                packet.clone().send_packet(player.client_id, &player.network_tx)?;
-            }
+            let packet_buffer = if let Some(chunk) = entity.chunk_mut() {
+                &mut chunk.packet_buffer
+            } else {
+                // throwaway packet buffer, doesn't feel like a good idea
+                // however there is a chance that an entity might end up outside chunk grid 
+                // and end up stuck if we tick only inside a valid chunk
+                &mut PacketBuffer::new()
+            };
+            entity.tick(entity_impl, packet_buffer);
         }
         Ok(())
     }
 
     pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
-        let server = self.server_mut();
-        for (client_id, _) in server.world.players.iter() {
-            BlockChange {
-                block_pos: BlockPos { x, y, z },
-                block_state: block.get_block_state_id()
-            }.send_packet(*client_id, &server.network_tx).unwrap();
-        }
         self.chunk_grid.set_block_at(block, x, y, z);
     }
 
@@ -151,30 +139,28 @@ impl World {
         self.chunk_grid.get_block_at(x, y, z)
     }
 
-    pub fn set_spawn_point(&mut self, new_spawn: BlockPos) {
-        self.spawn_point = new_spawn;
+    pub fn set_spawn_point(&mut self, position: DVec3, yaw: f32, pitch: f32) {
+        self.spawn_point = position;
+        self.spawn_yaw = yaw;
+        self.spawn_pitch = pitch;
     }
 
     pub fn fill_blocks(&mut self, block: Blocks, start: BlockPos, end: BlockPos) {
-        // should probably use a multi block change instead,
-        // however it only applies to one chunk,
-        // so you'd need to track the chunks and im not bothering with that
         iterate_blocks(start, end, |x, y, z| {
             self.set_block_at(block, x, y, z)
         })
     }
 }
 
-// from what ive read. this shouldn't have overhead and should inline the closure (hopefully)
 /// iterates over the blocks in area between start and end
 /// and runs a function
 #[inline(always)]
 pub fn iterate_blocks<F>(
     start: BlockPos,
     end: BlockPos,
-    mut func: F,
-)
-where F : FnMut(i32, i32, i32)
+    mut callback: F,
+) where 
+    F : FnMut(i32, i32, i32)
 {
     let x0 = start.x.min(end.x);
     let y0 = start.y.min(end.y);
@@ -187,7 +173,7 @@ where F : FnMut(i32, i32, i32)
     for x in x0..=x1 {
         for z in z0..=z1 {
             for y in y0..=y1 {
-                func(x, y, z);
+                callback(x, y, z);
             }
         }
     }

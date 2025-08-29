@@ -2,33 +2,48 @@ use crate::dungeon::crushers::Crusher;
 use crate::dungeon::door::Door;
 use crate::dungeon::dungeon::DUNGEON_ORIGIN;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
-use crate::server::block::block_pos::BlockPos;
+use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::rc::Rc;
+
+pub struct RoomSegment {
+    pub x: usize,
+    pub z: usize,
+    pub neighbours: [Option<RoomNeighbour>; 4]
+}
+
+pub struct RoomNeighbour {
+    pub door: Rc<RefCell<Door>>,
+    pub room: Rc<RefCell<Room>>,
+}
 
 pub struct Room {
-    pub segments: Vec<(usize, usize)>,
+    pub segments: Vec<RoomSegment>,
     pub room_data: RoomData,
     pub rotation: Direction,
 
     pub tick_amount: u32,
     pub crushers: Vec<Crusher>,
+    
+    pub entered: bool,
 }
 
 impl Room {
 
     pub fn new(
-        mut segments: Vec<(usize, usize)>,
+        mut segments: Vec<RoomSegment>,
         dungeon_doors: &Vec<Door>,
         room_data: RoomData
     ) -> Room {
-        // Sort room segments by y and then x
-        segments.sort_by(|a, b| a.1.cmp(&b.1));
-        segments.sort_by(|a, b| a.0.cmp(&b.0));
-
+        // Sort room segments by z and then x
+        segments.sort_by(|a, b| a.z.cmp(&b.z));
+        segments.sort_by(|a, b| a.x.cmp(&b.x));
+        
         let rotation = Room::get_rotation_from_segments(&segments, dungeon_doors);
         let corner_pos = Room::get_corner_pos_from(&segments, &rotation, &room_data);
 
@@ -64,6 +79,7 @@ impl Room {
             rotation,
             tick_amount: 0,
             crushers,
+            entered: false,
         }
     }
 
@@ -71,15 +87,14 @@ impl Room {
         Room::get_corner_pos_from(&self.segments, &self.rotation, &self.room_data)
     }
 
-    pub fn get_corner_pos_from(segments: &Vec<(usize, usize)>, rotation: &Direction, room_data: &RoomData) -> BlockPos {
-        let min_x = segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
-        let min_y = segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
+    pub fn get_corner_pos_from(segments: &Vec<RoomSegment>, rotation: &Direction, room_data: &RoomData) -> BlockPos {
+        let min_x = segments.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x;
+        let min_z = segments.iter().min_by(|a, b| a.z.cmp(&b.z)).unwrap().z;
 
         let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
         let y = 68;
-        let z = min_y as i32 * 32 + DUNGEON_ORIGIN.1;
-
-        // BlockPos { x, y, z }
+        let z = min_z as i32 * 32 + DUNGEON_ORIGIN.1;
+        
         match rotation {
             Direction::North => BlockPos { x, y, z },
             Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
@@ -93,9 +108,9 @@ impl Room {
         self.tick_amount += 1;
     }
 
-    pub fn get_1x1_shape_and_type(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> (RoomShape, Direction) {
-        let center_x = segments[0].0 as i32 * 32 + 15;
-        let center_z = segments[0].1 as i32 * 32 + 15;
+    pub fn get_1x1_shape_and_type(segments: &Vec<RoomSegment>, dungeon_doors: &Vec<Door>) -> (RoomShape, Direction) {
+        let center_x = segments[0].x as i32 * 32 + 15 + DUNGEON_ORIGIN.0;
+        let center_z = segments[0].z as i32 * 32 + 15 + DUNGEON_ORIGIN.1;
 
         // Actual doors found in the world
         let doors_opt = [
@@ -143,14 +158,12 @@ impl Room {
         }
     }
 
-    pub fn get_rotation_from_segments(segments: &Vec<(usize, usize)>, dungeon_doors: &Vec<Door>) -> Direction {
-
+    pub fn get_rotation_from_segments(segments: &Vec<RoomSegment>, dungeon_doors: &Vec<Door>) -> Direction {
         let unique_x = segments.iter()
-            .map(|x| x.0)
+            .map(|segment| segment.x)
             .collect::<HashSet<usize>>();
-
         let unique_z = segments.iter()
-            .map(|x| x.1)
+            .map(|segment| segment.z)
             .collect::<HashSet<usize>>();
 
         let not_long = unique_x.len() > 1 && unique_z.len() > 1;
@@ -158,8 +171,7 @@ impl Room {
         match segments.len() {
             1 => {
                 let (_, direction) = Room::get_1x1_shape_and_type(segments, dungeon_doors);
-
-                return direction
+                direction
             },
             2 => match unique_z.len() == 1 {
                 true => Direction::North,
@@ -170,25 +182,24 @@ impl Room {
                 if not_long {
                     let corner_value = segments.iter().find(|x| {
                         segments.iter().all(|y| {
-                            x.0.abs_diff(y.0) + x.1.abs_diff(y.1) <= 1
+                            x.x.abs_diff(y.x) + x.z.abs_diff(y.z) <= 1
                         })
-                    }).expect(format!("Invalid L room: Segments: {:?}", segments).as_str());
+                    }).expect("Invalid L room: Segments:");
 
-                    let min_x = segments.iter().min_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
-                    let min_y = segments.iter().min_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
-                    let max_x = segments.iter().max_by(|x, y| x.0.cmp(&y.0)).unwrap().0;
-                    let max_y = segments.iter().max_by(|x, y| x.1.cmp(&y.1)).unwrap().1;
+                    let min_x = segments.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x;
+                    let min_z = segments.iter().min_by(|a, b| a.z.cmp(&b.z)).unwrap().z;
+                    let max_x = segments.iter().max_by(|a, b| a.x.cmp(&b.x)).unwrap().x;
+                    let max_z = segments.iter().max_by(|a, b| a.z.cmp(&b.z)).unwrap().z;
 
-                    if corner_value == &(min_x, min_y) {
+                    if corner_value.x == min_x && corner_value.z == min_z {
                         return Direction::East
                     }
-                    if corner_value == &(max_x, min_y) {
+                    if corner_value.x == max_x && corner_value.z == min_z {
                         return Direction::South
                     }
-                    if corner_value == &(max_x, max_y) {
+                    if corner_value.x == max_x && corner_value.z == max_z {
                         return Direction::West
                     }
-
                     return Direction::North
                 }
 
@@ -212,7 +223,7 @@ impl Room {
     }
 
     fn load_default(&self, world: &mut World) {
-        for (x, z) in self.segments.iter() {
+        for segment in self.segments.iter() {
             
             // Temporary for room colors, will be changed later on to paste saved room block states
             let block = match self.room_data.room_type {
@@ -229,60 +240,58 @@ impl Room {
             world.fill_blocks(
                 block,
                 BlockPos {
-                    x: *x as i32 * 32 + DUNGEON_ORIGIN.0,
+                    x: segment.x as i32 * 32 + DUNGEON_ORIGIN.0,
                     y: self.room_data.bottom,
-                    z: *z as i32 * 32 + DUNGEON_ORIGIN.1,
+                    z: segment.z as i32 * 32 + DUNGEON_ORIGIN.1,
                 },
                 BlockPos {
-                    x: *x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+                    x: segment.x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
                     y: self.room_data.bottom,
-                    z: *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+                    z: segment.z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
                 }
             );
 
             // Merge to the side
-            if self.segments.contains(&(x+1, *z)) {
-                world.fill_blocks(
-                    block,
-                    BlockPos {
-                        x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        y: self.room_data.bottom,
-                        z: *z as i32 * 32 + DUNGEON_ORIGIN.1,
-                    },
-                    BlockPos {
-                        x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
-                        y: self.room_data.bottom,
-                        z: *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
-                    }
-                );
-            }
-            
-            // // Merge below
-            if self.segments.contains(&(*x, z+1)) {
-                world.fill_blocks(
-                    block,
-                    BlockPos {
-                        x: *x as i32 * 32 + DUNGEON_ORIGIN.0,
-                        y: self.room_data.bottom,
-                        z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
-                    },
-                    BlockPos {
-                        x: * x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
-                        y: self.room_data.bottom,
-                        z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
-                    }
-                );
-            }
+            // if self.segments.contains(&(x+1, *z)) {
+            //     world.fill_blocks(
+            //         block,
+            //         BlockPos {
+            //             x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
+            //             y: self.room_data.bottom,
+            //             z: *z as i32 * 32 + DUNGEON_ORIGIN.1,
+            //         },
+            //         BlockPos {
+            //             x: *x as i32 * 32 + 31 + DUNGEON_ORIGIN.0,
+            //             y: self.room_data.bottom,
+            //             z: *z as i32 * 32 + DUNGEON_ORIGIN.1 + 30,
+            //         }
+            //     );
+            // }
+            // 
+            // // // Merge below
+            // if self.segments.contains(&(*x, z+1)) {
+            //     world.fill_blocks(
+            //         block,
+            //         BlockPos {
+            //             x: *x as i32 * 32 + DUNGEON_ORIGIN.0,
+            //             y: self.room_data.bottom,
+            //             z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1,
+            //         },
+            //         BlockPos {
+            //             x: * x as i32 * 32 + DUNGEON_ORIGIN.0 + 30,
+            //             y: self.room_data.bottom,
+            //             z: *z as i32 * 32 + 31 + DUNGEON_ORIGIN.1 + 30,
+            //         }
+            //     );
+            // }
         }
     }
 
     pub fn load_into_world(&self, world: &mut World) {
-        if self.room_data.block_data.len() == 0 {
+        if self.room_data.block_data.is_empty() {
             self.load_default(world);
             return;
         }
-        // self.load_default(world);
-        // return;
 
         let corner = self.get_corner_pos();
 
@@ -307,7 +316,15 @@ impl Room {
         }
     }
 
-    pub fn get_world_pos(&self, room_pos: &BlockPos) -> BlockPos {
+    // pub fn get_world_pos(&self, position: DVec3) -> DVec3 {
+    //     let corner = self.get_corner_pos();
+    //     position.clone()
+    //         .rotate(self.rotation)
+    //         .add_x(corner.x as f64)
+    //         .add_z(corner.z as f64)
+    // }
+
+    pub fn get_world_block_pos(&self, room_pos: &BlockPos) -> BlockPos {
         let corner = self.get_corner_pos();
 
         room_pos.clone()

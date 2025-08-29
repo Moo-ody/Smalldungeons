@@ -1,16 +1,14 @@
-//! contains enums for messages sent between threads. 
-
-use crate::net::packets::packet_registry::{ClientBoundPacket, ServerBoundPackets};
-use crate::server::player::player::ClientId;
+use crate::net::protocol::play::serverbound::Play;
+use crate::server::player::player::{ClientId, GameProfile};
 
 // too many comments because theres 4 different client disconnect related messages and theyre all needed and do different things...
 
 pub enum NetworkThreadMessage {
-    SendPacket {
+    SendPackets {
         client_id: ClientId,
-        packet: ClientBoundPacket,
+        buffer: Vec<u8>,
     },
-
+    
     /// received when the client's handler is closed.
     /// sends a client disconnected message to the main thread
     ConnectionClosed {
@@ -34,15 +32,19 @@ pub enum ClientHandlerMessage {
 pub enum MainThreadMessage {
     PacketReceived {
         client_id: ClientId,
-        packet: ServerBoundPackets,
+        packet: Play,
     },
 
     NewPlayer {
         client_id: ClientId,
-        username: String,
+        profile: GameProfile,
     },
 
     ClientDisconnected {
         client_id: ClientId,
+    },
+
+    Abort {
+        reason: String,
     },
 }

@@ -1,17 +1,14 @@
-use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::packets::client_bound::set_slot::SetSlot;
-use crate::net::packets::packet::SendPacket;
-use crate::net::packets::server_bound::click_window::{ClickMode, ClickWindow};
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::SetSlot;
+use crate::net::protocol::play::serverbound::{ClickMode, ClickWindow};
 use crate::server::items::item_stack::ItemStack;
 use crate::server::items::Item;
-use crate::server::player::player::ClientId;
-use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default, Debug, Clone)]
 pub enum ItemSlot {
     #[default]
     Empty,
-    Filled(Item, /*ItemStack*/),
+    Filled(Item),
 }
 
 impl ItemSlot {
@@ -59,31 +56,28 @@ impl Inventory {
         }
         None
     }
-
-    // caveats:
-    // customizing armor would require implementation
-    // stacked items would also require implementation
-    // also currently almost no sync detection with confirm transaction packets and such.
+    
     pub fn click_slot(
-       &mut self,
-       packet: &ClickWindow,
-       client_id: &ClientId,
-       network_tx: &UnboundedSender<NetworkThreadMessage>,
-    ) -> anyhow::Result<bool> {
+        &mut self,
+        packet: &ClickWindow,
+        packet_buffer: &mut PacketBuffer
+    ) -> bool {
         match packet.mode {
             ClickMode::NormalClick => {
-                // this currently doesn't implement different buttons.
-                let slot = packet.slot_id;
-                if slot < 0 {
-                    SetSlot {
+                // if we ever have stackable items. this will need fixing
+                if packet.slot_id < 0 { 
+                    packet_buffer.write_packet(&SetSlot {
                         window_id: -1,
                         slot: 0,
-                        item_stack: self.dragged_item.clone().get_item_stack(),
-                    }.send_packet(*client_id, network_tx)?;
-                } else if is_valid_range(slot as usize) {
-                    let item = self.get_slot_cloned(slot as usize);
-                    self.set_slot(self.dragged_item.clone(), slot as usize);
-                    self.dragged_item = item;
+                        item_stack: self.dragged_item.get_item_stack(),
+                    })
+                } else {
+                    let slot = packet.slot_id as usize;
+                    if is_valid_range(slot) {
+                        let item = self.get_slot_cloned(slot);
+                        self.set_slot(self.dragged_item.clone(), slot);
+                        self.dragged_item = item;
+                    }
                 }
             }
             ClickMode::ShiftClick => {
@@ -91,7 +85,7 @@ impl Inventory {
                 if is_valid_range(slot) {
                     let clicked_stack = self.get_slot_cloned(slot);
                     let range = if slot >= 36 { 9..36 } else { 36..45 };
-
+    
                     for index in range {
                         let item = self.get_slot_cloned(index);
                         if let ItemSlot::Empty = &item {
@@ -105,19 +99,19 @@ impl Inventory {
             ClickMode::NumberKey => {
                 let slot = packet.slot_id as usize;
                 let button = packet.used_button as usize;
-
+    
                 if is_valid_range(slot) && button <= 9 {
-
+    
                     // this is what hypixel does, that allows ghost pickaxes
                     let to_slot = 36 + button;
                     let item = self.get_slot_cloned(slot);
-
+    
                     if to_slot == slot {
-                        SetSlot {
+                        packet_buffer.write_packet(&SetSlot {
                             window_id: 0,
                             slot: slot as i16,
                             item_stack: item.get_item_stack(),
-                        }.send_packet(*client_id, network_tx)?;
+                        })
                     } else {
                         let item_to = self.get_slot_cloned(to_slot);
                         self.set_slot(item, to_slot);
@@ -125,20 +119,23 @@ impl Inventory {
                     }
                 }
             }
+            ClickMode::MiddleClick => {
+                
+            }
             ClickMode::Drop => {
                 let slot = packet.slot_id as usize;
                 if is_valid_range(slot) {
-                    SetSlot {
+                    packet_buffer.write_packet(&SetSlot {
                         window_id: 0,
                         slot: packet.slot_id,
                         item_stack: self.get_slot_cloned(slot).get_item_stack(),
-                    }.send_packet(*client_id, network_tx)?;
+                    })
                 }
             }
+            ClickMode::Drag => {}
             ClickMode::DoubleClick => {}
-            _ => return Ok(true)
         }
-        Ok(false)
+        false
     }
 }
 

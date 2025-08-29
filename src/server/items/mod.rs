@@ -2,10 +2,10 @@ use crate::server::items::ether_transmission::handle_teleport;
 use crate::server::items::etherwarp::handle_ether_warp;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::Player;
-use crate::server::player::ui::UI;
-use crate::server::utils::nbt::encode::TAG_COMPOUND_ID;
-use crate::server::utils::nbt::{NBTNode, NBT};
+use crate::server::utils::nbt::nbt::{NBTNode, NBT};
+use crate::server::utils::nbt::serialize::TAG_COMPOUND_ID;
 use indoc::indoc;
+use std::collections::HashMap;
 
 mod etherwarp;
 pub mod item_stack;
@@ -15,19 +15,16 @@ mod ether_transmission;
 #[derive(Copy, Debug, Clone, PartialEq)]
 pub enum Item {
     SkyblockMenu,
+    MagicalMap,
     AspectOfTheVoid,
     DiamondPickaxe,
     SpiritSceptre,
-    SpeedBoots,
 }
 
 impl Item {
 
     pub fn on_right_click(&self, player: &mut Player) -> anyhow::Result<()> {
         match self {
-            Item::SkyblockMenu => {
-                player.open_ui(UI::SkyblockMenu)?
-            }
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();
                 let world = &server.world;
@@ -69,6 +66,12 @@ impl Item {
                     ]),
                 ])),
             },
+            Item::MagicalMap => ItemStack {
+                item: 358,
+                stack_size: 1,
+                metadata: 1,
+                tag_compound: None,
+            },
             Item::AspectOfTheVoid => ItemStack {
                 item: 277,
                 stack_size: 1,
@@ -97,8 +100,15 @@ impl Item {
                 stack_size: 1,
                 metadata: 0,
                 tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound({
+                            let mut map = HashMap::new();
+                            map.insert("lvl".into(), NBTNode::Short(10));
+                            map.insert("id".into(), NBTNode::Short(32));
+                            map
+                        })
+                    ]),
                     NBT::compound("display", vec![
-                        NBT::string("Name", "§9Diamond Pickaxe"),
                         NBT::list_from_string("Lore", indoc! {r#"
                             §8Breaking Power 4
 
@@ -107,14 +117,9 @@ impl Item {
                             §7breaks blocks.
 
                             §9§l§kE§r§9§l RARE PICKAXE §kE
-                        "#})
+                        "#}),
+                        NBT::string("Name", "§9Diamond Pickaxe"),
                     ]),
-                    NBT::list("ench", TAG_COMPOUND_ID, vec![
-                        NBTNode::Compound(vec![
-                            NBT::short("id", 32),
-                            NBT::short("lvl", 10),
-                        ])
-                    ])
                 ])),
             },
             Item::SpiritSceptre => ItemStack {
@@ -123,34 +128,10 @@ impl Item {
                 metadata: 0,
                 tag_compound: None,
             },
-            Item::SpeedBoots => ItemStack {
-                item: 301,
-                stack_size: 1,
-                metadata: 0,
-                tag_compound: Some(NBT::with_nodes(vec![
-                    NBT::compound("display", vec![
-                        NBT::int("color", 0),
-                        NBT::string("Name", "§bSpeedy Boots"),
-                        NBT::list_from_string("Lore", indoc! {r#"
-                            Why don't these work ):
-                        "#}),
-                    ]),
-                    NBT::list("AttributeModifiers", TAG_COMPOUND_ID, vec![
-                        NBTNode::Compound(vec![
-                            NBT::string("Name", "generic.movementSpeed"),
-                            NBT::string("AttributeName", "generic.movementSpeed"),
-                            NBT::double("Amount", 0.4),
-                            NBT::int("Operation", 0),
-                            NBT::long("UUIDLeast", 121742),
-                            NBT::long("UUIDMost", 38678),
-                        ]),
-                    ])
-                ])),
-            }
         };
         if let Some(ref mut tag) = stack.tag_compound {
-            tag.nodes.push(NBT::byte("Unbreakable", 1));
-            tag.nodes.push(NBT::int("HideFlags", 127));
+            tag.nodes.insert("Unbreakable".into(), NBTNode::Byte(1));
+            tag.nodes.insert("HideFlags".into(), NBTNode::Int(127));
         }
         stack
     }

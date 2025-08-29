@@ -1,4 +1,4 @@
-use crate::net::packets::packet_write::PacketWrite;
+use crate::net::packets::packet_serialize::PacketSerializable;
 use std::ops::Deref;
 
 /// [String] with a character size limit of N.
@@ -12,12 +12,8 @@ pub struct SizedString<const N: usize>(String);
 
 impl<const N: usize> SizedString<N> {
     pub fn truncated_owned(mut text: String) -> Self {
-        // cant just compare lengths because of how utf works >:(
-        for (index, (byte_position, _)) in text.char_indices().enumerate() {
-            if index == N {
-                text.truncate(byte_position);
-                return Self(text)
-            }
+        if let Some((byte_position, _)) = text.char_indices().nth(N) {
+            text.truncate(byte_position);
         }
         Self(text)
     }
@@ -55,7 +51,7 @@ impl<const N: usize> From<String> for SizedString<N> {
     }
 }
 
-impl<const N: usize> PacketWrite for SizedString<N> {
+impl<const N: usize> PacketSerializable for SizedString<N> {
     fn write(&self, writer: &mut Vec<u8>) {
         self.0.write(writer);
     }
