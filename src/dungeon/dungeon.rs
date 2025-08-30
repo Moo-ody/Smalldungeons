@@ -10,6 +10,8 @@ use crate::server::block::block_position::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::world;
+use crate::server::utils::sounds::Sounds;
+use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
 
@@ -493,22 +495,121 @@ impl Dungeon {
             DungeonState::Starting { tick_countdown: tick } => {
                 *tick -= 1;
                 if *tick == 0 {
+                    // Play final sounds when dungeon starts
+                    // Play sounds 20 ticks after "Starting in 1 second" message
+                    for (_, player) in &mut server.world.players {
+                        // Ender dragon growl
+                        let _ = player.write_packet(&SoundEffect {
+                            sound: Sounds::EnderDragonGrowl.id(),
+                            volume: 1.0,
+                            pitch: 1.0,
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                        });
+                        
+                        // Villager haggle
+                        let _ = player.write_packet(&SoundEffect {
+                            sound: Sounds::VillagerHaggle.id(),
+                            volume: 1.0,
+                            pitch: 0.7,
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                        });
+                    }
+                    
+                    // Send Mage stats message 20 ticks after "Starting in 1 second"
+                    for (_, player) in &mut server.world.players {
+                        player.send_message("§6Your Mage stats are doubled because");
+                        player.send_message("§6you are the only player using this");
+                        player.send_message("§6class!");
+                        player.send_message("§a[Mage] §fIntelligence §c500 §f-> §a750");
+                        player.send_message("§a[Mage] §fCooldown Reduction §c50% §f-> §a75%");
+                    }
+                    
+                    // Send Mort message with slight delay after Mage stats
+                    for (_, player) in &mut server.world.players {
+                        player.send_message("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
+                    }
+                    
                     self.state = DungeonState::Started { current_ticks: 0 };
                     self.start_dungeon();
                 } else if *tick % 20 == 0 {
-
                     let seconds_remaining = *tick / 20;
                     let s = if seconds_remaining == 1 { "" } else { "s" };
                     let str = format!("§aStarting in {} second{}.", seconds_remaining, s);
 
-                    for (_, player) in server.world.players.iter_mut() {
+                    for (_, player) in &mut server.world.players {
                         player.send_message(&str);
+                        
+                        // Play random.click sound with specific volume and pitch during countdown
+                        let _ = player.write_packet(&SoundEffect {
+                            sound: Sounds::RandomClick.id(),
+                            volume: 0.55,
+                            pitch: 2.0,
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                        });
                     }
                 }
             }
 
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
+                
+                // Play additional villager haggle sounds after the first one
+                // 2000ms = 40 ticks after dungeon start (first additional sound)
+                if *current_ticks == 40 {
+                    for (_, player) in &mut server.world.players {
+                        let _ = player.write_packet(&SoundEffect {
+                            sound: Sounds::VillagerHaggle.id(),
+                            volume: 1.0,
+                            pitch: 0.7,
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                        });
+                    }
+                    // Send Mort's follow-up message
+                    for (_, player) in &mut server.world.players {
+                        player.send_message("§e[NPC] §bMort§f: You should find it useful if you get lost.");
+                    }
+                }
+                
+                // 1500ms = 30 ticks after the second sound (70 ticks total)
+                if *current_ticks == 70 {
+                    for (_, player) in &mut server.world.players {
+                        let _ = player.write_packet(&SoundEffect {
+                            sound: Sounds::VillagerHaggle.id(),
+                            volume: 1.0,
+                            pitch: 0.7,
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                        });
+                    }
+                    
+                    // Send Mort's final message
+                    for (_, player) in &mut server.world.players {
+                        player.send_message("§e[NPC] §bMort§f: Good luck.");
+                    }
+                }
+                
+                // Play idle sounds for blood doors every second (20 ticks)
+                if *current_ticks % 20 == 0 {
+                    for door in &self.doors {
+                        if door.door_type == DoorType::BLOOD {
+                            // Check if the door is still interactable (not opened)
+                            let door_center = BlockPos::new(door.x, 70, door.z);
+                            if server.world.interactable_blocks.contains_key(&door_center) {
+                                door.play_idle_sound(&mut server.world);
+                            }
+                        }
+                    }
+                }
+                
                 for (_, player) in &mut server.world.players  {
                     if let Some(room_index) = self.get_player_room(player) {
                         let room = self.rooms.get_mut(room_index).unwrap();

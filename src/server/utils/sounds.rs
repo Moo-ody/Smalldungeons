@@ -29,5 +29,19 @@ id_enum! {
         Orb("random.orb"),
         Pop("random.pop"),
         ChestOpen("random.chestopen"),
+        Portal("mob.portal"),  
+        FireIgnite("fire.ignite"),
+        ZombieRemedy("mob.zombie.remedy"),
+        RandomClick("random.click"),
+        EnderDragonGrowl("mob.enderdragon.growl"),
+        VillagerHaggle("mob.villager.haggle"),
+        NotePling("note.pling"),
+        GhastScream("mob.ghast.scream"),
+        GuardianElderHit("mob.guardian.elder.hit"),
+        Bow("random.bow"),
+        EndermenPortal("mob.endermen.portal"),
+        NoteHat("note.hat"),
+        RandomExplode("random.explode"),
+        
     }
 }

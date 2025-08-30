@@ -14,6 +14,9 @@ use crate::server::utils::player_list::PlayerList;
 use std::collections::HashMap;
 use std::mem::take;
 
+pub mod tactical_insertion;
+pub use tactical_insertion::{TacticalInsertionMarker, ScheduledSound};
+
 pub const VIEW_DISTANCE: u8 = 6;
 
 pub struct World {
@@ -40,6 +43,10 @@ pub struct World {
     pub spawn_point: DVec3,
     pub spawn_yaw: f32,
     pub spawn_pitch: f32,
+    
+    // Scheduled tactical insertions (teleport back after delay)
+    pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
+    pub tick_count: u64,
 }
 
 impl World {
@@ -61,6 +68,10 @@ impl World {
             spawn_point: DVec3::ZERO,
             spawn_yaw: 0.0,
             spawn_pitch: 0.0,
+            
+            // NEW FIELDS
+            tactical_insertions: Vec::new(),
+            tick_count: 0,
         }
     }
 
@@ -103,6 +114,9 @@ impl World {
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
+        // Increment tick counter
+        self.tick_count = self.tick_count.wrapping_add(1);
+        
         if !self.entities_for_removal.is_empty() {
             for entity_id in take(&mut self.entities_for_removal) {
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
@@ -128,23 +142,27 @@ impl World {
             };
             entity.tick(entity_impl, packet_buffer);
         }
+        
+                // Process scheduled tactical insertions
+        tactical_insertion::process(self)?;
+        
         Ok(())
     }
-
+    
     pub fn set_block_at(&mut self, block: Blocks, x: i32, y: i32, z: i32) {
         self.chunk_grid.set_block_at(block, x, y, z);
     }
-
+    
     pub fn get_block_at(&self, x: i32, y: i32, z: i32) -> Blocks {
         self.chunk_grid.get_block_at(x, y, z)
     }
-
+    
     pub fn set_spawn_point(&mut self, position: DVec3, yaw: f32, pitch: f32) {
         self.spawn_point = position;
         self.spawn_yaw = yaw;
         self.spawn_pitch = pitch;
     }
-
+    
     pub fn fill_blocks(&mut self, block: Blocks, start: BlockPos, end: BlockPos) {
         iterate_blocks(start, end, |x, y, z| {
             self.set_block_at(block, x, y, z)

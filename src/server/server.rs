@@ -45,6 +45,44 @@ impl Server {
         self.tasks.push(Task::new(run_in, task));
     }
 
+
+
+    pub fn spawn_ender_pearl(&mut self, player: &mut Player, velocity: crate::server::utils::dvec3::DVec3) -> anyhow::Result<()> {
+        use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
+        use crate::server::items::ender_pearl::PearlEntityImpl;
+        
+        let eye_height = 1.62; // player eye height in blocks
+        let eye_pos = crate::server::utils::dvec3::DVec3::new(
+            player.position.x,
+            player.position.y + eye_height,
+            player.position.z,
+        );
+        
+        // Convert yaw/pitch (degrees) to a forward direction vector
+        let yaw_rad = (player.yaw as f64).to_radians();
+        let pitch_rad = (player.pitch as f64).to_radians();
+        let dir = crate::server::utils::dvec3::DVec3::new(
+            -pitch_rad.cos() * yaw_rad.sin(),
+            -pitch_rad.sin(),
+            pitch_rad.cos() * yaw_rad.cos(),
+        );
+        let dir = dir.normalize();
+
+        let spawn_pos = crate::server::utils::dvec3::DVec3::new(
+            eye_pos.x + dir.x * 0.2,
+            eye_pos.y + dir.y * 0.2,
+            eye_pos.z + dir.z * 0.2,
+        ); // slight offset in front of player
+
+        self.world.spawn_entity(
+            spawn_pos,
+            EntityMetadata::new(EntityVariant::EnderPearl),
+            PearlEntityImpl::new(player.client_id, velocity),
+        )?;
+
+        Ok(())
+    }
+
     pub fn process_event(&mut self, event: MainThreadMessage) -> Result<()> {
         match event {
             MainThreadMessage::NewPlayer { client_id, profile } => {
@@ -143,9 +181,16 @@ impl Server {
                 //     map_data: map.map_data.to_vec(),
                 // });
 
-                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid), 36);
-                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe), 37);
-                player.inventory.set_slot(ItemSlot::Filled(Item::MagicalMap), 44);
+                player.inventory.set_slot(ItemSlot::Filled(Item::AspectOfTheVoid, 1), 37);
+                player.inventory.set_slot(ItemSlot::Filled(Item::DiamondPickaxe, 1), 38);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SpiritSceptre, 1), 39);
+                player.inventory.set_slot(ItemSlot::Filled(Item::EnderPearl, 16), 43);
+                player.inventory.set_slot(ItemSlot::Filled(Item::MagicalMap, 1), 44);
+                player.inventory.set_slot(ItemSlot::Filled(Item::Hyperion, 1), 36);
+                player.inventory.set_slot(ItemSlot::Filled(Item::TacticalInsertion, 16), 41);
+                player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT, 64), 40);
+                player.inventory.set_slot(ItemSlot::Filled(Item::GoldenAxe, 1), 13);
+                player.inventory.set_slot(ItemSlot::Filled(Item::Terminator, 1), 42);
 
                 player.sync_inventory();
 
@@ -173,13 +218,13 @@ impl Server {
                     walk_speed: playerspeed,
                 });
                 
-                // let mut buf = Vec::new();
-                // "hypixel".write(&mut buf);
+                 let mut buf = Vec::new();
+                 "hypixel".write(&mut buf);
                 
-                // player.write_packet(&CustomPayload {
-                //     channel: "MC|Brand".into(),
-                //     data: &buf,
-                // });
+                 player.write_packet(&CustomPayload {
+                     channel: "MC|Brand".into(),
+                     data: &buf,
+                 });
                 
                 player.flush_packets();
 

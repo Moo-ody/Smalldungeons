@@ -6,6 +6,8 @@ use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::nbt::nbt::NBT;
+use crate::server::utils::sounds::Sounds;
+use crate::net::protocol::play::clientbound::SoundEffect;
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -106,7 +108,28 @@ impl UI {
                     4 | 13 => {
                         let dung = &mut player.server_mut().dungeon;
                         match dung.state {
-                            NotReady => dung.state = DungeonState::Starting { tick_countdown: 100 },
+                            NotReady => {
+                                // Send "is now ready!" message to all players
+                                let ready_msg = format!("§a{} is now ready!", player.profile.username);
+                                for (_, other_player) in &mut player.server_mut().world.players {
+                                    let _ = other_player.send_message(&ready_msg);
+                                }
+                                
+                                // Play first random.click sound when ready
+                                for (_, other_player) in &mut player.server_mut().world.players {
+                                    let _ = other_player.write_packet(&SoundEffect {
+                                        sound: Sounds::RandomClick.id(),
+                                        volume: 0.55,
+                                        pitch: 2.0,
+                                        pos_x: other_player.position.x,
+                                        pos_y: other_player.position.y,
+                                        pos_z: other_player.position.z,
+                                    });
+                                }
+                                
+                                // Start the dungeon countdown
+                                dung.state = DungeonState::Starting { tick_countdown: 100 };
+                            }
                             DungeonState::Starting { .. } => dung.state = NotReady,
                             _ => {}
                         }

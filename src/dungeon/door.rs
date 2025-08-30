@@ -9,6 +9,8 @@ use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world;
 use crate::server::world::World;
+use crate::server::utils::sounds::Sounds;
+use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::utils::seeded_rng::seeded_rng;
 use rand::prelude::IndexedRandom;
 use std::collections::HashMap;
@@ -141,6 +143,22 @@ impl Door {
         //     ticks_left: 20,
         //     door_index: self.id,
         // });
+    }
+
+    pub fn play_idle_sound(&self, world: &mut World) {
+        if self.door_type == DoorType::BLOOD {
+            // Play guardian elder hit sound from the door location
+            for (_, player) in &mut world.players {
+                let _ = player.write_packet(&SoundEffect {
+                    sound: Sounds::GuardianElderHit.id(),
+                    volume: 3.0,
+                    pitch: 0.49,
+                    pos_x: self.x as f64,
+                    pos_y: 70.0, // Door height
+                    pos_z: self.z as f64,
+                });
+            }
+        }
     }
 }
 

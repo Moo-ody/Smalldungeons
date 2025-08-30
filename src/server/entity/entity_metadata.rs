@@ -17,6 +17,10 @@ pub enum EntityVariant {
         hanging: bool
     },
     FallingBlock,
+    // NEW: a thrown ender pearl (spawned with Spawn Object)
+    EnderPearl,
+    // NEW: arrow projectile for Terminator bow
+    Arrow,
 }
 
 impl EntityVariant {
@@ -29,8 +33,13 @@ impl EntityVariant {
             EntityVariant::DroppedItem { .. } => 2,
             EntityVariant::ArmorStand => 30,
             EntityVariant::Zombie { .. } => 54,
-            EntityVariant::Bat { .. } => 65,
+            EntityVariant::Bat { .. } => 65, // mob id (Spawn Mob space)
             EntityVariant::FallingBlock => 70,
+            // NEW: object type id for ender pearl (Spawn Object space, 1.8)
+            // It's OK that this is also 65 - Spawn Object and Spawn Mob use different id spaces.
+            EntityVariant::EnderPearl => 65,
+            // NEW: arrow object type id (Spawn Object space, 1.8)
+            EntityVariant::Arrow => 60,
         }
     }
 
@@ -47,6 +56,10 @@ impl EntityVariant {
         match self {
             EntityVariant::DroppedItem { .. } => true,
             EntityVariant::FallingBlock => true,
+            // NEW
+            EntityVariant::EnderPearl => true,
+            // NEW: arrows are objects
+            EntityVariant::Arrow => true,
             _ => false,
         }
     }
@@ -56,7 +69,7 @@ impl EntityVariant {
 pub struct EntityMetadata {
     // add more needed stuff here
     pub variant: EntityVariant,
-    pub is_invisible: bool
+    pub is_invisible: bool,
 }
 
 impl EntityMetadata {
@@ -85,7 +98,7 @@ impl PacketSerializable for EntityMetadata {
         let mut flags: u8 = 0;
 
         if self.is_invisible {
-            flags |= 0b00100000
+            flags |= 0b0010_0000;
         }
 
         write_data(buf, BYTE, 0, flags);
@@ -101,8 +114,12 @@ impl PacketSerializable for EntityMetadata {
             EntityVariant::Bat { hanging } => {
                 write_data(buf, BYTE, 16, *hanging);
             }
+            // NEW: Ender pearls don't carry extra metadata
+            EntityVariant::EnderPearl => { /* no-op */ }
+            // NEW: Arrows don't carry extra metadata
+            EntityVariant::Arrow => { /* no-op */ }
             _ => {}
         }
-        buf.push(127)
+        buf.push(127); // end-of-metadata
     }
 }

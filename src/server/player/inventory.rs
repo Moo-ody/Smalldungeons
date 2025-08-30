@@ -8,13 +8,15 @@ use crate::server::items::Item;
 pub enum ItemSlot {
     #[default]
     Empty,
-    Filled(Item),
+    Filled(Item, u8), // Item and stack size
 }
 
 impl ItemSlot {
     pub fn get_item_stack(&self) -> Option<ItemStack> {
-        if let ItemSlot::Filled(item) = self {
-            Some(item.get_item_stack())
+        if let ItemSlot::Filled(item, stack_size) = self {
+            let mut item_stack = item.get_item_stack();
+            item_stack.stack_size = *stack_size as i8;
+            Some(item_stack)
         } else {
             None
         }

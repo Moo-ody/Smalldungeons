@@ -160,7 +160,7 @@ impl Player {
     }
     
     pub fn handle_right_click(&mut self) {
-        if let Some(ItemSlot::Filled(item)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
+        if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
     }
@@ -170,7 +170,7 @@ impl Player {
         // kind of temporary solution,
         // instead of just putting the item in an available slot if it is dragged
         if ui == UI::Inventory { 
-            if let ItemSlot::Filled(item) = self.inventory.dragged_item { 
+            if let ItemSlot::Filled(item, _) = self.inventory.dragged_item { 
                 self.write_packet(&SetSlot {
                     window_id: -1,
                     slot: 0,
