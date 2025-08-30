@@ -18,9 +18,6 @@ pub struct RoomSegment {
 
 #[derive(Debug)]
 pub struct RoomNeighbour {
-    // pub door: Rc<RefCell<Door>>,
-    // pub room: Rc<RefCell<Room>>,
-    
     pub door_index: usize,
     pub room_index: usize,
 }
@@ -162,7 +159,7 @@ impl Room {
         }
     }
 
-    pub fn get_rotation_from_segments(segments: &Vec<RoomSegment>, dungeon_doors: &[Door]) -> Direction {
+    pub fn get_rotation_from_segments(segments: &[RoomSegment], dungeon_doors: &[Door]) -> Direction {
         let unique_x = segments.iter()
             .map(|segment| segment.x)
             .collect::<HashSet<usize>>();

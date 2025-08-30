@@ -448,14 +448,12 @@ impl Dungeon {
         let entry = self.room_grid.get(grid_x + (grid_z * 6));
         entry.and_then(|e| *e)
     }
-
+    
     pub fn get_player_room(&mut self, player: &Player) -> Option<usize> {
-        let room =         self.get_room_at(
+        self.get_room_at(
             player.position.x as i32,
             player.position.z as i32
-        );
-        println!("{:?}", room);
-        room
+        )
     }
 
     pub fn start_dungeon(&mut self) {
@@ -512,8 +510,8 @@ impl Dungeon {
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
                 for (_, player) in &mut server.world.players  {
-                    if let Some(room_index) = server.dungeon.get_player_room(player) {
-                        let room = server.dungeon.rooms.get_mut(room_index).unwrap();
+                    if let Some(room_index) = self.get_player_room(player) {
+                        let room = self.rooms.get_mut(room_index).unwrap();
 
                         for crusher in room.crushers.iter_mut() {
                             crusher.tick(player);
@@ -521,7 +519,7 @@ impl Dungeon {
 
                         if !room.entered {
                             room.entered = true;
-                            DungeonMap::draw_room(self, room_index);
+                            self.map.draw_room(&self.rooms, &self.doors, room_index);
 
                             // this needs to happen once a tick,
                             // but currently the ticking stuff is a mess
