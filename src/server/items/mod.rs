@@ -172,6 +172,20 @@ impl Item {
                 let _ = player.sync_inventory();
             }
             Item::SuperboomTNT => {
+                // If air right-click, explode near player position as fallback
+                let block_pos = crate::server::block::block_position::BlockPos::new(
+                    player.position.x.floor() as i32,
+                    player.position.y.floor() as i32,
+                    player.position.z.floor() as i32,
+                );
+                let yaw = player.yaw;
+                let dir = ((yaw.rem_euclid(360.0) + 45.0) / 90.0).floor() as i32 % 4; // 0=S,1=W,2=N,3=E (approx)
+                let radius = match dir {
+                    0 | 3 => 3, // South or East => 3
+                    _ => 2,     // North or West => 2
+                };
+                let _ = player.server_mut().dungeon.superboom_at(block_pos, radius);
+
                 // Always restore stack size to prevent consumption
                 let hotbar_slot = player.held_slot as usize + 36;
                 player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT, 64), hotbar_slot);

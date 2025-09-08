@@ -123,6 +123,11 @@ impl DungeonMap {
     }
     
     pub fn draw_room(&mut self, rooms: &[Room], doors: &[Door], room_index: usize) {
+        // Validate room index before accessing
+        if room_index >= rooms.len() {
+            eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, rooms.len());
+            return;
+        }
         let room = &rooms[room_index];
         let color = get_room_color(&room.room_data);
         
@@ -145,6 +150,17 @@ impl DungeonMap {
                 
                 let (neighbour_room, door) = {
                     let neighbour = neighbour.as_ref().unwrap();
+                    
+                    // Validate indices before accessing
+                    if neighbour.room_index >= rooms.len() {
+                        eprintln!("Warning: Neighbour room index {} out of bounds for rooms vector of length {}", neighbour.room_index, rooms.len());
+                        continue;
+                    }
+                    if neighbour.door_index >= doors.len() {
+                        eprintln!("Warning: Door index {} out of bounds for doors vector of length {}", neighbour.door_index, doors.len());
+                        continue;
+                    }
+                    
                     (&rooms[neighbour.room_index], &doors[neighbour.door_index])
                 };
                 

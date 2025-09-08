@@ -610,7 +610,8 @@ impl Dungeon {
                     }
                 }
                 
-                for (_, player) in &mut server.world.players  {
+                let mut room_index_and_player_ids: Vec<(usize, u32)> = Vec::new();
+                for (player_id, player) in &mut server.world.players  {
                     if let Some(room_index) = self.get_player_room(player) {
                         let room = self.rooms.get_mut(room_index).unwrap();
 
@@ -639,7 +640,65 @@ impl Dungeon {
                                 });
                             };
                         }
+
+                        room_index_and_player_ids.push((room_index, *player_id));
                     }
+                }
+
+                // After loop, send debug per (room, player) without borrow conflicts
+                for (room_index, player_id) in room_index_and_player_ids.into_iter() {
+                    let (name, shape, rotation, pattern_len) = {
+                        let room = self.rooms.get(room_index).unwrap();
+                        if !(room.entered && room.crypt_patterns.len() > 0 && !room.crypts_checked) {
+                            continue;
+                        }
+                        let name = room.room_data.name.clone();
+                        let shape = room.room_data.shape.clone();
+                        let rotation = room.rotation;
+                        let pattern_len = room.crypt_patterns.len();
+                        (name, shape, rotation, pattern_len)
+                    };
+
+                    let count = {
+                        let room_mut = self.rooms.get_mut(room_index).unwrap();
+                        room_mut.detect_crypts(&server.world)
+                    };
+
+                    if let Some(player) = server.world.players.get_mut(&player_id) {
+                        player.send_message(&format!(
+                            "§8[crypts] §7room §f{}§7 shape {:?} rotation {:?} — patterns: §e{}§7, matched: §a{}",
+                            name,
+                            shape,
+                            rotation,
+                            pattern_len,
+                            count
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Superboom TNT logic: find the room containing `pos` and explode any crypt pattern
+    /// that has a block within a radius of 2 from `pos`. Plays explosion sound for all players.
+    pub fn superboom_at(&mut self, pos: BlockPos, radius: i32) -> anyhow::Result<()> {
+        if let Some(room_index) = self.get_room_at(pos.x, pos.z) {
+            let server = self.server_mut();
+            let world = &mut server.world;
+            let room = self.rooms.get_mut(room_index).unwrap();
+            let exploded_count = room.explode_crypt_near(world, &pos, radius);
+            if exploded_count > 0 {
+                // Play explosion sound for all players
+                for (_, player) in &mut world.players {
+                    let _ = player.write_packet(&SoundEffect {
+                        sound: Sounds::RandomExplode.id(),
+                        volume: 1.0,
+                        pitch: 1.0,
+                        pos_x: pos.x as f64 + 0.5,
+                        pos_y: pos.y as f64 + 0.5,
+                        pos_z: pos.z as f64 + 0.5,
+                    });
                 }
             }
         }

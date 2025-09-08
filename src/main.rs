@@ -55,17 +55,16 @@ async fn main() -> Result<()> {
     let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir
         .entries()
         .iter()
-        .map(|file| {
-            let file = file.as_file().unwrap();
-
-            let contents = file.contents_utf8().unwrap();
-            let name = file.path().file_name().unwrap().to_str().unwrap();
+        .filter_map(|file| {
+            let file = file.as_file()?;
+            let contents = file.contents_utf8()?;
+            let name = file.path().file_name()?.to_str()?;
             let room_data = RoomData::from_raw_json(contents);
 
             let name_parts: Vec<&str> = name.split(",").collect();
-            let room_id = name_parts.first().unwrap().parse::<usize>().unwrap();
+            let room_id = name_parts.first()?.parse::<usize>().ok()?;
 
-            (room_id, room_data)
+            Some((room_id, room_data))
         })
         .collect();
 
@@ -77,10 +76,11 @@ async fn main() -> Result<()> {
             let mut blocks: Vec<Blocks> = Vec::new();
 
             for i in (0..line.len() - 1).step_by(4) {
-                let substr = line.get(i..i + 4).unwrap();
-                let state = u16::from_str_radix(substr, 16).unwrap();
-
-                blocks.push(Blocks::from(state));
+                if let Some(substr) = line.get(i..i + 4) {
+                    if let Ok(state) = u16::from_str_radix(substr, 16) {
+                        blocks.push(Blocks::from(state));
+                    }
+                }
             }
 
             blocks
@@ -123,9 +123,9 @@ async fn main() -> Result<()> {
     let dungeon_str = match args.len() {
         0..=1 => {
             let mut rng = rand::rng();
-            dungeon_strings.choose(&mut rng).unwrap()
+            dungeon_strings.choose(&mut rng).unwrap_or(&"080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009")
         }
-        _ => args.get(1).unwrap().as_str(),
+        _ => args.get(1).map(|s| s.as_str()).unwrap_or("080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009"),
     };
     println!("Dungeon String: {}", dungeon_str);
 
@@ -147,11 +147,23 @@ async fn main() -> Result<()> {
         main_tx,
     ));
 
-    let dungeon = &server.dungeon;
-
-    for room in &dungeon.rooms {
+    let dungeon = &mut server.dungeon;
+    
+    for room in &mut dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
+
+        // Immediately scan crypts on world load for debug visibility
+        if room.crypt_patterns.len() > 0 && !room.crypts_checked {
+            let count = room.detect_crypts(&server.world);
+            println!(
+                "[crypts] room '{}' shape {:?} rotation {:?} — patterns: {}, matched: {}",
+                room.room_data.name, room.room_data.shape, room.rotation, room.crypt_patterns.len(), count
+            );
+            if count == 0 {
+                room.debug_crypt_mismatch(&server.world);
+            }
+        }
 
         // Set the spawn point to be inside of the spawn room
         if room.room_data.room_type == RoomType::Entrance {
@@ -190,8 +202,9 @@ async fn main() -> Result<()> {
                 EntityMetadata::new(EntityVariant::Zombie { is_child: false, is_villager: false }),
                 MortImpl,
             )?;
-            let (entity, _)= &mut server.world.entities.get_mut(&id).unwrap();
-            entity.yaw = 0.0.rotate(room.rotation);
+            if let Some((entity, _)) = server.world.entities.get_mut(&id) {
+                entity.yaw = 0.0.rotate(room.rotation);
+            }
         }
     }
 
@@ -286,13 +299,24 @@ async fn main() -> Result<()> {
                         ChunkDiff::New => {
                             if let Some(chunk) = player.world_mut().chunk_grid.get_chunk_mut(x, z) {
                                 player.write_packet(&chunk.get_chunk_data(x, z, true));
-                                for entity_id in chunk.entities.iter_mut() {
-                                    let (entity, entity_impl) =
-                                        &mut server.world.entities.get_mut(&entity_id).unwrap();
-                                    let buffer = &mut chunk.packet_buffer;
-                                    entity.write_spawn_packet(buffer);
-                                    entity_impl.spawn(entity, buffer);
+                                // Collect valid entity IDs first
+                                let valid_entity_ids: Vec<_> = chunk.entities.iter()
+                                    .filter(|&&entity_id| server.world.entities.contains_key(&entity_id))
+                                    .copied()
+                                    .collect();
+                                
+                                // Process valid entities
+                                for &entity_id in &valid_entity_ids {
+                                    if let Some((entity, entity_impl)) = server.world.entities.get_mut(&entity_id) {
+                                        let buffer = &mut chunk.packet_buffer;
+                                        entity.write_spawn_packet(buffer);
+                                        entity_impl.spawn(entity, buffer);
+                                    }
                                 }
+                                
+                                // Update chunk entities to only contain valid ones
+                                chunk.entities.clear();
+                                chunk.entities.extend(valid_entity_ids);
                             } else {
                                 let chunk_data = Chunk::new().get_chunk_data(x, z, true);
                                 player.write_packet(&chunk_data)
@@ -360,8 +384,17 @@ async fn main() -> Result<()> {
                 format!("{} {}{}", SKYBLOCK_MONTHS[month], day_of_month, suffix)
             };
 
-            let room_id = if let Some(room) = server.dungeon.get_player_room(player) {
-                &server.dungeon.rooms[room].room_data.id
+            let room_id = if let Some(room_index) = server.dungeon.get_player_room(player) {
+                if room_index < server.dungeon.rooms.len() {
+                    let room = &server.dungeon.rooms[room_index];
+                    
+                    // removed periodic room bounds chat
+                    
+                    &room.room_data.id
+                } else {
+                    eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, server.dungeon.rooms.len());
+                    ""
+                }
             } else {
                 ""
             };

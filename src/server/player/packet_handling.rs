@@ -68,7 +68,6 @@ impl ProcessPacket for PlayerPositionLook {
 
 impl ProcessPacket for PlayerDigging {
     fn process_with_player(&self, player: &mut Player) {
-        let world = player.world_mut();
         match self.action {
             PlayerDiggingAction::StartDestroyBlock => {
                 // todo:
@@ -77,22 +76,40 @@ impl ProcessPacket for PlayerDigging {
                 if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
                     match item {
                         Item::DiamondPickaxe | Item::GoldenAxe => {
-                            let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
-                            player.write_packet(&BlockChange {
-                                block_pos: self.position,
-                                block_state: block.get_block_state_id(),
-                            })
+                            // Limit the mutable borrow of world to this scope
+                            {
+                                let world = player.world_mut();
+                                let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                                player.write_packet(&BlockChange {
+                                    block_pos: self.position,
+                                    block_state: block.get_block_state_id(),
+                                })
+                            }
+                        }
+                        Item::SuperboomTNT => {
+                            // Explode crypt near the targeted block
+                            let yaw = player.yaw;
+                            let dir = ((yaw.rem_euclid(360.0) + 45.0) / 90.0).floor() as i32 % 4; // 0=S,1=W,2=N,3=E (approx)
+                            let radius = match dir {
+                                0 | 3 => 3, // South or East => 3
+                                _ => 2,     // North or West => 2
+                            };
+                            let _ = player.server_mut().dungeon.superboom_at(self.position, radius);
                         }
                         _ => {}
                     }
                 }
             }
             PlayerDiggingAction::FinishDestroyBlock => {
-                let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
-                player.write_packet(&BlockChange {
-                    block_pos: self.position,
-                    block_state: block.get_block_state_id(),
-                })
+                // Limit borrow scope
+                {
+                    let world = player.world_mut();
+                    let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                    player.write_packet(&BlockChange {
+                        block_pos: self.position,
+                        block_state: block.get_block_state_id(),
+                    })
+                }
             }
             _ => {}
         }
@@ -104,7 +121,6 @@ impl ProcessPacket for PlayerBlockPlacement {
         // todo:
         // - improve accuracy
         // - prevent clicking from a distance
-        let world = player.world_mut();
         if !self.position.is_invalid() {
             // im considering instead of this,
             // just pass this to the dungeon, which checks doors and such
@@ -119,14 +135,33 @@ impl ProcessPacket for PlayerBlockPlacement {
                 _ => pos.x += 1,
             }
 
-            let block = world.get_block_at(pos.x, pos.y, pos.z);
-            player.write_packet(&BlockChange {
-                block_pos: pos,
-                block_state: block.get_block_state_id()
-            });
+            {
+                let world = player.world_mut();
+                let block = world.get_block_at(pos.x, pos.y, pos.z);
+                player.write_packet(&BlockChange {
+                    block_pos: pos,
+                    block_state: block.get_block_state_id()
+                });
+            }
 
-            if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
-                interact_block.interact(player, &self.position);
+            // Use Superboom TNT when right-clicking a block
+            if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
+                if let Item::SuperboomTNT = item {
+                    let yaw = player.yaw;
+                    let dir = ((yaw.rem_euclid(360.0) + 45.0) / 90.0).floor() as i32 % 4; // 0=S,1=W,2=N,3=E (approx)
+                    let radius = match dir {
+                        0 | 3 => 3, // South or East => 3
+                        _ => 2,     // North or West => 2
+                    };
+                    let _ = player.server_mut().dungeon.superboom_at(pos, radius);
+                }
+            }
+
+            {
+                let world = player.world_mut();
+                if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
+                    interact_block.interact(player, &self.position);
+                }
             }
         } else {
             player.handle_right_click();

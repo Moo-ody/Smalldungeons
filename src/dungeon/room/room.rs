@@ -2,6 +2,7 @@ use crate::dungeon::crushers::Crusher;
 use crate::dungeon::door::Door;
 use crate::dungeon::dungeon::DUNGEON_ORIGIN;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
+use crate::dungeon::room::crypts::{get_room_crypts, rotate_block_pos};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -30,6 +31,9 @@ pub struct Room {
 
     pub tick_amount: u32,
     pub crushers: Vec<Crusher>,
+    pub crypt_patterns: Vec<Vec<(BlockPos, Option<u16>)>>, // world positions with expected block ids
+    pub crypts_checked: bool,
+    pub crypts_detected_count: usize,
     
     pub entered: bool,
 }
@@ -74,12 +78,43 @@ impl Room {
             crusher
         }).collect::<Vec<Crusher>>();
 
+        // Build crypt patterns from relative coords json
+        let mut crypt_patterns: Vec<Vec<(BlockPos, Option<u16>)>> = Vec::new();
+
+        let shape_key = match room_data.shape {
+            RoomShape::OneByOne => "1x1",
+            RoomShape::OneByOneEnd => "1x1_E",
+            RoomShape::OneByOneCross => "1x1_X",
+            RoomShape::OneByOneStraight => "1x1_I",
+            RoomShape::OneByOneBend => "1x1_L",
+            RoomShape::OneByOneTriple => "1x1_3",
+            RoomShape::OneByTwo => "1x2",
+            _ => "rest",
+        };
+
+        if let Some(rc) = get_room_crypts(shape_key, &room_data.name) {
+            for pattern in rc.patterns {
+                let mut world_blocks: Vec<(BlockPos, Option<u16>)> = Vec::new();
+                for blk in pattern.blocks {
+                    let rotated = rotate_block_pos(&blk, rotation);
+                    // Room block data is placed at its original absolute Y levels,
+                    // so crypt coordinates use their absolute Y directly.
+                    let world_pos = BlockPos { x: corner_pos.x + rotated.x, y: blk.y, z: corner_pos.z + rotated.z };
+                    world_blocks.push((world_pos, blk.block_id));
+                }
+                crypt_patterns.push(world_blocks);
+            }
+        }
+
         Room {
             segments,
             room_data,
             rotation,
             tick_amount: 0,
             crushers,
+            crypt_patterns,
+            crypts_checked: false,
+            crypts_detected_count: 0,
             entered: false,
         }
     }
@@ -107,6 +142,78 @@ impl Room {
 
     pub fn tick(&mut self) {
         self.tick_amount += 1;
+    }
+
+    pub fn detect_crypts(&mut self, world: &World) -> usize {
+        if self.crypts_checked {
+            return self.crypts_detected_count;
+        }
+        let mut detected = 0usize;
+        'pattern: for pattern in &self.crypt_patterns {
+            for (pos, expected) in pattern {
+                if let Some(block_id) = expected {
+                    let state_id = world.get_block_at(pos.x, pos.y, pos.z).get_block_state_id();
+                    let id = (state_id >> 4) as u16;
+                    if id != *block_id {
+                        continue 'pattern;
+                    }
+                }
+            }
+            detected += 1;
+        }
+        self.crypts_detected_count = detected;
+        self.crypts_checked = true;
+        detected
+    }
+
+    pub fn debug_crypt_mismatch(&self, world: &World) {
+        if self.crypt_patterns.is_empty() { return; }
+        let pattern = &self.crypt_patterns[0];
+        println!("[crypts] debug first pattern for '{}' ({} blocks):", self.room_data.name, pattern.len());
+        for (i, (pos, expected)) in pattern.iter().enumerate().take(12) {
+            let state_id = world.get_block_at(pos.x, pos.y, pos.z).get_block_state_id();
+            let id = (state_id >> 4) as u16;
+            println!(
+                "[crypts]   #{} at ({}, {}, {}): world_id={} expected={:?}",
+                i, pos.x, pos.y, pos.z, id, expected
+            );
+        }
+    }
+
+    /// Explodes (removes) all crypt patterns that have any block within `radius`
+    /// of `center`. Returns the number of crypts exploded.
+    pub fn explode_crypt_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> usize {
+        if self.crypt_patterns.is_empty() { return 0; }
+
+        // Collect indices to remove to avoid borrow issues while mutating
+        let mut indices: Vec<usize> = Vec::new();
+        for (i, pattern) in self.crypt_patterns.iter().enumerate() {
+            let in_range = pattern.iter().any(|(pos, _)| {
+                let dx = (pos.x - center.x).abs();
+                let dy = (pos.y - center.y).abs();
+                let dz = (pos.z - center.z).abs();
+                dx.max(dy).max(dz) <= radius
+            });
+            if in_range { indices.push(i); }
+        }
+
+        if indices.is_empty() { return 0; }
+
+        // Remove from highest to lowest index to keep indices valid
+        indices.sort_unstable_by(|a, b| b.cmp(a));
+        let mut exploded = 0usize;
+        for idx in indices {
+            if let Some(pattern) = self.crypt_patterns.get(idx).cloned() {
+                for (pos, _) in pattern.into_iter() {
+                    world.set_block_at(Blocks::Air, pos.x, pos.y, pos.z);
+                }
+                // Actually remove the pattern after applying blocks
+                let _ = self.crypt_patterns.remove(idx);
+                exploded += 1;
+            }
+        }
+
+        exploded
     }
 
     pub fn get_1x1_shape_and_type(segments: &[RoomSegment], dungeon_doors: &[Door]) -> (RoomShape, Direction) {
