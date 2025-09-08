@@ -82,12 +82,9 @@ pub fn process(world: &mut World) -> anyhow::Result<()> {
                 
                 println!("  Teleported player {} back to origin", marker.client_id);
             }
-            // Mark as teleported but keep for sounds
-            marker.return_tick = u64::MAX; // Prevent repeat teleport
-        }
-        
-        // Keep scheduling if there are future sounds pending
-        if !sounds.is_empty() {
+            // Do not re-schedule after return
+        } else {
+            // Not due yet: keep scheduling regardless of pending sounds
             remaining.push((marker, sounds));
         }
     }

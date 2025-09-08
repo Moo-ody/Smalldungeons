@@ -14,6 +14,8 @@ use crate::server::utils::sounds::Sounds;
 use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
+use std::collections::HashMap;
+// use crate::server::block::block_interact_action::BlockInteractAction::*;
 
 // The top leftmost corner of the dungeon
 pub const DUNGEON_ORIGIN: (i32, i32) = (-200, -200);
@@ -33,6 +35,9 @@ pub struct Dungeon {
     pub room_grid: [Option<usize>; 36],
     pub state: DungeonState,
     pub map: DungeonMap,
+
+    // Temporary per-player mapping of mushroom set index -> up destination (world BlockPos)
+    pub temp_player_mushroom_up: HashMap<u32, Vec<BlockPos>>,
 }
 
 impl Dungeon {
@@ -113,6 +118,7 @@ impl Dungeon {
             room_grid: room_grid,
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
+            temp_player_mushroom_up: HashMap::new(),
         })
     }
 
@@ -613,14 +619,22 @@ impl Dungeon {
                 let mut room_index_and_player_ids: Vec<(usize, u32)> = Vec::new();
                 for (player_id, player) in &mut server.world.players  {
                     if let Some(room_index) = self.get_player_room(player) {
-                        let room = self.rooms.get_mut(room_index).unwrap();
+                        // Limit mutable borrow scope to avoid conflicts with immutable borrows later
+                        let mut did_mark_entered = false;
+                        {
+                            let room = self.rooms.get_mut(room_index).unwrap();
 
-                        for crusher in room.crushers.iter_mut() {
-                            crusher.tick(player);
+                            for crusher in room.crushers.iter_mut() {
+                                crusher.tick(player);
+                            }
+
+                            if !room.entered {
+                                room.entered = true;
+                                did_mark_entered = true;
+                            }
                         }
 
-                        if !room.entered {
-                            room.entered = true;
+                        if did_mark_entered {
                             self.map.draw_room(&self.rooms, &self.doors, room_index);
 
                             // this needs to happen once a tick,
@@ -639,6 +653,23 @@ impl Dungeon {
                                     map_data: data,
                                 });
                             };
+                        }
+
+                        // Register mushroom secret interactables for this player: store up list, and insert bottom/top positions as interactables
+                        let room_ref = &self.rooms[room_index];
+                        if !room_ref.mushroom_sets.is_empty() {
+                            // Store per-player up positions for set index resolution
+                            let up_list: Vec<BlockPos> = room_ref.mushroom_sets.iter().map(|s| s.up.get(0).cloned().unwrap_or(BlockPos::new(0,0,0))).collect();
+                            self.temp_player_mushroom_up.insert(*player_id, up_list);
+
+                            for (idx, set) in room_ref.mushroom_sets.iter().enumerate() {
+                                for bp in &set.bottom {
+                                    server.world.interactable_blocks.insert(*bp, BlockInteractAction::MushroomBottom { set_index: idx });
+                                }
+                                for bp in &set.top {
+                                    server.world.interactable_blocks.insert(*bp, BlockInteractAction::MushroomTop);
+                                }
+                            }
                         }
 
                         room_index_and_player_ids.push((room_index, *player_id));

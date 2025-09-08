@@ -10,6 +10,10 @@ use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use std::cell::RefCell;
 use std::rc::Rc;
+// use std::collections::HashMap;
+
+use crate::server::world::ScheduledSound;
+use crate::server::world::tactical_insertion::TacticalInsertionMarker;
 
 pub enum BlockInteractAction {
     WitherDoor {
@@ -25,6 +29,11 @@ pub enum BlockInteractAction {
         secret: Rc<RefCell<DungeonSecret>>
     },
     Lever,
+    // Mushroom secret: bottom mushrooms (start) and top mushrooms (return nodes)
+    MushroomBottom {
+        set_index: usize,
+    },
+    MushroomTop,
     // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
@@ -122,6 +131,66 @@ impl BlockInteractAction {
                 // player.send_msg("hi").unwrap();
             }
             
+            Self::MushroomBottom { set_index } => {
+                // Debounce if already active
+                if player.server_mut().world.tactical_insertions.iter().any(|(m, _)| m.client_id == player.client_id) {
+                    return;
+                }
+                // Save precise origin and schedule return in 5s (100 ticks)
+                let origin = player.position;
+                let yaw = player.yaw;
+                let pitch = player.pitch;
+
+                // Teleport immediately to the corresponding UP point (center) by resolving within the player's current room
+                {
+                    let dungeon = &mut player.server_mut().dungeon;
+                    if let Some(room_index) = dungeon.get_player_room(player) {
+                        let room_ref = &dungeon.rooms[room_index];
+                        if let Some(set) = room_ref.mushroom_sets.iter().find(|s| s.bottom.iter().any(|bp| bp == block_pos)) {
+                            if let Some(dest) = set.up.get(0) {
+                                player.write_packet(&crate::net::protocol::play::clientbound::PositionLook {
+                                    x: dest.x as f64 + 0.5,
+                                    y: dest.y as f64,
+                                    z: dest.z as f64 + 0.5,
+                                    yaw,
+                                    pitch,
+                                    flags: 0,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                let return_tick = player.world_mut().tick_count + 100;
+                let marker = TacticalInsertionMarker {
+                    client_id: player.client_id,
+                    return_tick,
+                    origin,
+                    damage_echo_window_ticks: 0,
+                    yaw,
+                    pitch,
+                };
+                // Optional cooldown sound pattern could be added to Vec
+                player.world_mut().tactical_insertions.push((marker, Vec::<ScheduledSound>::new()));
+            }
+
+            Self::MushroomTop => {
+                // Only valid if active
+                let world = player.world_mut();
+                if let Some(idx) = world.tactical_insertions.iter().position(|(m, _)| m.client_id == player.client_id) {
+                    let (marker, _) = world.tactical_insertions.remove(idx);
+                    // Teleport immediately to origin and keep yaw/pitch
+                    player.write_packet(&crate::net::protocol::play::clientbound::PositionLook {
+                        x: marker.origin.x,
+                        y: marker.origin.y,
+                        z: marker.origin.z,
+                        yaw: marker.yaw,
+                        pitch: marker.pitch,
+                        flags: 0,
+                    });
+                }
+            }
+
             Self::WitherEssence { secret } => {
                 let mut secret = secret.borrow_mut();
                 debug_assert!(!secret.obtained);

@@ -3,6 +3,7 @@ use crate::dungeon::door::Door;
 use crate::dungeon::dungeon::DUNGEON_ORIGIN;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
 use crate::dungeon::room::crypts::{get_room_crypts, rotate_block_pos};
+use crate::dungeon::room::mushroom::{get_room_mushrooms, MushroomSets};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -34,6 +35,7 @@ pub struct Room {
     pub crypt_patterns: Vec<Vec<(BlockPos, Option<u16>)>>, // world positions with expected block ids
     pub crypts_checked: bool,
     pub crypts_detected_count: usize,
+    pub mushroom_sets: Vec<MushroomSets>,
     
     pub entered: bool,
 }
@@ -106,6 +108,9 @@ impl Room {
             }
         }
 
+        // Build mushroom secret sets
+        let mushroom_sets = get_room_mushrooms(&room_data.name, rotation, &corner_pos);
+
         Room {
             segments,
             room_data,
@@ -115,6 +120,7 @@ impl Room {
             crypt_patterns,
             crypts_checked: false,
             crypts_detected_count: 0,
+            mushroom_sets,
             entered: false,
         }
     }
