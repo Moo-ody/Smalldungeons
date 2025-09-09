@@ -67,7 +67,7 @@ static RELATIVE_L1X3: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
 // Optional extra file: crypts(1).json. Loaded if present in the directory bundle.
 static RELATIVE_EXTRA: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
     // Embed the directory and try to fetch the file at runtime (path relative to crate root)
-    static DIR: include_dir::Dir<'_> = include_dir!("src/room_data/relativecoords");
+    static DIR: include_dir::Dir<'_> = include_dir!("../../room_data/relativecoords");
     if let Some(file) = DIR.get_file("crypts(1).json") {
         let contents = file.contents_utf8().unwrap_or("");
         serde_json::from_str::<RelativeCoordsFile>(contents).ok()
