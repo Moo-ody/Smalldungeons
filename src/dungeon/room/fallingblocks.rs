@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use include_dir::{include_dir, Dir};
 
 // Include the fallingblocks data
-const FALLINGBLOCKS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/room_data/Fallingblocks");
+const FALLINGBLOCKS_DIR: Dir<'_> = include_dir!("src/room_data/relativecoords");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FallingBlock {
