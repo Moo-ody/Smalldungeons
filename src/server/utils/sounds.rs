@@ -42,6 +42,10 @@ id_enum! {
         EndermenPortal("mob.endermen.portal"),
         NoteHat("note.hat"),
         RandomExplode("random.explode"),
+        GhastMoan("mob.ghast.moan"),
+        FireworksBlast("fireworks.blast"),
+        FireworksTwinkle("fireworks.twinkle"),
+        RandomFizz("random.fizz"),
         
     }
 }

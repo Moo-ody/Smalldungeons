@@ -144,6 +144,9 @@ impl Player {
     pub fn set_position(&mut self, x: f64, y: f64, z: f64) {
         // self.last_position = self.position;
         self.position = DVec3::new(x, y, z);
+        
+        // Check for falling blocks collision
+        self.check_fallingblocks_collision();
     }
     
     pub fn collision_aabb(&self) -> AABB {
@@ -153,6 +156,26 @@ impl Player {
             DVec3::new(self.position.x - w, self.position.y, self.position.z - w),
             DVec3::new(self.position.x + w, self.position.y + h, self.position.z + w),
         )
+    }
+
+    /// Check for falling blocks collision when player moves
+    fn check_fallingblocks_collision(&mut self) {
+        let server = self.server_mut();
+        let world = &mut server.world;
+        let dungeon = &mut server.dungeon;
+        
+        // Find the room the player is in
+        if let Some(room_index) = dungeon.get_room_at(self.position.x as i32, self.position.z as i32) {
+            let room = dungeon.rooms.get_mut(room_index).unwrap();
+            let player_pos = crate::server::block::block_position::BlockPos {
+                x: self.position.x as i32,
+                y: self.position.y as i32,
+                z: self.position.z as i32,
+            };
+            
+            // Check for falling blocks collision
+            room.check_fallingblocks_collision(world, &player_pos);
+        }
     }
 
     pub fn handle_left_click(&mut self) {

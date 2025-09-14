@@ -21,6 +21,8 @@ pub enum EntityVariant {
     EnderPearl,
     // NEW: arrow projectile for Terminator bow
     Arrow,
+    // NEW: explosive projectile for Bonzo Staff
+    BonzoProjectile,
 }
 
 impl EntityVariant {
@@ -40,6 +42,8 @@ impl EntityVariant {
             EntityVariant::EnderPearl => 65,
             // NEW: arrow object type id (Spawn Object space, 1.8)
             EntityVariant::Arrow => 60,
+            // NEW: bonzo projectile object type id (Spawn Object space, 1.8)
+            EntityVariant::BonzoProjectile => 65,
         }
     }
 
@@ -60,6 +64,8 @@ impl EntityVariant {
             EntityVariant::EnderPearl => true,
             // NEW: arrows are objects
             EntityVariant::Arrow => true,
+            // NEW: bonzo projectiles are objects
+            EntityVariant::BonzoProjectile => true,
             _ => false,
         }
     }
@@ -118,6 +124,8 @@ impl PacketSerializable for EntityMetadata {
             EntityVariant::EnderPearl => { /* no-op */ }
             // NEW: Arrows don't carry extra metadata
             EntityVariant::Arrow => { /* no-op */ }
+            // NEW: Bonzo projectiles don't carry extra metadata
+            EntityVariant::BonzoProjectile => { /* no-op */ }
             _ => {}
         }
         buf.push(127); // end-of-metadata

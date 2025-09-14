@@ -139,6 +139,26 @@ impl Server {
                     }
                 );
 
+                // Also send bossroom chunks to new players
+                // Bossroom is at (-18, 255, 4) with dimensions 143x156
+                let bossroom_corner_x = -18;
+                let bossroom_corner_z = 4;
+                let bossroom_width = 143;
+                let bossroom_length = 156;
+                
+                let bossroom_chunk_x_min = bossroom_corner_x >> 4;
+                let bossroom_chunk_z_min = bossroom_corner_z >> 4;
+                let bossroom_chunk_x_max = (bossroom_corner_x + bossroom_width) >> 4;
+                let bossroom_chunk_z_max = (bossroom_corner_z + bossroom_length) >> 4;
+                
+                for chunk_x in bossroom_chunk_x_min..=bossroom_chunk_x_max {
+                    for chunk_z in bossroom_chunk_z_min..=bossroom_chunk_z_max {
+                        if let Some(chunk) = self.world.chunk_grid.get_chunk(chunk_x, chunk_z) {
+                            player.write_packet(&chunk.get_chunk_data(chunk_x, chunk_z, true));
+                        }
+                    }
+                }
+
                 
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
 
@@ -191,6 +211,7 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT, 64), 40);
                 player.inventory.set_slot(ItemSlot::Filled(Item::GoldenAxe, 1), 13);
                 player.inventory.set_slot(ItemSlot::Filled(Item::Terminator, 1), 42);
+                player.inventory.set_slot(ItemSlot::Filled(Item::BonzoStaff, 1), 14);
 
                 player.sync_inventory();
 

@@ -38,6 +38,12 @@ pub struct Dungeon {
 
     // Temporary per-player mapping of mushroom set index -> up destination (world BlockPos)
     pub temp_player_mushroom_up: HashMap<u32, Vec<BlockPos>>,
+    
+    // Boss room data
+    pub boss_room_corner: BlockPos,
+    pub boss_room_width: i32,
+    pub boss_room_length: i32,
+    pub boss_room_height: i32,
 }
 
 impl Dungeon {
@@ -119,6 +125,10 @@ impl Dungeon {
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
             temp_player_mushroom_up: HashMap::new(),
+            boss_room_corner: BlockPos { x: -18, y: 255, z: 4 },
+            boss_room_width: 0, // Will be set when boss room is loaded
+            boss_room_length: 0, // Will be set when boss room is loaded
+            boss_room_height: 30, // Default height
         })
     }
 
@@ -189,6 +199,7 @@ impl Dungeon {
                 // Fairy can have a varying number of doors, all other special rooms are fixed to just one.
                 let shape = match room_type {
                     RoomType::Fairy => RoomShape::OneByOne,
+                    RoomType::Boss => RoomShape::FourByFour,
                     _ => RoomShape::OneByOneEnd,
                 };
 
@@ -464,6 +475,22 @@ impl Dungeon {
         )
     }
 
+    /// Check if a player is inside the boss room
+    pub fn is_player_in_boss_room(&self, player: &Player) -> bool {
+        let player_x = player.position.x as i32;
+        let player_y = player.position.y as i32;
+        let player_z = player.position.z as i32;
+        
+        // Check if player is within boss room bounds using stored dimensions
+        // Boss room spans from Y=0 to Y=height (254), regardless of corner.y
+        player_x >= self.boss_room_corner.x 
+            && player_x < self.boss_room_corner.x + self.boss_room_width
+            && player_z >= self.boss_room_corner.z 
+            && player_z < self.boss_room_corner.z + self.boss_room_length
+            && player_y >= 0  // Boss room starts from Y=0 (bottom)
+            && player_y <= self.boss_room_height  // Up to the height of the room (254)
+    }
+
     pub fn start_dungeon(&mut self) {
         let world = &mut self.server_mut().world;
         for (index, door) in self.doors.iter().enumerate() {
@@ -695,6 +722,18 @@ impl Dungeon {
                         room_mut.detect_crypts(&server.world)
                     };
 
+                    // Also detect superboomwalls
+                    let walls_count = {
+                        let room_mut = self.rooms.get_mut(room_index).unwrap();
+                        room_mut.detect_superboomwalls(&server.world)
+                    };
+
+                    // Also detect falling blocks
+                    let fallingblocks_count = {
+                        let room_mut = self.rooms.get_mut(room_index).unwrap();
+                        room_mut.detect_fallingblocks(&server.world)
+                    };
+
                     if let Some(player) = server.world.players.get_mut(&player_id) {
                         player.send_message(&format!(
                             "§8[crypts] §7room §f{}§7 shape {:?} rotation {:?} — patterns: §e{}§7, matched: §a{}",
@@ -704,22 +743,60 @@ impl Dungeon {
                             pattern_len,
                             count
                         ));
+                        
+                        // Also show superboomwalls info
+                        let walls_pattern_len = {
+                            let room = self.rooms.get(room_index).unwrap();
+                            room.superboomwall_patterns.len()
+                        };
+                        player.send_message(&format!(
+                            "§8[walls] §7room §f{}§7 — superboomwall patterns: §e{}§7, matched: §a{}",
+                            name,
+                            walls_pattern_len,
+                            walls_count
+                        ));
+                        
+                        // Also show falling blocks info
+                        let fallingblocks_pattern_len = {
+                            let room = self.rooms.get(room_index).unwrap();
+                            room.fallingblock_patterns.len()
+                        };
+                        player.send_message(&format!(
+                            "§8[falling] §7room §f{}§7 — falling block patterns: §e{}§7, matched: §a{}",
+                            name,
+                            fallingblocks_pattern_len,
+                            fallingblocks_count
+                        ));
                     }
                 }
             }
         }
+
+        // Tick all rooms to process falling blocks
+        for room in self.rooms.iter_mut() {
+            room.tick(&mut server.world);
+        }
+
         Ok(())
     }
 
-    /// Superboom TNT logic: find the room containing `pos` and explode any crypt pattern
-    /// that has a block within a radius of 2 from `pos`. Plays explosion sound for all players.
+    /// Superboom TNT logic: find the room containing `pos` and explode crypts and superboomwalls.
+    /// For crypts: explodes all patterns within radius.
+    /// For superboomwalls: explodes only the FIRST pattern within radius (one at a time).
+    /// Plays explosion sound for all players.
     pub fn superboom_at(&mut self, pos: BlockPos, radius: i32) -> anyhow::Result<()> {
         if let Some(room_index) = self.get_room_at(pos.x, pos.z) {
             let server = self.server_mut();
             let world = &mut server.world;
             let room = self.rooms.get_mut(room_index).unwrap();
-            let exploded_count = room.explode_crypt_near(world, &pos, radius);
-            if exploded_count > 0 {
+            
+            // Explode crypts (all patterns within radius)
+            let crypts_exploded = room.explode_crypt_near(world, &pos, radius);
+            
+            // Explode superboomwalls (only first pattern within radius)
+            let walls_exploded = room.explode_superboomwall_near(world, &pos, radius);
+            
+            if crypts_exploded > 0 || walls_exploded > 0 {
                 // Play explosion sound for all players
                 for (_, player) in &mut world.players {
                     let _ = player.write_packet(&SoundEffect {
@@ -731,6 +808,7 @@ impl Dungeon {
                         pos_z: pos.z as f64 + 0.5,
                     });
                 }
+                
             }
         }
         Ok(())

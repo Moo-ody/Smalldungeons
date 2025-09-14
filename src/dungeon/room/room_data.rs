@@ -20,6 +20,7 @@ pub enum RoomShape {
     OneByThree,
     OneByFour,
     TwoByTwo,
+    FourByFour,
     L,
     Empty, // Shouldn't happen probably
 }
@@ -37,6 +38,7 @@ impl RoomShape {
             "1x3" => Self::OneByThree,
             "1x4" => Self::OneByFour,
             "2x2" => Self::TwoByTwo,
+            "4x4" => Self::FourByFour,
             "L" => Self::L,
             _ => unimplemented!(),
         }
@@ -85,6 +87,7 @@ pub enum RoomType {
     Blood,
     Yellow,
     Rare,
+    Boss,
 }
 
 impl RoomType {
@@ -98,6 +101,7 @@ impl RoomType {
             "entrance" => RoomType::Entrance,
             "trap" => RoomType::Trap,
             "rare" => RoomType::Rare,
+            "boss" => RoomType::Boss,
             _ => RoomType::Normal,
         }
     }

@@ -19,7 +19,7 @@ struct MushroomRoomEntry {
 }
 
 static MUSHROOM_DATA: Lazy<Option<MushroomFile>> = Lazy::new(|| {
-    let data = include_str!("Evensmallerdungeonsdata/room_data/Mushroom secret/Mushroomdata.json");
+    let data = include_str!("../../room_data/Mushroom secret/Mushroomdata.json");
     serde_json::from_str::<MushroomFile>(data).ok()
 });
 

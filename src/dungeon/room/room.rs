@@ -4,6 +4,8 @@ use crate::dungeon::dungeon::DUNGEON_ORIGIN;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
 use crate::dungeon::room::crypts::{get_room_crypts, rotate_block_pos};
 use crate::dungeon::room::mushroom::{get_room_mushrooms, MushroomSets};
+use crate::dungeon::room::superboomwalls::{get_room_superboomwalls, SuperboomWallPattern, rotate_superboomwall_pos};
+use crate::dungeon::room::fallingblocks::{get_room_fallingblocks, FallingBlockPattern, rotate_fallingblock_pos};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -18,7 +20,7 @@ pub struct RoomSegment {
     pub neighbours: [Option<RoomNeighbour>; 4]
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct RoomNeighbour {
     pub door_index: usize,
     pub room_index: usize,
@@ -35,6 +37,13 @@ pub struct Room {
     pub crypt_patterns: Vec<Vec<(BlockPos, Option<u16>)>>, // world positions with expected block ids
     pub crypts_checked: bool,
     pub crypts_detected_count: usize,
+    pub superboomwall_patterns: Vec<SuperboomWallPattern>, // superboomwall patterns for this room
+    pub superboomwalls_checked: bool,
+    pub superboomwalls_detected_count: usize,
+    pub fallingblock_patterns: Vec<FallingBlockPattern>, // falling block patterns for this room
+    pub fallingblocks_checked: bool,
+    pub fallingblocks_detected_count: usize,
+    pub scheduled_falling_removals: Vec<(u64, Vec<crate::dungeon::room::fallingblocks::FallingBlock>)>, // (tick, blocks)
     pub mushroom_sets: Vec<MushroomSets>,
     
     pub entered: bool,
@@ -111,6 +120,58 @@ impl Room {
         // Build mushroom secret sets
         let mushroom_sets = get_room_mushrooms(&room_data.name, rotation, &corner_pos);
 
+        // Build superboomwall patterns from relative coords json
+        let mut superboomwall_patterns = Vec::new();
+        if let Some(patterns) = get_room_superboomwalls(shape_key, &room_data.name) {
+            for pattern in patterns {
+                let mut world_blocks = Vec::new();
+                for block in pattern.blocks {
+                    // Convert relative coordinates to world coordinates
+                    let rotated = rotate_superboomwall_pos(&block, rotation);
+                    let world_pos = BlockPos { 
+                        x: corner_pos.x + rotated.x, 
+                        y: block.y, // Use absolute Y like crypts
+                        z: corner_pos.z + rotated.z 
+                    };
+                    world_blocks.push(crate::dungeon::room::superboomwalls::SuperboomWallBlock {
+                        x: world_pos.x,
+                        y: world_pos.y,
+                        z: world_pos.z,
+                        block_id: block.block_id,
+                    });
+                }
+                superboomwall_patterns.push(crate::dungeon::room::superboomwalls::SuperboomWallPattern {
+                    blocks: world_blocks,
+                });
+            }
+        }
+
+        // Build falling block patterns from relative coords json
+        let mut fallingblock_patterns = Vec::new();
+        if let Some(patterns) = get_room_fallingblocks(shape_key, &room_data.name) {
+            for pattern in patterns {
+                let mut world_blocks = Vec::new();
+                for block in pattern.blocks {
+                    // Convert relative coordinates to world coordinates
+                    let rotated = rotate_fallingblock_pos(&block, rotation);
+                    let world_pos = BlockPos { 
+                        x: corner_pos.x + rotated.x, 
+                        y: block.y, // Use absolute Y like crypts
+                        z: corner_pos.z + rotated.z 
+                    };
+                    world_blocks.push(crate::dungeon::room::fallingblocks::FallingBlock {
+                        x: world_pos.x,
+                        y: world_pos.y,
+                        z: world_pos.z,
+                        block_id: block.block_id,
+                    });
+                }
+                fallingblock_patterns.push(crate::dungeon::room::fallingblocks::FallingBlockPattern {
+                    blocks: world_blocks,
+                });
+            }
+        }
+
         Room {
             segments,
             room_data,
@@ -120,6 +181,13 @@ impl Room {
             crypt_patterns,
             crypts_checked: false,
             crypts_detected_count: 0,
+            superboomwall_patterns,
+            superboomwalls_checked: false,
+            superboomwalls_detected_count: 0,
+            fallingblock_patterns,
+            fallingblocks_checked: false,
+            fallingblocks_detected_count: 0,
+            scheduled_falling_removals: Vec::new(),
             mushroom_sets,
             entered: false,
         }
@@ -133,21 +201,35 @@ impl Room {
         let min_x = segments.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x;
         let min_z = segments.iter().min_by(|a, b| a.z.cmp(&b.z)).unwrap().z;
 
-        let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
-        let y = 68;
-        let z = min_z as i32 * 32 + DUNGEON_ORIGIN.1;
-        
-        match rotation {
-            Direction::North => BlockPos { x, y, z },
-            Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
-            Direction::South => BlockPos { x: x + room_data.length - 1, y, z: z + room_data.width - 1 },
-            Direction::West => BlockPos { x: x, y, z: z + room_data.width - 1 },
-            _ => unreachable!(),
+        // Special handling for bossrooms
+        if room_data.room_type == crate::dungeon::room::room_data::RoomType::Boss {
+            match rotation {
+                Direction::North => BlockPos { x: -7, y: 255, z: 23 },
+                Direction::East => BlockPos { x: -7 + room_data.length - 1, y: 255, z: 23 },
+                Direction::South => BlockPos { x: -7 + room_data.length - 1, y: 255, z: 23 + room_data.width - 1 },
+                Direction::West => BlockPos { x: -7, y: 255, z: 23 + room_data.width - 1 },
+                _ => unreachable!(),
+            }
+        } else {
+            let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
+            let y = 68;
+            let z = min_z as i32 * 32 + DUNGEON_ORIGIN.1;
+            
+            match rotation {
+                Direction::North => BlockPos { x, y, z },
+                Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
+                Direction::South => BlockPos { x: x + room_data.length - 1, y, z: z + room_data.width - 1 },
+                Direction::West => BlockPos { x, y, z: z + room_data.width - 1 },
+                _ => unreachable!(),
+            }
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, world: &mut World) {
         self.tick_amount += 1;
+        
+        // Process scheduled falling block removals
+        self.process_scheduled_falling_removals(world);
     }
 
     pub fn detect_crypts(&mut self, world: &World) -> usize {
@@ -220,6 +302,169 @@ impl Room {
         }
 
         exploded
+    }
+
+    /// Detect superboomwalls in the room (similar to crypts)
+    pub fn detect_superboomwalls(&mut self, world: &World) -> usize {
+        if self.superboomwalls_checked {
+            return self.superboomwalls_detected_count;
+        }
+        let mut detected = 0usize;
+        'pattern: for pattern in &self.superboomwall_patterns {
+            for block in &pattern.blocks {
+                let pos = BlockPos { x: block.x, y: block.y, z: block.z };
+                let state_id = world.get_block_at(pos.x, pos.y, pos.z).get_block_state_id();
+                let id = (state_id >> 4) as u16;
+                if id != block.block_id {
+                    continue 'pattern;
+                }
+            }
+            detected += 1;
+        }
+        self.superboomwalls_detected_count = detected;
+        self.superboomwalls_checked = true;
+        detected
+    }
+
+    /// Explodes (removes) ONLY THE FIRST superboomwall pattern that has any block within `radius`
+    /// of `center`. Returns the number of walls exploded (0 or 1).
+    /// This is the key difference from crypts - only one wall can be exploded at a time.
+    pub fn explode_superboomwall_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> usize {
+        if self.superboomwall_patterns.is_empty() { 
+            return 0; 
+        }
+
+        // Find the FIRST pattern that has any block within range
+        for (i, pattern) in self.superboomwall_patterns.iter().enumerate() {
+            let in_range = pattern.blocks.iter().any(|block| {
+                let pos = BlockPos { x: block.x, y: block.y, z: block.z };
+                let dx = (pos.x - center.x).abs();
+                let dy = (pos.y - center.y).abs();
+                let dz = (pos.z - center.z).abs();
+                dx.max(dy).max(dz) <= radius
+            });
+            
+            if in_range {
+                // Found the first wall in range - explode it and return
+                if let Some(pattern) = self.superboomwall_patterns.get(i).cloned() {
+                    for block in pattern.blocks {
+                        let pos = BlockPos { x: block.x, y: block.y, z: block.z };
+                        world.set_block_at(Blocks::Air, pos.x, pos.y, pos.z);
+                    }
+                    // Remove the pattern after applying blocks
+                    let _ = self.superboomwall_patterns.remove(i);
+                    return 1; // Only one wall exploded
+                }
+            }
+        }
+
+        0 // No walls in range
+    }
+
+    /// Detect falling blocks in the room (similar to crypts)
+    pub fn detect_fallingblocks(&mut self, world: &World) -> usize {
+        if self.fallingblocks_checked {
+            return self.fallingblocks_detected_count;
+        }
+        let mut detected = 0usize;
+        'pattern: for pattern in &self.fallingblock_patterns {
+            for block in &pattern.blocks {
+                let pos = BlockPos { x: block.x, y: block.y, z: block.z };
+                let state_id = world.get_block_at(pos.x, pos.y, pos.z).get_block_state_id();
+                let id = (state_id >> 4) as u16;
+                if id != block.block_id {
+                    continue 'pattern;
+                }
+            }
+            detected += 1;
+        }
+        self.fallingblocks_detected_count = detected;
+        self.fallingblocks_checked = true;
+        detected
+    }
+
+    /// Check if player is touching any falling block and trigger the fall
+    /// Returns true if a falling block pattern was triggered
+    pub fn check_fallingblocks_collision(&mut self, world: &mut World, player_pos: &BlockPos) -> bool {
+        if self.fallingblock_patterns.is_empty() {
+            return false;
+        }
+
+        // Check if player is standing on any falling block
+        let player_feet_pos = BlockPos { 
+            x: player_pos.x, 
+            y: player_pos.y - 1, // Check block below player's feet
+            z: player_pos.z 
+        };
+
+        // Find the first pattern that has the block the player is standing on
+        for (i, pattern) in self.fallingblock_patterns.iter().enumerate() {
+            let is_standing_on = pattern.blocks.iter().any(|block| {
+                let pos = BlockPos { x: block.x, y: block.y, z: block.z };
+                pos == player_feet_pos
+            });
+            
+            if is_standing_on {
+                // Player is standing on this falling block pattern - trigger it
+                self.trigger_fallingblocks(world, i);
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Trigger falling blocks for a specific pattern index
+    fn trigger_fallingblocks(&mut self, world: &mut World, pattern_index: usize) {
+        if let Some(pattern) = self.fallingblock_patterns.get(pattern_index).cloned() {
+            // Play sound effect
+            for (_, player) in &mut world.players {
+                let _ = player.write_packet(&crate::net::protocol::play::clientbound::SoundEffect {
+                    sound: crate::server::utils::sounds::Sounds::RandomFizz.id(),
+                    pos_x: pattern.blocks[0].x as f64 + 0.5,
+                    pos_y: pattern.blocks[0].y as f64 + 0.5,
+                    pos_z: pattern.blocks[0].z as f64 + 0.5,
+                    volume: 5.0,
+                    pitch: 0.49,
+                });
+            }
+
+            // Schedule block removal after 5 ticks (0.25 seconds)
+            let current_tick = world.tick_count;
+            let removal_tick = current_tick + 5;
+            
+            // Store the blocks to be removed at the scheduled tick
+            self.scheduled_falling_removals.push((removal_tick, pattern.blocks.clone()));
+            
+            // Remove the pattern from the room so it can't be triggered again
+            let _ = self.fallingblock_patterns.remove(pattern_index);
+        }
+    }
+
+    /// Process scheduled falling block removals
+    pub fn process_scheduled_falling_removals(&mut self, world: &mut World) {
+        let current_tick = world.tick_count;
+        let mut to_remove = Vec::new();
+        
+        for (i, (scheduled_tick, blocks)) in self.scheduled_falling_removals.iter().enumerate() {
+            if *scheduled_tick <= current_tick {
+                // Time to remove these blocks
+                for block in blocks {
+                    world.set_block_at(
+                        crate::server::block::blocks::Blocks::Air,
+                        block.x,
+                        block.y,
+                        block.z
+                    );
+                }
+                to_remove.push(i);
+            }
+        }
+        
+        // Remove processed removals (in reverse order to maintain indices)
+        for &i in to_remove.iter().rev() {
+            self.scheduled_falling_removals.remove(i);
+        }
     }
 
     pub fn get_1x1_shape_and_type(segments: &[RoomSegment], dungeon_doors: &[Door]) -> (RoomShape, Direction) {
@@ -349,6 +594,7 @@ impl Room {
                 RoomType::Yellow => Blocks::Stone { variant: 0 },
                 RoomType::Puzzle => Blocks::Stone { variant: 0 },
                 RoomType::Rare => Blocks::Stone { variant: 0 },
+                RoomType::Boss => Blocks::Stone { variant: 0 },
             };
 
             world.fill_blocks(

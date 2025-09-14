@@ -239,18 +239,19 @@ fn get_room_color(room_data: &RoomData) -> u8 {
         Entrance => GREEN,
         Blood => RED,
         Yellow =>  YELLOW,
+        Boss => RED, // Boss rooms get red color
     }
 }
 
 fn get_door_color(room: &Room, neighbour: &Room) -> u8 {
     match room.room_data.room_type {
-        Puzzle | Trap | Blood | Yellow | Fairy => {
+        Puzzle | Trap | Blood | Yellow | Fairy | Boss => {
             return get_room_color(&room.room_data)
         }
         _ => {}
     };
     match neighbour.room_data.room_type {
-        Puzzle | Trap | Blood | Yellow => {
+        Puzzle | Trap | Blood | Yellow | Boss => {
             return get_room_color(&neighbour.room_data)
         }
         _ => {}

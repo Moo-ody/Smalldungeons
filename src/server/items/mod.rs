@@ -15,6 +15,7 @@ pub mod item_stack;
 mod ether_transmission;
 pub mod ender_pearl;
 mod hyperion;
+mod bonzo_projectile;
 
 
 
@@ -32,6 +33,7 @@ pub enum Item {
     SuperboomTNT,
     GoldenAxe,
     Terminator,
+    BonzoStaff,
 }
 
 impl Item {
@@ -189,6 +191,25 @@ impl Item {
                 // Always restore stack size to prevent consumption
                 let hotbar_slot = player.held_slot as usize + 36;
                 player.inventory.set_slot(ItemSlot::Filled(Item::SuperboomTNT, 64), hotbar_slot);
+                // Sync inventory to ensure client sees the restored stack
+                let _ = player.sync_inventory();
+            }
+            Item::BonzoStaff => {
+                // Play ghast moan sound immediately on right-click
+                player.write_packet(&SoundEffect {
+                    sound: Sounds::GhastMoan.id(),
+                    pos_x: player.position.x,
+                    pos_y: player.position.y,
+                    pos_z: player.position.z,
+                    volume: 1.0,
+                    pitch: 1.43,
+                });
+                
+                bonzo_projectile::on_right_click(player)?;
+                
+                // Always restore stack size to prevent consumption
+                let hotbar_slot = player.held_slot as usize + 36;
+                player.inventory.set_slot(ItemSlot::Filled(Item::BonzoStaff, 1), hotbar_slot);
                 // Sync inventory to ensure client sees the restored stack
                 let _ = player.sync_inventory();
             }
@@ -540,6 +561,45 @@ impl Item {
                     ]),
                     NBT::compound("ExtraAttributes", vec![
                         NBT::string("id", "TERMINATOR"),
+                    ]),
+                ])),
+            },
+            Item::BonzoStaff => ItemStack {
+                item: 369, // blaze_rod
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![]),
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§9⚚ Heroic Bonzo's Staff §6✪✪✪✪✪"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            §7Gear Score: §d405 §8(2327)
+                            §7Damage: §c+176 §8(+1,009.6)
+                            §7Strength: §c+25 §9(+25) §8(+157.75)
+                            §7Bonus Attack Speed: §e+2% §9(+2%) §8(+3.12%)
+                            §7Intelligence: §b+395 §9(+65) §8(+2,303.15)
+                             §8[§7✎§8] §8[§8✎§8]
+
+                            §d§l§d§lUltimate Wise V§9, §9Luck II
+
+                            §6Ability: Showtime  §e§lRIGHT CLICK
+                            §7Shoots balloons that create a large explosion
+                            §7on impact, dealing up to §c22,999.9 §7damage.
+                            §8Mana Cost: §341
+
+                            §9§lRARE DUNGEON SWORD
+                        "#})
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("modifier", "heroic"),
+                        NBT::string("upgrade_level", "5"),
+                        NBT::string("id", "STARRED_BONZO_STAFF"),
+                        NBT::compound("enchantments", vec![
+                            NBT::string("luck", "2"),
+                            NBT::string("ultimate_wise", "5"),
+                        ]),
+                        NBT::string("uuid", "3fe1615b-7d69-47f2-9541-81be655310e5"),
+                        NBT::string("timestamp", "1734732834553"),
                     ]),
                 ])),
             },

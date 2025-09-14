@@ -7,3 +7,4 @@ pub mod server;
 pub mod player;
 pub mod entity;
 pub mod commands;
+pub mod lava_boost;

@@ -7,6 +7,7 @@ use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::{RoomData, RoomType};
+use crate::dungeon::room::room::Room;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound;
@@ -21,6 +22,7 @@ use crate::server::chunk::chunk::Chunk;
 use crate::server::chunk::chunk_grid::ChunkDiff;
 use crate::server::entity::entity::{Entity, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
+use crate::server::lava_boost::apply_lava_boost;
 use crate::server::player::container_ui::UI;
 use crate::server::player::player::Player;
 use crate::server::player::scoreboard::ScoreboardLines;
@@ -49,7 +51,7 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
 
-    let rooms_dir = include_dir!("Evensmallerdungeonsdata/room_data/");
+    let rooms_dir = include_dir!("../Evensmallerdungeonsdata/room_data/");
 
     // roomdata first digit (the key) is just a list of numbers 0..etc. this could just be a vec with roomid lookups.
     let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir
@@ -147,6 +149,83 @@ async fn main() -> Result<()> {
         main_tx,
     ));
 
+    // Load the bossroom at fixed coordinates first
+    {
+        // Load the bossroom JSON data
+        let bossroom_json = include_str!("room_data/146,bossroom,-8,-8.json");
+        let bossroom_data = RoomData::from_raw_json(bossroom_json);
+        
+        // Extract dimensions before using bossroom_data
+        let bossroom_width = bossroom_data.width;
+        let bossroom_length = bossroom_data.length;
+        let bossroom_height = bossroom_data.height;
+        
+        // Store boss room dimensions in dungeon for detection
+        server.dungeon.boss_room_width = bossroom_width;
+        server.dungeon.boss_room_length = bossroom_length;
+        server.dungeon.boss_room_height = bossroom_height;
+        
+        // Create a single segment for the bossroom at the specified coordinates
+        let bossroom_segments = vec![crate::dungeon::room::room::RoomSegment {
+            x: 0, // This will be overridden by our custom positioning
+            z: 0, // This will be overridden by our custom positioning
+            neighbours: [None; 4],
+        }];
+        
+        // Create the bossroom with North rotation (no rotation)
+        let bossroom = Room::new(
+            bossroom_segments,
+            &[], // empty doors array
+            bossroom_data,
+        );
+        
+        // Override the corner position to spawn at -18, 255, 4
+        // We need to manually load the bossroom since it's not part of the regular dungeon grid
+        let corner = BlockPos { x: -18, y: 255, z: 4 };
+        
+        // Manually load the bossroom blocks at the specified position
+        for (i, block) in bossroom.room_data.block_data.iter().enumerate() {
+            if *block == Blocks::Air {
+                continue;
+            }
+            
+            let block = block.clone();
+            // No rotation needed since we're placing it directly
+            
+            let ind = i as i32;
+            let x = ind % bossroom.room_data.width;
+            let z = (ind / bossroom.room_data.width) % bossroom.room_data.length;
+            let y = bossroom.room_data.bottom + ind / (bossroom.room_data.width * bossroom.room_data.length);
+            
+            // Place the block at the world position
+            server.world.set_block_at(block, corner.x + x, y, corner.z + z);
+        }
+        
+        println!("Bossroom loaded at coordinates: x={}, y={}, z={} with dimensions: {}x{}x{}", 
+            corner.x, corner.y, corner.z, 
+            server.dungeon.boss_room_width, 
+            server.dungeon.boss_room_length, 
+            server.dungeon.boss_room_height);
+        
+        // Send bossroom chunks to all connected players
+        let bossroom_chunk_x_min = corner.x >> 4;
+        let bossroom_chunk_z_min = corner.z >> 4;
+        let bossroom_chunk_x_max = (corner.x + bossroom.room_data.width) >> 4;
+        let bossroom_chunk_z_max = (corner.z + bossroom.room_data.length) >> 4;
+        
+        for player in server.world.players.values_mut() {
+            for chunk_x in bossroom_chunk_x_min..=bossroom_chunk_x_max {
+                for chunk_z in bossroom_chunk_z_min..=bossroom_chunk_z_max {
+                    if let Some(chunk) = server.world.chunk_grid.get_chunk(chunk_x, chunk_z) {
+                        player.write_packet(&chunk.get_chunk_data(chunk_x, chunk_z, true));
+                    }
+                }
+            }
+        }
+        
+        println!("Bossroom chunks sent to all players");
+    }
+
     let dungeon = &mut server.dungeon;
     
     for room in &mut dungeon.rooms {
@@ -207,6 +286,7 @@ async fn main() -> Result<()> {
             }
         }
     }
+
 
     for door in &dungeon.doors {
         door.load_into_world(&mut server.world, &door_type_blocks);
@@ -395,6 +475,8 @@ async fn main() -> Result<()> {
                     eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, server.dungeon.rooms.len());
                     ""
                 }
+            } else if server.dungeon.is_player_in_boss_room(player) {
+                "bossroom"
             } else {
                 ""
             };
@@ -481,6 +563,14 @@ async fn main() -> Result<()> {
                     hide_particles: true,
                 });
             }
+            
+            // Apply lava boost system (only in boss rooms)
+            let is_in_boss_room = server.dungeon.is_player_in_boss_room(player);
+            // We need to check lava in the world, but we can't borrow world while player is mutably borrowed
+            // So we'll pass the world reference through the player's world_mut method
+            let world_ref = player.world_mut();
+            apply_lava_boost(player, world_ref, is_in_boss_room);
+            
             player.last_position = player.position;
             player.flush_packets();
         }
