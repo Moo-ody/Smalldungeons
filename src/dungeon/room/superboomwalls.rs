@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use include_dir::{include_dir, Dir};
 
 // Include the superboomwalls data
-const SUPERBOOMWALLS_DIR: Dir<'_> = include_dir!("src/room_data/relativecoords");
+const SUPERBOOMWALLS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/room_data/Superboomwalls");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuperboomWallBlock {
