@@ -1,4 +1,9 @@
 use crate::server::block::block_position::BlockPos;
+use crate::server::block::blocks::Blocks;
+use crate::server::entity::entity::{Entity, EntityImpl};
+use crate::net::packets::packet_buffer::PacketBuffer;
+use crate::net::protocol::play::clientbound::{DestroyEntites, EntityAttach, SpawnObject};
+use crate::net::var_int::VarInt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use include_dir::{include_dir, Dir};
@@ -96,4 +101,74 @@ pub fn rotate_fallingblock_pos(block: &FallingBlock, rotation: crate::server::ut
     };
     
     BlockPos { x, y: block.y, z }
+}
+
+/// Entity implementation for falling floor blocks
+/// Similar to DoorEntityImpl but for falling floor blocks
+#[derive(Debug)]
+pub struct FallingFloorEntityImpl {
+    pub block: Blocks,
+    distance_per_tick: f64,
+    ticks_left: u32,
+}
+
+impl FallingFloorEntityImpl {
+    pub fn new(block: Blocks, distance: f64, ticks: u32) -> Self {
+        Self {
+            block,
+            distance_per_tick: distance / ticks as f64,
+            ticks_left: ticks,
+        }
+    }
+}
+
+/// Offset for the falling block riding the bat entity
+pub const FALLING_FLOOR_ENTITY_OFFSET: f64 = 0.65;
+
+impl EntityImpl for FallingFloorEntityImpl {
+    fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        let world = entity.world_mut();
+        let entity_id = world.new_entity_id();
+
+        let object_data = {
+            let block_state_id = self.block.get_block_state_id() as i32;
+            let block_id = block_state_id >> 4;
+            let metadata = block_state_id & 0b1111;
+            block_id | (metadata << 12)
+        };
+
+        buffer.write_packet(&SpawnObject {
+            entity_id: VarInt(entity_id),
+            entity_variant: 70, // Falling block entity
+            x: entity.position.x,
+            y: entity.position.y + FALLING_FLOOR_ENTITY_OFFSET,
+            z: entity.position.z,
+            yaw: 0.0,
+            pitch: 0.0,
+            data: object_data,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
+        });
+
+        buffer.write_packet(&EntityAttach {
+            entity_id,
+            vehicle_id: entity.id,
+            leash: false,
+        });
+    }
+
+    fn despawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        buffer.write_packet(&DestroyEntites {
+            entities: vec![VarInt(entity.id + 1)],
+        });
+    }
+
+    fn tick(&mut self, entity: &mut Entity, _: &mut PacketBuffer) {
+        entity.position.y -= self.distance_per_tick;
+        self.ticks_left -= 1;
+        if self.ticks_left == 0 {
+            entity.world_mut().despawn_entity(entity.id);
+        }
+    }
 }

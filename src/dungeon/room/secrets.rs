@@ -12,6 +12,7 @@ use crate::server::world::World;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub enum SecretType {
     WitherEssence {
         // have rotation here
@@ -26,6 +27,7 @@ pub enum SecretType {
     Bat,
 }
 
+#[derive(Debug)]
 pub struct DungeonSecret {
     secret_type: SecretType,
     block_pos: BlockPos, // might not even need?

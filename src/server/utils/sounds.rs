@@ -46,6 +46,7 @@ id_enum! {
         FireworksBlast("fireworks.blast"),
         FireworksTwinkle("fireworks.twinkle"),
         RandomFizz("random.fizz"),
+        RandomWoodClick("random.wood_click"),
         
     }
 }

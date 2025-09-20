@@ -11,6 +11,7 @@ use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
+use crate::server::redstone::RedstoneSystem;
 use std::collections::HashMap;
 use std::mem::take;
 
@@ -47,6 +48,9 @@ pub struct World {
     // Scheduled tactical insertions (teleport back after delay)
     pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
     pub tick_count: u64,
+    
+    // Redstone system for handling power transmission
+    pub redstone_system: RedstoneSystem,
 }
 
 impl World {
@@ -72,6 +76,7 @@ impl World {
             // NEW FIELDS
             tactical_insertions: Vec::new(),
             tick_count: 0,
+            redstone_system: RedstoneSystem::new(),
         }
     }
 
@@ -145,6 +150,9 @@ impl World {
         
                 // Process scheduled tactical insertions
         tactical_insertion::process(self)?;
+        
+        // Process redstone system updates
+        // We'll handle redstone updates in the lever interaction instead
         
         Ok(())
     }

@@ -196,7 +196,7 @@ impl Server {
                 //     scale: 0,
                 //     columns: 128,
                 //     rows: 128,
-                //     x: 0,
+                //     x: 0,car
                 //     z: 0,
                 //     map_data: map.map_data.to_vec(),
                 // });

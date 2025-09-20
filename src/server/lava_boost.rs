@@ -1,4 +1,4 @@
-use crate::net::protocol::play::clientbound::{EntityVelocity, PositionLook};
+use crate::net::protocol::play::clientbound::{EntityVelocity};
 use crate::net::var_int::VarInt;
 use crate::server::block::blocks::Blocks;
 use crate::server::player::player::Player;
@@ -6,25 +6,28 @@ use crate::server::world::World;
 
 // Constants for the lava boost system
 const IS_SINGLEPLAYER: bool = true;          // Singleplayer detection
-const GROUND_EPSILON: f64 = 0.10;            // "close to ground" tolerance
+// const GROUND_EPSILON: f64 = 0.5;             // "close to ground" tolerance - not used anymore
 const BOOST_VELOCITY_Y: f64 = 3.5;           // vertical launch power
 
-/// Check if a player is currently in lava by checking the block at their position
-fn is_player_in_lava(player: &Player, world: &World) -> bool {
+/// Check if a player is touching lava (either standing on it or in it)
+fn is_player_touching_lava(player: &Player, world: &World) -> bool {
     let block_x = player.position.x.floor() as i32;
-    let block_y = player.position.y.floor() as i32;
     let block_z = player.position.z.floor() as i32;
     
-    let block = world.get_block_at(block_x, block_y, block_z);
+    // Check block at player's feet (below their position)
+    let feet_y = (player.position.y - 0.1).floor() as i32;
+    let block_below = world.get_block_at(block_x, feet_y, block_z);
+    let standing_on_lava = matches!(block_below, Blocks::Lava { .. } | Blocks::FlowingLava { .. });
     
-    matches!(block, Blocks::Lava { .. } | Blocks::FlowingLava { .. })
+    // Check block at player's position (in lava)
+    let player_y = player.position.y.floor() as i32;
+    let block_at_player = world.get_block_at(block_x, player_y, block_z);
+    let in_lava = matches!(block_at_player, Blocks::Lava { .. } | Blocks::FlowingLava { .. });
+    
+    standing_on_lava || in_lava
 }
 
-/// Check if a player is close to the ground (within epsilon of integer Y)
-fn is_near_ground(player: &Player) -> bool {
-    let y_int = player.position.y.floor();
-    (player.position.y - y_int) < GROUND_EPSILON
-}
+// Ground proximity check removed - touching lava should always bounce
 
 /// Apply lava boost to a player if they meet all conditions
 /// This function should be called every tick for each player
@@ -39,15 +42,16 @@ pub fn apply_lava_boost(player: &mut Player, world: &World, is_in_boss_room: boo
         return;
     }
     
-    // 3) Are we in lava?
-    if !is_player_in_lava(player, world) {
+    // 3) Are our feet touching lava?
+    if !is_player_touching_lava(player, world) {
         return;
     }
     
-    // 4) Are we basically on the ground? (within 0.1 above the integer Y)
-    if !is_near_ground(player) {
-        return;
-    }
+    // 4) Are we basically on the ground? (within 0.5 above the integer Y)
+    // Note: Removed this check since touching lava should always bounce
+    // if !is_near_ground(player) {
+    //     return;
+    // }
     
     // 5) Apply boost: set player velocity upward like the Java version
     // This creates a proper bounce effect instead of just teleporting

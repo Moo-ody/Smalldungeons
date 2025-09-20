@@ -6,6 +6,7 @@ use crate::dungeon::room::crypts::{get_room_crypts, rotate_block_pos};
 use crate::dungeon::room::mushroom::{get_room_mushrooms, MushroomSets};
 use crate::dungeon::room::superboomwalls::{get_room_superboomwalls, SuperboomWallPattern, rotate_superboomwall_pos};
 use crate::dungeon::room::fallingblocks::{get_room_fallingblocks, FallingBlockPattern, rotate_fallingblock_pos};
+use crate::dungeon::room::levers::{get_room_levers, LeverData};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -45,6 +46,7 @@ pub struct Room {
     pub fallingblocks_detected_count: usize,
     pub scheduled_falling_removals: Vec<(u64, Vec<crate::dungeon::room::fallingblocks::FallingBlock>)>, // (tick, blocks)
     pub mushroom_sets: Vec<MushroomSets>,
+    pub lever_data: Vec<LeverData>, // Store lever data for this room
     
     pub entered: bool,
 }
@@ -172,6 +174,58 @@ impl Room {
             }
         }
 
+        // Store lever data for this room (similar to crypts and superboom walls)
+        let mut lever_data = Vec::new();
+        if let Some(room_levers) = get_room_levers(shape_key, &room_data.name) {
+            for lever_data_item in room_levers {
+                // Convert relative coordinates to world coordinates (same as crypts)
+                let relative_pos = BlockPos {
+                    x: lever_data_item.lever[0],
+                    y: lever_data_item.lever[1], // Y coordinates are absolute
+                    z: lever_data_item.lever[2],
+                };
+                
+                // Rotate the position based on room rotation (same as crypts)
+                let rotated = relative_pos.rotate(rotation);
+                
+                // Convert to world coordinates (same as crypts)
+                let lever_pos = BlockPos {
+                    x: corner_pos.x + rotated.x,
+                    y: rotated.y, // Y coordinates are absolute
+                    z: corner_pos.z + rotated.z,
+                };
+                
+                // Store the lever data with world coordinates
+                let mut world_lever_data = lever_data_item.clone();
+                world_lever_data.lever = [lever_pos.x, lever_pos.y, lever_pos.z];
+                
+                // Convert block positions to world coordinates as well
+                let mut world_blocks = Vec::new();
+                for block_pos in &lever_data_item.blocks {
+                    let relative_block_pos = BlockPos {
+                        x: block_pos[0],
+                        y: block_pos[1], // Y coordinates are absolute
+                        z: block_pos[2],
+                    };
+                    
+                    // Rotate the block position based on room rotation (same as crypts)
+                    let rotated_block_pos = relative_block_pos.rotate(rotation);
+                    
+                    // Convert to world coordinates (same as crypts)
+                    let world_block_pos = BlockPos {
+                        x: corner_pos.x + rotated_block_pos.x,
+                        y: rotated_block_pos.y, // Y coordinates are absolute
+                        z: corner_pos.z + rotated_block_pos.z,
+                    };
+                    
+                    world_blocks.push([world_block_pos.x, world_block_pos.y, world_block_pos.z]);
+                }
+                world_lever_data.blocks = world_blocks;
+                
+                lever_data.push(world_lever_data);
+            }
+        }
+
         Room {
             segments,
             room_data,
@@ -189,6 +243,7 @@ impl Room {
             fallingblocks_detected_count: 0,
             scheduled_falling_removals: Vec::new(),
             mushroom_sets,
+            lever_data,
             entered: false,
         }
     }
@@ -429,42 +484,49 @@ impl Room {
                 });
             }
 
-            // Schedule block removal after 5 ticks (0.25 seconds)
-            let current_tick = world.tick_count;
-            let removal_tick = current_tick + 5;
-            
-            // Store the blocks to be removed at the scheduled tick
-            self.scheduled_falling_removals.push((removal_tick, pattern.blocks.clone()));
+            // Spawn falling block entities for each block in the pattern
+            for block in &pattern.blocks {
+                let x = block.x;
+                let y = block.y;
+                let z = block.z;
+                
+                // Get the current block at this position
+                let current_block = world.get_block_at(x, y, z);
+                
+                // Skip air blocks
+                if matches!(current_block, crate::server::block::blocks::Blocks::Air) {
+                    continue;
+                }
+                
+                // Replace with barrier block immediately
+                world.set_block_at(crate::server::block::blocks::Blocks::Barrier, x, y, z);
+                world.interactable_blocks.remove(&crate::server::block::block_position::BlockPos { x, y, z });
+                
+                // Schedule the barrier block to be replaced with air after 20 ticks
+                world.server_mut().schedule(20, move |server| {
+                    server.world.set_block_at(crate::server::block::blocks::Blocks::Air, x, y, z);
+                });
+                
+                // Spawn falling block entity for animation
+                let _ = world.spawn_entity(
+                    crate::server::utils::dvec3::DVec3::new(x as f64 + 0.5, y as f64 - crate::dungeon::room::fallingblocks::FALLING_FLOOR_ENTITY_OFFSET, z as f64 + 0.5),
+                    crate::server::entity::entity_metadata::EntityMetadata {
+                        variant: crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false },
+                        is_invisible: true
+                    },
+                    crate::dungeon::room::fallingblocks::FallingFloorEntityImpl::new(current_block, 5.0, 20),
+                );
+            }
             
             // Remove the pattern from the room so it can't be triggered again
             let _ = self.fallingblock_patterns.remove(pattern_index);
         }
     }
 
-    /// Process scheduled falling block removals
-    pub fn process_scheduled_falling_removals(&mut self, world: &mut World) {
-        let current_tick = world.tick_count;
-        let mut to_remove = Vec::new();
-        
-        for (i, (scheduled_tick, blocks)) in self.scheduled_falling_removals.iter().enumerate() {
-            if *scheduled_tick <= current_tick {
-                // Time to remove these blocks
-                for block in blocks {
-                    world.set_block_at(
-                        crate::server::block::blocks::Blocks::Air,
-                        block.x,
-                        block.y,
-                        block.z
-                    );
-                }
-                to_remove.push(i);
-            }
-        }
-        
-        // Remove processed removals (in reverse order to maintain indices)
-        for &i in to_remove.iter().rev() {
-            self.scheduled_falling_removals.remove(i);
-        }
+    /// Process scheduled falling block removals (now handled by entities)
+    pub fn process_scheduled_falling_removals(&mut self, _world: &mut World) {
+        // This method is now empty since falling blocks are handled by entities
+        // The scheduled_falling_removals field is kept for compatibility but not used
     }
 
     pub fn get_1x1_shape_and_type(segments: &[RoomSegment], dungeon_doors: &[Door]) -> (RoomShape, Direction) {
@@ -647,6 +709,20 @@ impl Room {
         }
     }
 
+    /// Register levers for this room as interactable blocks
+    pub fn register_levers(&self, world: &mut World) {
+        for lever_data in &self.lever_data {
+            let lever_pos = BlockPos {
+                x: lever_data.lever[0],
+                y: lever_data.lever[1],
+                z: lever_data.lever[2],
+            };
+            
+            // Register the lever as an interactable block
+            world.interactable_blocks.insert(lever_pos, crate::server::block::block_interact_action::BlockInteractAction::Lever);
+        }
+    }
+
     pub fn load_into_world(&self, world: &mut World) {
         if self.room_data.block_data.is_empty() {
             self.load_default(world);
@@ -654,6 +730,9 @@ impl Room {
         }
 
         let corner = self.get_corner_pos();
+        
+        // Register levers for this room
+        self.register_levers(world);
 
         for (i, block) in self.room_data.block_data.iter().enumerate() {
             if *block == Blocks::Air {

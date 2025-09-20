@@ -8,3 +8,4 @@ pub mod player;
 pub mod entity;
 pub mod commands;
 pub mod lava_boost;
+pub mod redstone;

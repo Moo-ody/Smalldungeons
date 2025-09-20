@@ -1,4 +1,4 @@
-use crate::net::protocol::play::clientbound::{EntityVelocity, SoundEffect, Particles, PositionLook};
+use crate::net::protocol::play::clientbound::{EntityVelocity, SoundEffect, Particles};
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::var_int::VarInt;
 use crate::server::block::blocks::Blocks;
@@ -10,8 +10,12 @@ use crate::server::utils::sounds::Sounds;
 use anyhow::Result;
 use std::f64::consts::PI;
 
-const TPS: f64 = 20.0;
-const SPEED_BPS: f64 = 20.0; // blocks per second
+// Core constants from the guide
+const TPS: f64 = 20.0; // Minecraft runs at 20 ticks per second
+const PROJECTILE_SPEED: f64 = 20.0; // blocks per second
+const EXPLOSION_RADIUS: f64 = 2.5;
+const KNOCKBACK_STRENGTH: f64 = 0.9;
+const SPAWN_OFFSET: f64 = 0.30; // blocks forward from player eye
 
 /// Explosive projectile for Bonzo Staff
 pub struct BonzoProjectileImpl {
@@ -35,9 +39,9 @@ impl BonzoProjectileImpl {
         Self {
             thrower_client_id,
             velocity_per_tick,
-            explosion_radius: 8.0, // Larger explosion radius
-            base_knockback: 4.0,   // Stronger base knockback
-            vertical_boost: 3.0,   // Stronger vertical boost
+            explosion_radius: EXPLOSION_RADIUS,
+            base_knockback: KNOCKBACK_STRENGTH,
+            vertical_boost: 2.0,   // Stronger vertical boost for knockback
             max_ticks: 200, // 10 seconds max lifetime
         }
     }
@@ -76,6 +80,8 @@ impl EntityImpl for BonzoProjectileImpl {
 
         // Perform segment raycast (prev -> next)
         if let Some(impact_point) = self.segment_raycast(entity, prev_pos, next_pos) {
+            println!("BONZO PROJECTILE HIT WALL at ({:.2}, {:.2}, {:.2})", 
+                impact_point.x, impact_point.y, impact_point.z);
             self.explode(entity, packet_buffer, impact_point);
             entity.world_mut().despawn_entity(entity.id);
             return;
@@ -135,6 +141,7 @@ impl BonzoProjectileImpl {
         
         println!("BONZO EXPLOSION at ({:.2}, {:.2}, {:.2}) with radius {:.2}", 
             explosion_center.x, explosion_center.y, explosion_center.z, self.explosion_radius);
+        println!("BONZO EXPLOSION: Found {} players to check for knockback", world.players.len());
         
         // Play explosion sounds
         for _player in world.players.values() {
@@ -156,27 +163,26 @@ impl BonzoProjectileImpl {
             });
         }
 
-        // Generate explosion particles
+        // Generate explosion particles in spherical pattern
         self.generate_explosion_particles(packet_buffer, explosion_center);
         
         // Apply knockback to nearby players
         self.apply_knockback_to_players(world, explosion_center);
     }
 
-    /// Generate explosion particles in a spherical pattern
+    /// Generate particles in spherical explosion pattern
     fn generate_explosion_particles(&self, packet_buffer: &mut PacketBuffer, center: DVec3) {
-        const PARTICLE_COUNT: i32 = 50;
+        let particle_count = 20;
         
-        for _ in 0..PARTICLE_COUNT {
-            // Generate spherical coordinates
-            let theta = (rand::random::<f64>() * 2.0 * PI) as f32;
-            let phi = (rand::random::<f64>() * PI) as f32;
-            let r = rand::random::<f32>() * self.explosion_radius as f32;
+        for _ in 0..particle_count {
+            // Generate random point on sphere
+            let theta = rand::random::<f64>() * 2.0 * PI;
+            let phi = (2.0 * rand::random::<f64>() - 1.0).acos();
+            let r = rand::random::<f64>() * self.explosion_radius;
             
-            // Convert to Cartesian coordinates
-            let x = center.x + (r * phi.sin() * theta.cos()) as f64;
-            let y = center.y + (r * phi.cos()) as f64;
-            let z = center.z + (r * phi.sin() * theta.sin()) as f64;
+            let x = center.x + r * phi.sin() * theta.cos();
+            let y = center.y + r * phi.cos();
+            let z = center.z + r * phi.sin() * theta.sin();
             
             // Spawn explosion particle
             let _ = packet_buffer.write_packet(&Particles {
@@ -196,65 +202,56 @@ impl BonzoProjectileImpl {
 
     /// Apply knockback to players within explosion radius
     fn apply_knockback_to_players(&self, world: &mut crate::server::world::World, explosion_center: DVec3) {
-        println!("Checking knockback for {} players", world.players.len());
+        let explosion_range = 9.0; // blocks
+        
         for (_client_id, player) in world.players.iter_mut() {
-            // Use eye position for knockback calculation
-            let eye_height = 1.62;
-            let eye_pos = DVec3::new(
+            // Use player center position (feet + 0.9 blocks) for more stable knockback
+            let player_center = DVec3::new(
                 player.position.x,
-                player.position.y + eye_height,
+                player.position.y + 0.9,  // Player center height
                 player.position.z,
             );
             
-            let distance = eye_pos.distance_to(&explosion_center);
+            let distance = explosion_center.distance_to(&player_center);
             
-            println!("Player at distance {:.2} from explosion (radius: {:.2})", distance, self.explosion_radius);
-            
-            if distance < self.explosion_radius {
-                // Calculate direction from explosion center to player's eyes
-                let direction_to_player = (eye_pos - explosion_center).normalize();
+            if distance < explosion_range {
+                // Calculate knockback direction (from explosion to player)
+                let mut knockback_dir = (player_center - explosion_center);
                 
-                // Distance attenuation: clamp(1 - d/radius, 0..1)
-                let attenuation = (1.0 - (distance / self.explosion_radius)).max(0.0).min(1.0);
+                // Apply distance-based minimum knockback to prevent tiny explosions from having huge effects
+                let min_distance = 0.5; // Minimum effective distance
+                if knockback_dir.distance_to(&DVec3::ZERO) < min_distance {
+                    // If explosion is very close, use player's look direction for knockback
+                    let look_dir = look_dir_minecraft(player.yaw, player.pitch);
+                    knockback_dir = DVec3::new(look_dir.x, look_dir.y, look_dir.z);
+                } else {
+                    knockback_dir = knockback_dir.normalize();
+                }
                 
-                // Knockback = (direction_to_player × base_strength × attn) with vertical boost
-                let horizontal_knockback = DVec3::new(
-                    direction_to_player.x * self.base_knockback * attenuation,
-                    direction_to_player.y * self.base_knockback * attenuation,
-                    direction_to_player.z * self.base_knockback * attenuation,
+                // Apply knockback with distance attenuation
+                let attenuation = (1.0 - (distance / explosion_range)).max(0.1); // Minimum 10% knockback
+                let horizontal_strength = 1.5 * attenuation; // Stronger horizontal knockback
+                let vertical_strength = 0.6 * attenuation;   // Reduced vertical knockback
+                
+                let final_knockback = DVec3::new(
+                    knockback_dir.x * horizontal_strength,
+                    knockback_dir.y * vertical_strength,  // Reduced vertical
+                    knockback_dir.z * horizontal_strength,
                 );
                 
-                // Add vertical boost scaled by attenuation
-                let vertical_boost = DVec3::new(0.0, self.vertical_boost * attenuation, 0.0);
+                // Debug logging
+                println!("BONZO KNOCKBACK: distance={:.2}, explosion=({:.2}, {:.2}, {:.2}), player=({:.2}, {:.2}, {:.2}), dir=({:.2}, {:.2}, {:.2}), knockback=({:.2}, {:.2}, {:.2})", 
+                    distance, explosion_center.x, explosion_center.y, explosion_center.z,
+                    player_center.x, player_center.y, player_center.z,
+                    knockback_dir.x, knockback_dir.y, knockback_dir.z,
+                    final_knockback.x, final_knockback.y, final_knockback.z);
                 
-                let total_knockback = horizontal_knockback + vertical_boost;
-                
-                // Debug output
-                println!("Knockback: distance={:.2}, attn={:.2}, total=({:.2}, {:.2}, {:.2})", 
-                    distance, attenuation, total_knockback.x, total_knockback.y, total_knockback.z);
-                
-                // Apply knockback by directly moving the player (more reliable)
-                let new_position = player.position + total_knockback;
-                
-                // Update player position on server
-                player.position = new_position;
-                
-                // Send PositionLook packet to move the player
-                player.write_packet(&PositionLook {
-                    x: new_position.x,
-                    y: new_position.y,
-                    z: new_position.z,
-                    yaw: player.yaw,
-                    pitch: player.pitch,
-                    flags: 0, // Set absolute position
-                });
-                
-                // Also try EntityVelocity as backup
+                // Send EntityVelocity packet to apply the knockback
                 player.write_packet(&EntityVelocity {
                     entity_id: VarInt(player.entity_id),
-                    velocity_x: (total_knockback.x * 4000.0).clamp(-3.9, 3.9) as i16,
-                    velocity_y: (total_knockback.y * 4000.0).clamp(-3.9, 3.9) as i16,
-                    velocity_z: (total_knockback.z * 4000.0).clamp(-3.9, 3.9) as i16,
+                    velocity_x: (final_knockback.x * 8000.0).clamp(-32767.0, 32767.0) as i16,
+                    velocity_y: (final_knockback.y * 8000.0).clamp(-32767.0, 32767.0) as i16,
+                    velocity_z: (final_knockback.z * 8000.0).clamp(-32767.0, 32767.0) as i16,
                 });
                 
                 player.flush_packets();
@@ -330,37 +327,99 @@ pub fn on_right_click(player: &mut Player) -> Result<()> {
     // MC-correct look direction calculation
     let direction = look_dir_minecraft(player.yaw, player.pitch);
     
-    // Small forward offset to avoid self-collision (0.25-0.35 blocks)
+    // Calculate spawn position with forward offset to avoid self-collision
     let spawn_pos = eye_pos + DVec3::new(
-        direction.x * 0.30,
-        direction.y * 0.30,
-        direction.z * 0.30,
+        direction.x * SPAWN_OFFSET,
+        direction.y * SPAWN_OFFSET,
+        direction.z * SPAWN_OFFSET,
     );
 
-    // TODO: Add ping compensation here
-    // delay_ticks = round(ping_ms / 50)
-    // For now, spawn immediately
-
-    player.world_mut().spawn_entity(
-        spawn_pos,
-        EntityMetadata::new(EntityVariant::BonzoProjectile),
-        BonzoProjectileImpl::new(player.client_id, direction, SPEED_BPS),
-    )?;
+    // Ping compensation: delay_ticks = round(ping_ms / 50)
+    let delay_ticks = ((player.ping as f64) / 50.0).round() as u32;
+    
+    if delay_ticks == 0 {
+        // Spawn immediately for low ping
+        player.world_mut().spawn_entity(
+            spawn_pos,
+            EntityMetadata::new(EntityVariant::BonzoProjectile),
+            BonzoProjectileImpl::new(player.client_id, direction, PROJECTILE_SPEED),
+        )?;
+    } else {
+        // Schedule delayed spawn for ping compensation
+        let server = player.server_mut();
+        let client_id = player.client_id;
+        let spawn_pos_clone = spawn_pos;
+        let direction_clone = direction;
+        
+        server.schedule(delay_ticks, move |server| {
+            if let Some(player) = server.world.players.get_mut(&client_id) {
+                let _ = player.world_mut().spawn_entity(
+                    spawn_pos_clone,
+                    EntityMetadata::new(EntityVariant::BonzoProjectile),
+                    BonzoProjectileImpl::new(client_id, direction_clone, PROJECTILE_SPEED),
+                );
+            }
+        });
+    }
 
     Ok(())
 }
 
-/// MC-correct look direction calculation
-/// Conventions: forward is +Z, yaw=0 faces +Z, yaw=90 faces -X, yaw=-90 faces +X, pitch positive means looking down
+/// Converts Minecraft yaw/pitch (in degrees) to a normalized direction vector
+/// 
+/// Minecraft conventions:
+/// - Yaw 0° = +Z (forward)
+/// - Yaw 90° = -X (right)
+/// - Yaw -90° = +X (left)
+/// - Pitch 0° = horizontal
+/// - Pitch 90° = straight down (negative Y)
+/// - Pitch -90° = straight up (positive Y)
 #[inline]
 fn look_dir_minecraft(yaw_deg: f32, pitch_deg: f32) -> DVec3 {
     let yaw = yaw_deg as f64 * PI / 180.0;
     let pitch = pitch_deg as f64 * PI / 180.0;
-    let cp = pitch.cos();
-    let dir = DVec3::new(
-        -yaw.sin() * cp,   // +yaw right -> -X (MC)
-        -pitch.sin(),      // pitch down positive -> negative Y in world-up
-        yaw.cos() * cp     // forward is +Z
-    );
-    dir.normalize()
+    
+    let cos_pitch = pitch.cos();
+    let sin_pitch = pitch.sin();
+    let cos_yaw = yaw.cos();
+    let sin_yaw = yaw.sin();
+    
+    DVec3::new(
+        -sin_yaw * cos_pitch,  // X: +yaw right -> -X
+        -sin_pitch,            // Y: pitch down -> negative Y
+        cos_yaw * cos_pitch    // Z: forward is +Z
+    ).normalize()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_look_directions() {
+        let dir = look_dir_minecraft(0.0, 0.0);
+        assert!((dir.x - 0.0).abs() < 0.001);
+        assert!((dir.y - 0.0).abs() < 0.001);
+        assert!((dir.z - 1.0).abs() < 0.001); // Forward
+        
+        let dir = look_dir_minecraft(90.0, 0.0);
+        assert!((dir.x - (-1.0)).abs() < 0.001); // Right
+        assert!((dir.y - 0.0).abs() < 0.001);
+        assert!((dir.z - 0.0).abs() < 0.001);
+        
+        let dir = look_dir_minecraft(0.0, 90.0);
+        assert!((dir.x - 0.0).abs() < 0.001);
+        assert!((dir.y - (-1.0)).abs() < 0.001); // Down
+        assert!((dir.z - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_projectile_speed() {
+        let direction = DVec3::new(0.0, 0.0, 1.0); // Forward
+        let projectile = BonzoProjectileImpl::new(0, direction, PROJECTILE_SPEED);
+        
+        // After 20 ticks (1 second), should travel 20 blocks
+        let expected_velocity = DVec3::new(0.0, 0.0, PROJECTILE_SPEED / TPS);
+        assert!((projectile.velocity_per_tick.z - expected_velocity.z).abs() < 0.001);
+    }
 }

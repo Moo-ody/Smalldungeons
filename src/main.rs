@@ -70,6 +70,9 @@ async fn main() -> Result<()> {
         })
         .collect();
 
+    // Load lever data - using include_str for now since the directory name has spaces
+    let _lever_json_data = include_str!("room_data/lever shi/lever.json");
+
     // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
     // But this works for now...
     let door_data: Vec<Vec<Blocks>> = include_str!("door_data/doors.txt")
@@ -137,7 +140,8 @@ async fn main() -> Result<()> {
     println!("Rng Seed: {}", rng_seed);
     SeededRng::set_seed(rng_seed);
 
-    let dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
+    let mut dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
+    
     let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
     server.world.server = &mut server;
     server.dungeon.server = &mut server;
@@ -182,6 +186,9 @@ async fn main() -> Result<()> {
         // Override the corner position to spawn at -18, 255, 4
         // We need to manually load the bossroom since it's not part of the regular dungeon grid
         let corner = BlockPos { x: -18, y: 255, z: 4 };
+        
+        // Update the dungeon's boss room corner to match the actual loaded position
+        server.dungeon.boss_room_corner = corner;
         
         // Manually load the bossroom blocks at the specified position
         for (i, block) in bossroom.room_data.block_data.iter().enumerate() {
@@ -235,10 +242,6 @@ async fn main() -> Result<()> {
         // Immediately scan crypts on world load for debug visibility
         if room.crypt_patterns.len() > 0 && !room.crypts_checked {
             let count = room.detect_crypts(&server.world);
-            println!(
-                "[crypts] room '{}' shape {:?} rotation {:?} — patterns: {}, matched: {}",
-                room.room_data.name, room.room_data.shape, room.rotation, room.crypt_patterns.len(), count
-            );
             if count == 0 {
                 room.debug_crypt_mismatch(&server.world);
             }
@@ -286,7 +289,8 @@ async fn main() -> Result<()> {
             }
         }
     }
-
+    
+    // Lever system is now integrated into room generation (like crypts and superboom walls)
 
     for door in &dungeon.doors {
         door.load_into_world(&mut server.world, &door_type_blocks);

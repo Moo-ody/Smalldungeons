@@ -44,6 +44,7 @@ pub struct Dungeon {
     pub boss_room_width: i32,
     pub boss_room_length: i32,
     pub boss_room_height: i32,
+    
 }
 
 impl Dungeon {
@@ -131,6 +132,7 @@ impl Dungeon {
             boss_room_height: 30, // Default height
         })
     }
+
 
     pub fn from_str(layout_str: &str, room_data_storage: &DeterministicHashMap<usize, RoomData>) -> anyhow::Result<Dungeon> {
         let mut rooms: Vec<Room> = Vec::new();
