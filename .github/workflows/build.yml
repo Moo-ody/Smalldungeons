@@ -27,7 +27,7 @@ jobs:
       - name: Get ClearData Room Data
         uses: actions/checkout@v4
         with:
-          repository: Big-Dungeons/ClearData
+          repository: Moo-ody/Evensmallerdungeonsdata
           ref: main
           path: ClearData
 
