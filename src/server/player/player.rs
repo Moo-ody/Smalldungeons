@@ -6,6 +6,7 @@ use crate::net::protocol::play::clientbound::{Chat, OpenWindow, SetSlot, WindowI
 use crate::server::entity::entity::EntityId;
 use crate::server::player::container_ui::UI;
 use crate::server::player::inventory::{Inventory, ItemSlot};
+use crate::server::player::terminal::Terminal;
 use crate::server::player::scoreboard::Scoreboard;
 use crate::server::server::Server;
 use crate::server::utils::aabb::AABB;
@@ -66,6 +67,7 @@ pub struct Player {
     pub window_id: i8,
     pub current_ui: UI,
     // pub current_ui: UI,
+    pub current_terminal: Option<Terminal>,
 
     pub sidebar: Scoreboard,
 }
@@ -106,7 +108,8 @@ impl Player {
             
             window_id: 1,
             current_ui: UI::None,
-            
+            current_terminal: None,
+
             sidebar: Scoreboard::new(),
             
             // observed_entities: HashSet::new(),
@@ -201,11 +204,16 @@ impl Player {
                 })
             }
         }
-        if let Some(container_data) = ui.get_container_data() {
-            self.window_id += 1;
+        if let Some(container_data) = ui.get_container_data(self) {
+            // team we forgot to check for wId exceeding 100
+            if self.window_id > 99 {
+                self.window_id = 1;
+            } else {
+                self.window_id += 1;
+            }
             self.write_packet(&OpenWindow {
                 window_id: self.window_id,
-                inventory_type: "minecraft:container".into(),
+                inventory_type: "minecraft:chest".into(), // if this needs to be containers lmk
                 window_title: ChatComponentTextBuilder::new(container_data.title).build(),
                 slot_count: container_data.slot_amount,
             });
@@ -221,7 +229,7 @@ impl Player {
         }
         
         if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
-            self.write_packet(&WindowItems {
+            self.write_packet(&WindowItems { // this breaks autoterms :fire:, in order to make it as like hypixel as possible we would need to use setslots
                 window_id: self.window_id,
                 items,
             });

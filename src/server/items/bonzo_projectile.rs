@@ -216,7 +216,7 @@ impl BonzoProjectileImpl {
             
             if distance < explosion_range {
                 // Calculate knockback direction (from explosion to player)
-                let mut knockback_dir = (player_center - explosion_center);
+                let mut knockback_dir = (player_center - explosion_center); // the y component is set, u always take the same vertical kb (0.5)
                 
                 // Apply distance-based minimum knockback to prevent tiny explosions from having huge effects
                 let min_distance = 0.5; // Minimum effective distance

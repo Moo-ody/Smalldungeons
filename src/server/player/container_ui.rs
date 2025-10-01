@@ -8,6 +8,7 @@ use crate::server::server::Server;
 use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::sounds::Sounds;
 use crate::net::protocol::play::clientbound::SoundEffect;
+use crate::server::player::terminal::{Terminal, TerminalType};
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -20,19 +21,35 @@ pub enum UI {
     None,
     // this is here to direct clicks to the actual inventory where all the items are stored, etc.
     Inventory,
-    MortReadyUpMenu
+    MortReadyUpMenu,
+    TerminalUI
 }
 
 impl UI {
 
     /// this function returns data for opening a container,
     /// should not be used for UI's that don't use a container
-    pub fn get_container_data(&self) -> Option<ContainerData> {
+    pub fn get_container_data(&self, player: &mut Player) -> Option<ContainerData> { // fuck you im passing player
         match self {
             UI::MortReadyUpMenu => Some(ContainerData {
                 title: "Ready Up".to_string(),
                 slot_amount: 54,
             }),
+            UI::TerminalUI => { // Hello, Please don't read this :)
+                let title;
+                let slot_amount;
+                match player.current_terminal.as_mut()?._type {
+                    TerminalType::Panes => {
+                        title = "Correct all the panes!".to_string();
+                        slot_amount = 45;
+                    }
+                    _ => {
+                        title = "How did you do this?".to_string();
+                        slot_amount = 67;
+                    }
+                }
+                Some(ContainerData { title, slot_amount })
+            },
             _ => None
         }
     }
@@ -82,6 +99,9 @@ impl UI {
                     ])),
                 });
                 Some(content)
+            }
+            UI::TerminalUI => {
+                Option::from(player.current_terminal.as_ref()?.get_contents())
             }
             _ => None
         }
@@ -143,6 +163,32 @@ impl UI {
                     _ => {}
                 }
                 player.sync_inventory();
+            }
+            UI::TerminalUI => {
+                if let Some(mut terminal) = player.current_terminal.take() {
+                    if terminal.click_slot(packet) { // i dont get this at all
+                        player.current_ui = UI::None;
+                        player.current_terminal = None;
+                        player.write_packet(&CloseWindow {
+                            window_id: player.window_id,
+                        });
+
+                        // TERMINAL COMPLETED
+                        return;
+                    }
+                    player.current_terminal = Some(terminal);
+                    player.open_ui(UI::TerminalUI);
+
+                    // TERRIBLE horrid AWFUL implementation of term sounds
+                    player.write_packet(&SoundEffect {
+                        sound: Sounds::Orb.id(),
+                        volume: 1.0,
+                        pitch: 1.0,
+                        pos_x: player.position.x,
+                        pos_y: player.position.y,
+                        pos_z: player.position.z,
+                    });
+                }
             }
             _ => unreachable!()
         }

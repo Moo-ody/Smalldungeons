@@ -3,6 +3,7 @@ use crate::server::commands::command::CommandMetadata;
 use crate::server::commands::outcome::Outcome;
 use crate::server::commands::r#impl::locraw::Locraw;
 use crate::server::commands::r#impl::mort::Mort;
+use crate::server::commands::r#impl::term::Term;
 use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
@@ -16,6 +17,7 @@ mod outcome;
 crate::command_registry! {
     Mort,
     Locraw,
+    Term
 }
 
 impl Command {
