@@ -183,9 +183,9 @@ async fn main() -> Result<()> {
             bossroom_data,
         );
         
-        // Override the corner position to spawn at -18, 255, 4
+        // Override the corner position to spawn at -8, 254, -8
         // We need to manually load the bossroom since it's not part of the regular dungeon grid
-        let corner = BlockPos { x: -18, y: 255, z: 4 };
+        let corner = BlockPos { x: -8, y: 254, z: -8 };
         
         // Update the dungeon's boss room corner to match the actual loaded position
         server.dungeon.boss_room_corner = corner;

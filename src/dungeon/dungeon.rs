@@ -126,7 +126,7 @@ impl Dungeon {
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
             temp_player_mushroom_up: HashMap::new(),
-            boss_room_corner: BlockPos { x: -18, y: 255, z: 4 },
+            boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
             boss_room_width: 0, // Will be set when boss room is loaded
             boss_room_length: 0, // Will be set when boss room is loaded
             boss_room_height: 30, // Default height

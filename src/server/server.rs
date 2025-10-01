@@ -140,9 +140,9 @@ impl Server {
                 );
 
                 // Also send bossroom chunks to new players
-                // Bossroom is at (-18, 255, 4) with dimensions 143x156
-                let bossroom_corner_x = -18;
-                let bossroom_corner_z = 4;
+                // Bossroom is at (-8, 254, -8) with dimensions 143x156
+                let bossroom_corner_x = -8;
+                let bossroom_corner_z = -8;
                 let bossroom_width = 143;
                 let bossroom_length = 156;
                 

@@ -259,10 +259,10 @@ impl Room {
         // Special handling for bossrooms
         if room_data.room_type == crate::dungeon::room::room_data::RoomType::Boss {
             match rotation {
-                Direction::North => BlockPos { x: -7, y: 255, z: 23 },
-                Direction::East => BlockPos { x: -7 + room_data.length - 1, y: 255, z: 23 },
-                Direction::South => BlockPos { x: -7 + room_data.length - 1, y: 255, z: 23 + room_data.width - 1 },
-                Direction::West => BlockPos { x: -7, y: 255, z: 23 + room_data.width - 1 },
+                Direction::North => BlockPos { x: -8, y: 254, z: -8 },
+                Direction::East => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 },
+                Direction::South => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 + room_data.width - 1 },
+                Direction::West => BlockPos { x: -8, y: 254, z: -8 + room_data.width - 1 },
                 _ => unreachable!(),
             }
         } else {
