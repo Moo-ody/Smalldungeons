@@ -15,7 +15,7 @@ pub mod item_stack;
 mod ether_transmission;
 pub mod ender_pearl;
 mod hyperion;
-mod bonzo_projectile;
+pub mod bonzo_projectile;
 
 
 
@@ -195,23 +195,9 @@ impl Item {
                 let _ = player.sync_inventory();
             }
             Item::BonzoStaff => {
-                // Play ghast moan sound immediately on right-click
-                player.write_packet(&SoundEffect {
-                    sound: Sounds::GhastMoan.id(),
-                    pos_x: player.position.x,
-                    pos_y: player.position.y,
-                    pos_z: player.position.z,
-                    volume: 1.0,
-                    pitch: 1.43,
-                });
-                
-                bonzo_projectile::on_right_click(player)?;
-                
-                // Always restore stack size to prevent consumption
-                let hotbar_slot = player.held_slot as usize + 36;
-                player.inventory.set_slot(ItemSlot::Filled(Item::BonzoStaff, 1), hotbar_slot);
-                // Sync inventory to ensure client sees the restored stack
-                let _ = player.sync_inventory();
+                // Bonzo Staff is now handled in packet processing (PlayerBlockPlacement)
+                // The ghast sound and projectile spawning happens in shoot_bonzo_projectile()
+                // No need to do anything here since it's handled by the packet system
             }
             _ => {}
         }

@@ -70,6 +70,9 @@ pub struct Player {
     pub current_terminal: Option<Terminal>,
 
     pub sidebar: Scoreboard,
+    
+    // Bonzo Staff cooldown tracking
+    pub bonzo_last_shot_tick: u64,
 }
 
 impl Player {
@@ -111,6 +114,9 @@ impl Player {
             current_terminal: None,
 
             sidebar: Scoreboard::new(),
+            
+            // Bonzo Staff cooldown tracking
+            bonzo_last_shot_tick: 0,
             
             // observed_entities: HashSet::new(),
         }
@@ -189,6 +195,62 @@ impl Player {
         if let Some(ItemSlot::Filled(item, _)) = self.inventory.get_hotbar_slot(self.held_slot as usize) {
             item.on_right_click(self).unwrap()
         }
+    }
+    
+    /// Shoot Bonzo projectile with cooldown and delay like the Java version
+    pub fn shoot_bonzo_projectile(&mut self) -> anyhow::Result<()> {
+        use crate::server::items::bonzo_projectile::BonzoProjectileImpl;
+        use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
+        use crate::server::utils::sounds::Sounds;
+        use crate::net::protocol::play::clientbound::SoundEffect;
+        
+        let current_tick = self.world_mut().tick_count;
+        
+        // Bonzo Staff cooldown (equivalent to bonzoCd in Java - 500ms = 10 ticks)
+        const BONZO_COOLDOWN_TICKS: u64 = 10;
+        if current_tick - self.bonzo_last_shot_tick < BONZO_COOLDOWN_TICKS {
+            return Ok(()); // Silently ignore if on cooldown
+        }
+        
+        // Play ghast moan sound immediately (like Java version)
+        self.write_packet(&SoundEffect {
+            sound: Sounds::GhastMoan.id(),
+            pos_x: self.position.x,
+            pos_y: self.position.y,
+            pos_z: self.position.z,
+            volume: 1.0,
+            pitch: 1.43,
+        });
+        
+        // Calculate spawn position with forward offset
+        let eye_height = 1.62; // Player eye height
+        let yaw_rad = (self.yaw as f64).to_radians();
+        let pitch_rad = (self.pitch as f64).to_radians();
+        
+        let direction = DVec3::new(
+            -pitch_rad.cos() * yaw_rad.sin(),
+            -pitch_rad.sin(),
+            pitch_rad.cos() * yaw_rad.cos(),
+        ).normalize();
+        
+        let spawn_offset = 0.15; // Small forward offset like Java version
+        let spawn_pos = DVec3::new(
+            self.position.x + direction.x * spawn_offset,
+            self.position.y + eye_height + direction.y * spawn_offset,
+            self.position.z + direction.z * spawn_offset,
+        );
+        
+        // Spawn projectile immediately with full velocity (like Java version)
+        let _projectile_id = self.world_mut().spawn_entity(
+            spawn_pos,
+            EntityMetadata::new(EntityVariant::BonzoProjectile),
+            BonzoProjectileImpl::new(self.client_id, direction, 20.0), // Full speed immediately
+        )?;
+        
+        // Update cooldown
+        self.bonzo_last_shot_tick = current_tick;
+        
+        Ok(())
     }
     
     pub fn open_ui(&mut self, ui: UI) {

@@ -13,6 +13,8 @@ use crate::server::utils::player_list::header::header;
 use crate::server::utils::tasks::Task;
 use crate::server::world;
 use crate::server::world::World;
+use crate::server::entity::entity::EntityId;
+use crate::server::utils::dvec3::DVec3;
 use anyhow::{Context, Result};
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
@@ -43,6 +45,33 @@ impl Server {
 
     pub fn schedule(&mut self, run_in: u32, task: impl FnOnce(&mut Self) + 'static) {
         self.tasks.push(Task::new(run_in, task));
+    }
+    
+    /// Schedule Bonzo projectile velocity application after delay
+    pub fn schedule_bonzo_velocity(&mut self, projectile_id: EntityId, direction: DVec3, delay_ticks: u32) {
+        self.schedule(delay_ticks, move |server| {
+            use crate::server::items::bonzo_projectile::BonzoProjectileImpl;
+            
+            if let Some((_, entity_impl)) = server.world.entities.get_mut(&projectile_id) {
+                // We need to replace the entity impl with a new one that has velocity
+                // This is a bit hacky but works for our use case
+                let new_impl = BonzoProjectileImpl::new(0, direction, 20.0); // 20 blocks/sec speed
+                *entity_impl = Box::new(new_impl);
+                
+                // Also send velocity packet to all players
+                for player in server.world.players.values_mut() {
+                    use crate::net::protocol::play::clientbound::EntityVelocity;
+                    use crate::net::var_int::VarInt;
+                    
+                    let _ = player.write_packet(&EntityVelocity {
+                        entity_id: VarInt(projectile_id),
+                        velocity_x: (direction.x * 20.0 / 20.0 * 8000.0) as i16, // Convert to velocity packet format
+                        velocity_y: (direction.y * 20.0 / 20.0 * 8000.0) as i16,
+                        velocity_z: (direction.z * 20.0 / 20.0 * 8000.0) as i16,
+                    });
+                }
+            }
+        });
     }
 
 
