@@ -23,6 +23,8 @@ pub enum EntityVariant {
     Arrow,
     // NEW: explosive projectile for Bonzo Staff
     BonzoProjectile,
+    // NEW: projectile for Jerry-Chine Gun
+    JerryProjectile,
 }
 
 impl EntityVariant {
@@ -44,6 +46,8 @@ impl EntityVariant {
             EntityVariant::Arrow => 60,
             // NEW: bonzo projectile object type id (Spawn Object space, 1.8)
             EntityVariant::BonzoProjectile => 65,
+            // NEW: jerry projectile object type id (Spawn Object space, 1.8)
+            EntityVariant::JerryProjectile => 65,
         }
     }
 

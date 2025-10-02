@@ -49,6 +49,9 @@ pub struct World {
     pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
     pub tick_count: u64,
     
+    // Lava flow control
+    pub stop_lava_flow: bool,
+    
     // Redstone system for handling power transmission
     pub redstone_system: RedstoneSystem,
 }
@@ -77,6 +80,8 @@ impl World {
             tactical_insertions: Vec::new(),
             tick_count: 0,
             redstone_system: RedstoneSystem::new(),
+            
+            stop_lava_flow: true, // Stop lava flow by default like Java version
         }
     }
 

@@ -11,9 +11,9 @@ const TPS: f64 = 20.0; // Minecraft runs at 20 ticks per second
 const PROJECTILE_SPEED: f64 = 20.0; // blocks per second
 const MAX_LIFETIME_TICKS: u32 = 200; // 10 seconds (20 * 10)
 const ROTATION_PER_TICK: f32 = 60.0; // Yaw increases by 60 each tick like Java
-const BONZO_RANGE: f64 = 3.5; // Range for knockback (wall at 31, knockback works at 34.3, so ~3.3 blocks range)
-const BONZO_HORIZONTAL_MULT: f64 = 1.5; // Horizontal knockback multiplier (from DungeonSim.config.bonzoHMult) - reduced for balanced knockback
-const BONZO_VERTICAL_VELO: f64 = 0.5; // Vertical velocity for knockback (from DungeonSim.config.bonzoVVelo) - set to 0.5 as requested
+const BONZO_RANGE: f64 = 3.0; // Range for knockback (from DungeonSim.config.bonzoRange = 3F)
+const BONZO_HORIZONTAL_MULT: f64 = 1.5; // Horizontal knockback multiplier (from DungeonSim.config.bonzoHMult = 1.5F)
+const BONZO_VERTICAL_VELO: f64 = 0.5; // Vertical velocity for knockback (from DungeonSim.config.bonzoVVelo = 0.5F)
 
 /// Bonzo projectile implementation matching Java version
 pub struct BonzoProjectileImpl {
@@ -229,8 +229,6 @@ impl BonzoProjectileImpl {
                             velocity_z,
                         });
                         
-                        println!("BONZO KNOCKBACK (delayed): Player {} knocked back by motion=({:.2}, {:.2}, {:.2}) velocity_packet=({}, {}, {})", 
-                            thrower_id, knockback_x, knockback_y, knockback_z, velocity_x, velocity_y, velocity_z);
                     }
                 });
             }

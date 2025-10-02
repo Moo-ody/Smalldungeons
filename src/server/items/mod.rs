@@ -1,5 +1,4 @@
-use crate::server::items::ether_transmission::handle_teleport;
-use crate::server::items::etherwarp::handle_ether_warp;
+use crate::server::items::etherwarp::{handle_ether_warp, handle_teleport};
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::Player;
 use crate::server::player::inventory::ItemSlot;
@@ -7,15 +6,14 @@ use crate::server::utils::nbt::nbt::{NBTNode, NBT};
 use crate::server::utils::nbt::serialize::TAG_COMPOUND_ID;
 use indoc::indoc;
 use std::collections::HashMap;
-use crate::net::protocol::play::clientbound::SoundEffect;
-use crate::server::utils::sounds::Sounds;
 
-mod etherwarp;
 pub mod item_stack;
 mod ether_transmission;
+mod etherwarp;
 pub mod ender_pearl;
 mod hyperion;
 pub mod bonzo_projectile;
+pub mod jerry_projectile;
 
 
 
@@ -34,6 +32,8 @@ pub enum Item {
     GoldenAxe,
     Terminator,
     BonzoStaff,
+    JerryChineGun,
+    VanillaChest,
 }
 
 impl Item {
@@ -48,28 +48,18 @@ impl Item {
                 // Sync inventory to ensure client sees the restored stack
                 let _ = player.sync_inventory();
             }
-            Item::Hyperion => {
-                hyperion::on_right_click(player)?;
-            }
             Item::AspectOfTheVoid => {
                 let server = &player.server_mut();
                 let world = &server.world;
 
                 if player.is_sneaking {
-                    handle_ether_warp(player, world)?;
+                    handle_ether_warp(player, world)?; // Etherwarp with DDA algorithm
                 } else {
-                    handle_teleport(player, &server.network_tx)?;
-                    
-                    // Play portal sound for teleportation
-                    player.write_packet(&SoundEffect {
-                        sound: Sounds::Portal.id(),
-                        pos_x: player.position.x,
-                        pos_y: player.position.y,
-                        pos_z: player.position.z,
-                        volume: 1.0,
-                        pitch: 1.0,
-                    });
+                    handle_teleport(player, &server.network_tx)?; // Ether transmission
                 }
+            }
+            Item::Hyperion => {
+                hyperion::on_right_click(player)?;
             }
             Item::SpiritSceptre => {
                 // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but
@@ -588,6 +578,26 @@ impl Item {
                         NBT::string("timestamp", "1734732834553"),
                     ]),
                 ])),
+            },
+            Item::JerryChineGun => ItemStack {
+                item: 418, // golden_horse_armor
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§5Jerry-Chine Gun"),
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "JERRY_STAFF"),
+                        NBT::string("type", "SWORD"),
+                    ]),
+                ])),
+            },
+            Item::VanillaChest => ItemStack {
+                item: 54, // chest
+                stack_size: 64,
+                metadata: 0,
+                tag_compound: None,
             },
         };
         if let Some(ref mut tag) = stack.tag_compound {

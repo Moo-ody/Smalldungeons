@@ -118,7 +118,7 @@ impl ProcessPacket for PlayerDigging {
 
 impl ProcessPacket for PlayerBlockPlacement {
     fn process_with_player(&self, player: &mut Player) {
-        // Check if player is holding Bonzo Staff and handle accordingly
+        // Check if player is holding Bonzo Staff or Jerry-Chine Gun and handle accordingly
         if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
             if let Item::BonzoStaff = item {
                 // Handle Bonzo Staff block placement
@@ -138,7 +138,26 @@ impl ProcessPacket for PlayerBlockPlacement {
                 
                 // Shoot Bonzo projectile (either air click or non-interactable block)
                 if let Err(e) = player.shoot_bonzo_projectile() {
-                    eprintln!("Failed to shoot Bonzo projectile: {}", e);
+                }
+                return;
+            } else if let Item::JerryChineGun = item {
+                // Handle Jerry-Chine Gun block placement
+                if !self.position.is_invalid() {
+                    // Check if the block being clicked is interactable
+                    let world = player.world_mut();
+                    
+                    // If it's an interactable block, don't shoot Jerry projectile
+                    if world.interactable_blocks.contains_key(&self.position) {
+                        // Handle block interaction normally
+                        if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
+                            interact_block.interact(player, &self.position);
+                        }
+                        return;
+                    }
+                }
+                
+                // Shoot Jerry projectile (either air click or non-interactable block)
+                if let Err(e) = player.shoot_jerry_projectile() {
                 }
                 return;
             }

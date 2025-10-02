@@ -214,23 +214,16 @@ async fn main() -> Result<()> {
             server.dungeon.boss_room_length, 
             server.dungeon.boss_room_height);
         
-        // Send bossroom chunks to all connected players
+        // Bossroom chunks will be sent to players individually when they get near it
+        // No need to send to all players immediately - this saves bandwidth and memory
         let bossroom_chunk_x_min = corner.x >> 4;
         let bossroom_chunk_z_min = corner.z >> 4;
         let bossroom_chunk_x_max = (corner.x + bossroom.room_data.width) >> 4;
         let bossroom_chunk_z_max = (corner.z + bossroom.room_data.length) >> 4;
         
-        for player in server.world.players.values_mut() {
-            for chunk_x in bossroom_chunk_x_min..=bossroom_chunk_x_max {
-                for chunk_z in bossroom_chunk_z_min..=bossroom_chunk_z_max {
-                    if let Some(chunk) = server.world.chunk_grid.get_chunk(chunk_x, chunk_z) {
-                        player.write_packet(&chunk.get_chunk_data(chunk_x, chunk_z, true));
-                    }
-                }
-            }
-        }
-        
-        println!("Bossroom chunks sent to all players");
+        let total_chunks = (bossroom_chunk_x_max - bossroom_chunk_x_min + 1) * (bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
+        println!("Bossroom loaded with {} chunks ({}x{}), will be sent to players when they get near", 
+            total_chunks, bossroom_chunk_x_max - bossroom_chunk_x_min + 1, bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
     }
 
     let dungeon = &mut server.dungeon;
@@ -412,6 +405,8 @@ async fn main() -> Result<()> {
                         }
                     },
                 );
+                
+                
             }
 
             {

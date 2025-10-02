@@ -31,14 +31,12 @@ pub fn process(world: &mut World) -> anyhow::Result<()> {
     }
     
     // Debug: Print current state
-    println!("Processing {} tactical insertions at tick {}", world.tactical_insertions.len(), world.tick_count);
     
     // Drain due markers
     let now = world.tick_count;
     let mut remaining: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)> = Vec::with_capacity(world.tactical_insertions.len());
     
     for (mut marker, mut sounds) in world.tactical_insertions.drain(..) {
-        println!("  Processing marker for player {}: return_tick={}, now={}", marker.client_id, marker.return_tick, now);
         // Emit any due sounds first
         if let Some(player) = world.players.get_mut(&marker.client_id) {
             // Make sounds follow the player by using their current position
@@ -80,7 +78,6 @@ pub fn process(world: &mut World) -> anyhow::Result<()> {
                 // Use player's write_packet method
                 player.write_packet(&pos_packet);
                 
-                println!("  Teleported player {} back to origin", marker.client_id);
             }
             // Do not re-schedule after return
         } else {
