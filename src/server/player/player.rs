@@ -204,7 +204,7 @@ impl Player {
                 })
             }
         }
-        if let Some(container_data) = ui.get_container_data(self) {
+        if let Some(container_data) = ui.get_container_data() {
             // team we forgot to check for wId exceeding 100
             if self.window_id > 99 {
                 self.window_id = 1;
@@ -213,7 +213,7 @@ impl Player {
             }
             self.write_packet(&OpenWindow {
                 window_id: self.window_id,
-                inventory_type: "minecraft:chest".into(), // if this needs to be containers lmk
+                inventory_type: "minecraft:container".into(),
                 window_title: ChatComponentTextBuilder::new(container_data.title).build(),
                 slot_count: container_data.slot_amount,
             });

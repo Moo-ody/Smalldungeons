@@ -40,11 +40,11 @@ impl CommandMetadata for Term {
     }
 
     fn arguments(world: &mut World, player: &mut Player) -> Vec<Argument> {
-        vec![Argument { name: "panes", completions: Vec::new() }] // this seems to let any args work strangely, and no args doesn't work at all
+        vec![Argument { name: "type", completions: vec!["panes".to_string()]}]
     }
 }
 
-fn open_terminal(player: &mut Player, _type: TerminalType) {
-    player.current_terminal = Option::from(Terminal::new(_type));
-    player.open_ui(TerminalUI);
+fn open_terminal(player: &mut Player, typ: TerminalType) {
+    player.current_terminal = Option::from(Terminal::new(typ));
+    player.open_ui(TerminalUI {typ});
 }

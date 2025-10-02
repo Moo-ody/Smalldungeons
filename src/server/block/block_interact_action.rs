@@ -44,7 +44,7 @@ pub enum BlockInteractAction {
 impl BlockInteractAction {
     pub fn interact(&self, player: &mut Player, block_pos: &BlockPos) {
         match self {
-            Self::WitherDoor { door_index: id } => {
+            Self::WitherDoor { door_index: id } => { //todo: left click open doors
                 // Play wither door opening sound effect
                 let _ = player.write_packet(&SoundEffect {
                     sound: Sounds::NotePling.id(),

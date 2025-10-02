@@ -1,15 +1,19 @@
+use std::collections::HashMap;
+use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::net::protocol::play::serverbound::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::player::player::Player;
 use crate::server::player::terminals::panes::Panes;
+use crate::server::utils::sounds::Sounds;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TerminalType {
     Panes
 }
 
 pub(crate) trait Term {
-    fn click_slot(terminal: &mut Terminal, slot: usize) -> bool;
-    fn create() -> Vec<Option<ItemStack>>;
+    fn click_slot(terminal: &mut Terminal, player: &mut Player, slot: usize) -> bool;
+    fn create() -> (Vec<Option<ItemStack>>, HashMap<i8, i8>);
     fn check(terminal: &mut Terminal) -> bool;
 }
 
@@ -17,17 +21,20 @@ pub(crate) trait Term {
 
 #[derive(Debug)]
 pub struct Terminal {
-    pub size: i8, // what is ts, where my int at :sob:
+    pub size: i8,
     pub items: Vec<Option<ItemStack>>,
-    pub _type: TerminalType
+    pub typ: TerminalType,
+    pub solution: HashMap<i8, i8> // using second arg as an int for rubix and numbers
 }
 
 impl Terminal {
-    pub fn new( _type: TerminalType) -> Terminal {
+    pub fn new(typ: TerminalType) -> Terminal {
+        let pair = Panes::create();
         Terminal {
             size: 45,
-            items: Panes::create(),
-            _type
+            items: pair.0,
+            typ,
+            solution: pair.1
         }
     }
 
@@ -48,13 +55,24 @@ impl Terminal {
 
     pub fn click_slot(
         &mut self,
-        packet: &ClickWindow
+        packet: &ClickWindow,
+        player: &mut Player
     ) -> bool {
         let slot = packet.slot_id as usize;
-        match self._type { // is it obv how much i wanna use proper objects
+        match self.typ {
             TerminalType::Panes => {
-                Panes::click_slot(self, slot)
+                Panes::click_slot(self, player, slot)
             }
         }
+    }
+    pub fn play_sound(&self, player: &mut Player, sound: &str) {
+        player.write_packet(&SoundEffect {
+            sound,
+            volume: 1.0,
+            pitch: 1.0,
+            pos_x: player.position.x,
+            pos_y: player.position.y,
+            pos_z: player.position.z,
+        });
     }
 }

@@ -22,34 +22,25 @@ pub enum UI {
     // this is here to direct clicks to the actual inventory where all the items are stored, etc.
     Inventory,
     MortReadyUpMenu,
-    TerminalUI
+    TerminalUI {
+        typ: TerminalType
+    }
 }
 
 impl UI {
 
     /// this function returns data for opening a container,
     /// should not be used for UI's that don't use a container
-    pub fn get_container_data(&self, player: &mut Player) -> Option<ContainerData> { // fuck you im passing player
+    pub fn get_container_data(&self) -> Option<ContainerData> {
         match self {
             UI::MortReadyUpMenu => Some(ContainerData {
                 title: "Ready Up".to_string(),
                 slot_amount: 54,
             }),
-            UI::TerminalUI => { // Hello, Please don't read this :)
-                let title;
-                let slot_amount;
-                match player.current_terminal.as_mut()?._type {
-                    TerminalType::Panes => {
-                        title = "Correct all the panes!".to_string();
-                        slot_amount = 45;
-                    }
-                    _ => {
-                        title = "How did you do this?".to_string();
-                        slot_amount = 67;
-                    }
-                }
-                Some(ContainerData { title, slot_amount })
-            },
+            UI::TerminalUI { typ: TerminalType::Panes } => Some(ContainerData {
+                title: "Correct all the panes!".to_string(),
+                slot_amount: 45,
+            }),
             _ => None
         }
     }
@@ -100,7 +91,7 @@ impl UI {
                 });
                 Some(content)
             }
-            UI::TerminalUI => {
+            UI::TerminalUI { typ } => { // matches any
                 Option::from(player.current_terminal.as_ref()?.get_contents())
             }
             _ => None
@@ -164,9 +155,9 @@ impl UI {
                 }
                 player.sync_inventory();
             }
-            UI::TerminalUI => {
-                if let Some(mut terminal) = player.current_terminal.take() {
-                    if terminal.click_slot(packet) { // i dont get this at all
+            UI::TerminalUI { typ } => {
+                if let Some(mut terminal) = player.current_terminal.take() { // this take thing is kinda weird, but it works ig
+                    if terminal.click_slot(packet, player) {
                         player.current_ui = UI::None;
                         player.current_terminal = None;
                         player.write_packet(&CloseWindow {
@@ -177,17 +168,7 @@ impl UI {
                         return;
                     }
                     player.current_terminal = Some(terminal);
-                    player.open_ui(UI::TerminalUI);
-
-                    // TERRIBLE horrid AWFUL implementation of term sounds
-                    player.write_packet(&SoundEffect {
-                        sound: Sounds::Orb.id(),
-                        volume: 1.0,
-                        pitch: 1.0,
-                        pos_x: player.position.x,
-                        pos_y: player.position.y,
-                        pos_z: player.position.z,
-                    });
+                    player.open_ui(UI::TerminalUI { typ: typ.clone() });
                 }
             }
             _ => unreachable!()
