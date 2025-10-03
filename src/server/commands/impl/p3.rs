@@ -12,9 +12,9 @@ impl CommandMetadata for P3 {
 
     fn run(_: &mut World, player: &mut Player, _: &[&str]) -> anyhow::Result<Outcome> {
         // Teleport to coordinates 100, 116, 40
-        let x = 100.0;
+        let x = 100.5;
         let y = 116.0;
-        let z = 40.0;
+        let z = 40.5;
         
         // Set player position
         player.set_position(x, y, z);
@@ -24,8 +24,8 @@ impl CommandMetadata for P3 {
             x,
             y,
             z,
-            yaw: player.yaw,
-            pitch: player.pitch,
+            yaw: 0.0,
+            pitch: 0.0,
             flags: 0, // Absolute positioning
         });
         
