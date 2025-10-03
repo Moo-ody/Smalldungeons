@@ -70,6 +70,29 @@ impl ProcessPacket for PlayerDigging {
     fn process_with_player(&self, player: &mut Player) {
         match self.action {
             PlayerDiggingAction::StartDestroyBlock => {
+                // Check for Simon Says puzzle first
+                let world = player.world_mut();
+                let action = world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count);
+                match action {
+                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::BlockClick) => {
+                        return; // Block the click
+                    }
+                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::ShowSolution) => {
+                        // TODO: Show solution - simplified for now
+                        world.simon_says.showing_solution = true;
+                        return;
+                    }
+                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::Continue) => {
+                        return; // Continue with puzzle
+                    }
+                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::Fail) => {
+                        // TODO: Handle failure - simplified for now
+                        return;
+                    }
+                    None => {
+                        // Not a Simon Says button, continue with normal processing
+                    }
+                }
                 // todo:
                 // when block toughness is added,
                 // replace check with if vanilla toughness would match
@@ -118,6 +141,32 @@ impl ProcessPacket for PlayerDigging {
 
 impl ProcessPacket for PlayerBlockPlacement {
     fn process_with_player(&self, player: &mut Player) {
+        // Check for Simon Says puzzle first
+        if !self.position.is_invalid() {
+            let world = player.world_mut();
+            let action = world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count);
+            match action {
+                Some(crate::dungeon::p3::simon_says::SimonSaysAction::BlockClick) => {
+                    return; // Block the click
+                }
+                Some(crate::dungeon::p3::simon_says::SimonSaysAction::ShowSolution) => {
+                    // TODO: Show solution - simplified for now
+                    world.simon_says.showing_solution = true;
+                    return;
+                }
+                Some(crate::dungeon::p3::simon_says::SimonSaysAction::Continue) => {
+                    return; // Continue with puzzle
+                }
+                Some(crate::dungeon::p3::simon_says::SimonSaysAction::Fail) => {
+                    // TODO: Handle failure - simplified for now
+                    return;
+                }
+                None => {
+                    // Not a Simon Says button, continue with normal processing
+                }
+            }
+        }
+        
         // Check if player is holding Bonzo Staff or Jerry-Chine Gun and handle accordingly
         if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
             if let Item::BonzoStaff = item {

@@ -12,6 +12,7 @@ use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
 use crate::server::redstone::RedstoneSystem;
+use crate::dungeon::p3::simon_says::SimonSays;
 use std::collections::HashMap;
 use std::mem::take;
 
@@ -54,6 +55,9 @@ pub struct World {
     
     // Redstone system for handling power transmission
     pub redstone_system: RedstoneSystem,
+    
+    // P3 Simon Says puzzle
+    pub simon_says: SimonSays,
 }
 
 impl World {
@@ -80,6 +84,7 @@ impl World {
             tactical_insertions: Vec::new(),
             tick_count: 0,
             redstone_system: RedstoneSystem::new(),
+            simon_says: SimonSays::new(),
             
             stop_lava_flow: true, // Stop lava flow by default like Java version
         }
@@ -155,6 +160,10 @@ impl World {
         
                 // Process scheduled tactical insertions
         tactical_insertion::process(self)?;
+        
+        // Process Simon Says puzzle
+        // Note: We can't pass self to simon_says.tick due to borrowing rules
+        // The Simon Says puzzle will be handled in packet processing instead
         
         // Process redstone system updates
         // We'll handle redstone updates in the lever interaction instead
