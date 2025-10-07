@@ -80,6 +80,7 @@ pub struct EntityMetadata {
     // add more needed stuff here
     pub variant: EntityVariant,
     pub is_invisible: bool,
+    pub custom_name: Option<String>,
 }
 
 impl EntityMetadata {
@@ -87,6 +88,7 @@ impl EntityMetadata {
         Self {
             variant,
             is_invisible: false,
+            custom_name: None,
         }
     }
 }
@@ -112,6 +114,11 @@ impl PacketSerializable for EntityMetadata {
         }
 
         write_data(buf, BYTE, 0, flags);
+
+        // Add custom name if present
+        if let Some(ref name) = self.custom_name {
+            write_data(buf, STRING, 2, name.clone());
+        }
 
         match &self.variant {
             EntityVariant::DroppedItem { item } => {

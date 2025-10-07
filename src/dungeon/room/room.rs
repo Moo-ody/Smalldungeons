@@ -512,7 +512,8 @@ impl Room {
                     crate::server::utils::dvec3::DVec3::new(x as f64 + 0.5, y as f64 - crate::dungeon::room::fallingblocks::FALLING_FLOOR_ENTITY_OFFSET, z as f64 + 0.5),
                     crate::server::entity::entity_metadata::EntityMetadata {
                         variant: crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false },
-                        is_invisible: true
+                        is_invisible: true,
+                        custom_name: None,
                     },
                     crate::dungeon::room::fallingblocks::FallingFloorEntityImpl::new(current_block, 5.0, 20),
                 );

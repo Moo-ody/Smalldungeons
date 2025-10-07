@@ -207,6 +207,7 @@ impl BlockInteractAction {
                     EntityMetadata {
                         variant: EntityVariant::ArmorStand,
                         is_invisible: true,
+                        custom_name: None,
                     },
                     NoEntityImpl,
                 ).unwrap();
@@ -388,7 +389,8 @@ impl BlockInteractAction {
                                         ),
                                         crate::server::entity::entity_metadata::EntityMetadata {
                                             variant: crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false },
-                                            is_invisible: true
+                                            is_invisible: true,
+                                            custom_name: None,
                                         },
                                         crate::dungeon::room::levers::LeverEntityImpl::new(current_block, 5.0, 20),
                                     );
