@@ -14,8 +14,10 @@ use crate::server::utils::chat_component::chat_component_text::ChatComponentText
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 use std::collections::HashMap;
+use std::ops::Index;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
+use crate::server::items::item_stack::ItemStack;
 
 /// type alias to represent a client's user id.
 ///
@@ -408,10 +410,13 @@ impl Player {
         }
         
         if let Some(items) = self.current_ui.get_container_contents(self.server_mut(), &self.client_id)  {
-            self.write_packet(&WindowItems { // this breaks autoterms :fire:, in order to make it as like hypixel as possible we would need to use setslots
-                window_id: self.window_id,
-                items,
-            });
+            for i in 0..items.len() {
+                self.write_packet(&SetSlot {
+                    window_id: self.window_id,
+                    slot: i as i16,
+                    item_stack: items.get(i).unwrap_or_else(|| &None).clone(),
+                });
+            }
         }
         
         self.write_packet(&WindowItems {
