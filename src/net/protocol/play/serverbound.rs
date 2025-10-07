@@ -210,7 +210,8 @@ packet_deserializable! {
 }
 
 packet_deserializable! {
-    pub enum ClickMode {
+    #[derive(PartialEq)]
+pub enum ClickMode {
         NormalClick,
         ShiftClick,
         NumberKey,

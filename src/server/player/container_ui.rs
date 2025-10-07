@@ -1,14 +1,16 @@
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::dungeon_state::DungeonState::NotReady;
 use crate::net::protocol::play::clientbound::CloseWindow;
+use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::net::protocol::play::serverbound::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::{ClientId, Player};
+use crate::server::player::terminal::TerminalType;
+use crate::server::player::terminals::select::ENUM_DYE;
+use crate::server::player::terminals::starts_with::LETTERS;
 use crate::server::server::Server;
 use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::sounds::Sounds;
-use crate::net::protocol::play::clientbound::SoundEffect;
-use crate::server::player::terminal::{Terminal, TerminalType};
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -23,7 +25,8 @@ pub enum UI {
     Inventory,
     MortReadyUpMenu,
     TerminalUI {
-        typ: TerminalType
+        typ: TerminalType,
+        rand: i16
     }
 }
 
@@ -37,8 +40,24 @@ impl UI {
                 title: "Ready Up".to_string(),
                 slot_amount: 54,
             }),
-            UI::TerminalUI { typ: TerminalType::Panes } => Some(ContainerData {
+            UI::TerminalUI { typ: TerminalType::Panes, rand } => Some(ContainerData {
                 title: "Correct all the panes!".to_string(),
+                slot_amount: 45,
+            }),
+            UI::TerminalUI { typ: TerminalType::Order, rand } => Some(ContainerData {
+                title: "Click in order!".to_string(),
+                slot_amount: 36,
+            }),
+            UI::TerminalUI { typ: TerminalType::Rubix, rand } => Some(ContainerData {
+                title: "Change all to same color!".to_string(),
+                slot_amount: 45,
+            }),
+            UI::TerminalUI { typ: TerminalType::Select, rand } => Some(ContainerData {
+                title: ("Select all the ".to_owned() + &*ENUM_DYE[rand].name + " items!").to_string(),
+                slot_amount: 54,
+            }),
+            UI::TerminalUI { typ: TerminalType::StartsWith, rand } => Some(ContainerData {
+                title: ("What starts with: '".to_owned() + LETTERS[*rand as usize % LETTERS.len()] + "'?").to_string(),
                 slot_amount: 45,
             }),
             _ => None
@@ -91,7 +110,7 @@ impl UI {
                 });
                 Some(content)
             }
-            UI::TerminalUI { typ } => { // matches any
+            UI::TerminalUI { typ, rand } => { // matches any
                 Option::from(player.current_terminal.as_ref()?.get_contents())
             }
             _ => None
@@ -155,7 +174,7 @@ impl UI {
                 }
                 player.sync_inventory();
             }
-            UI::TerminalUI { typ } => {
+            UI::TerminalUI { typ, rand } => {
                 if let Some(mut terminal) = player.current_terminal.take() { // this take thing is kinda weird, but it works ig
                     if terminal.click_slot(packet, player) {
                         player.current_ui = UI::None;
@@ -168,7 +187,7 @@ impl UI {
                         return;
                     }
                     player.current_terminal = Some(terminal);
-                    player.open_ui(UI::TerminalUI { typ: typ.clone() });
+                    player.open_ui(UI::TerminalUI { typ: typ.clone(), rand: *rand });
                 }
             }
             _ => unreachable!()
