@@ -12,7 +12,11 @@ use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::player_list::PlayerList;
 use crate::server::redstone::RedstoneSystem;
+use crate::server::block::block_parameter::ButtonDirection;
+use crate::server::block::metadata::BlockMetadata;
 use crate::dungeon::p3::simon_says::SimonSays;
+use crate::dungeon::p3::terminal::TerminalManager;
+use crate::dungeon::p3::p3_manager::P3Manager;
 use std::collections::HashMap;
 use std::mem::take;
 
@@ -58,6 +62,12 @@ pub struct World {
     
     // P3 Simon Says puzzle
     pub simon_says: SimonSays,
+    
+    // P3 Terminal system
+    pub terminal_manager: TerminalManager,
+    
+    // P3 Manager
+    pub p3_manager: P3Manager,
 }
 
 impl World {
@@ -85,6 +95,8 @@ impl World {
             tick_count: 0,
             redstone_system: RedstoneSystem::new(),
             simon_says: SimonSays::new(),
+            terminal_manager: TerminalManager::new(),
+            p3_manager: P3Manager::new(),
             
             stop_lava_flow: true, // Stop lava flow by default like Java version
         }
@@ -161,9 +173,92 @@ impl World {
                 // Process scheduled tactical insertions
         tactical_insertion::process(self)?;
         
-        // Process Simon Says puzzle
-        // Note: We can't pass self to simon_says.tick due to borrowing rules
-        // The Simon Says puzzle will be handled in packet processing instead
+        // Process Simon Says puzzle timing system
+        self.simon_says.tick();
+        
+        // Process pending Simon Says actions
+        let current_tick = self.tick_count;
+        let mut actions_to_execute = Vec::new();
+        
+        // Find actions that should execute this tick
+        self.simon_says.pending_actions.retain(|(tick, action)| {
+            if *tick <= current_tick {
+                actions_to_execute.push(action.clone());
+                false // Remove this action
+            } else {
+                true // Keep this action
+            }
+        });
+        
+        // Execute the actions
+        for action in actions_to_execute {
+            match action {
+                crate::dungeon::p3::simon_says::SolutionAction::ShowSeaLantern(pos) => {
+                    self.set_block_at(crate::server::block::blocks::Blocks::SeaLantern, pos.x, pos.y, pos.z);
+                }
+                crate::dungeon::p3::simon_says::SolutionAction::HideSeaLantern(pos) => {
+                    self.set_block_at(crate::server::block::blocks::Blocks::Obsidian, pos.x, pos.y, pos.z);
+                }
+                crate::dungeon::p3::simon_says::SolutionAction::ReplaceButtons => {
+                    println!("Simon Says: Executing ReplaceButtons action, setting showing_solution = false");
+                    self.simon_says.showing_solution = false;
+                    if self.simon_says.is_skip && !self.simon_says.solution.is_empty() {
+                        self.simon_says.solution.remove(0);
+                        self.simon_says.is_skip = false;
+                    }
+                    // Replace buttons manually to avoid borrowing conflicts
+                    for y in 0..4 {
+                        for z in 0..4 {
+                            let pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
+                                .add(crate::server::block::block_position::BlockPos::new(0, y, z));
+                            println!("Simon Says: Placing button at {:?}", pos);
+                            self.set_block_at(
+                                crate::server::block::blocks::Blocks::StoneButton { 
+                                    direction: ButtonDirection::from_meta(2), 
+                                    powered: false 
+                                }, 
+                                pos.x, pos.y, pos.z
+                            );
+                        }
+                    }
+                    println!("Simon Says: Buttons replaced, showing_solution is now: {}", self.simon_says.showing_solution);
+                    
+                    // Start the puzzle timing when buttons become available for the first time
+                    self.simon_says.start_puzzle(self.tick_count);
+                }
+                crate::dungeon::p3::simon_says::SolutionAction::StartPuzzle => {
+                    println!("Simon Says: Starting puzzle after 20 tick delay");
+                    
+                    // Reset Simon Says puzzle completely
+                    self.simon_says.reset(false);
+                    
+                    // Remove all buttons except the start button
+                    // Remove all solution buttons (4x4 grid)
+                    for y in 0..4 {
+                        for z in 0..4 {
+                            let pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
+                                .add(crate::server::block::block_position::BlockPos::new(0, y, z));
+                            self.set_block_at(crate::server::block::blocks::Blocks::Air, pos.x, pos.y, pos.z);
+                        }
+                    }
+                    
+                    // Place the start button
+                    let start_pos = crate::dungeon::p3::simon_says::START_BUTTON.to_block_pos();
+                    self.set_block_at(
+                        crate::server::block::blocks::Blocks::StoneButton { 
+                            direction: ButtonDirection::from_meta(2), 
+                            powered: false 
+                        }, 
+                        start_pos.x, start_pos.y, start_pos.z
+                    );
+                    
+                    // Start the puzzle timer from this point
+                    self.simon_says.start_puzzle(self.tick_count);
+                    
+                    println!("Simon Says: Puzzle started, timer begins now");
+                }
+            }
+        }
         
         // Process redstone system updates
         // We'll handle redstone updates in the lever interaction instead
@@ -189,6 +284,16 @@ impl World {
         iterate_blocks(start, end, |x, y, z| {
             self.set_block_at(block, x, y, z)
         })
+    }
+
+    pub fn get_next_entity_id(&mut self) -> u32 {
+        let id = self.next_entity_id as u32;
+        self.next_entity_id += 1;
+        id
+    }
+
+    pub fn destroy_entity(&mut self, entity_id: u32) {
+        self.entities_for_removal.push(entity_id as i32);
     }
 }
 

@@ -4,6 +4,7 @@ use crate::server::commands::outcome::Outcome;
 use crate::server::commands::r#impl::locraw::Locraw;
 use crate::server::commands::r#impl::mort::Mort;
 use crate::server::commands::r#impl::p3::P3;
+use crate::server::commands::r#impl::p3s::P3S;
 use crate::server::commands::r#impl::term::Term;
 use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
@@ -19,6 +20,7 @@ crate::command_registry! {
     Mort,
     Locraw,
     P3,
+    P3S,
     Term
 }
 
