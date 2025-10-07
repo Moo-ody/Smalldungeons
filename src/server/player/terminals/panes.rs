@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use crate::server::player::terminal::{Term, Terminal};
+use crate::server::player::terminal::{pane, Term, Terminal};
 use rand::Rng;
+use crate::net::protocol::play::serverbound::ClickWindow;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::player::player::Player;
-use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::sounds::Sounds;
 
 pub(crate) struct Panes;
@@ -11,7 +11,7 @@ pub(crate) struct Panes;
 const SIZE: usize = 45; // 9*5
 
 impl Term for Panes {
-    fn click_slot(terminal: &mut Terminal, player: &mut Player, slot: usize) -> bool {
+    fn click_slot(terminal: &mut Terminal, player: &mut Player, slot: usize, _packet: &ClickWindow) -> bool {
         let sloti8 = &(slot as i8);
 
         if terminal.solution.contains_key(sloti8) {
@@ -31,7 +31,7 @@ impl Term for Panes {
         false
     }
 
-    fn create() -> (Vec<Option<ItemStack>>, HashMap<i8, i8>) {
+    fn create(_rand: i16) -> (Vec<Option<ItemStack>>, HashMap<i8, i8>) {
         let mut rng = rand::rng();
         let mut contents: Vec<Option<ItemStack>> = Vec::new();
         let mut map: HashMap<i8, i8> = HashMap::new();
@@ -57,26 +57,7 @@ impl Term for Panes {
         (contents, map)
     }
 
-    fn check(terminal: &mut Terminal) -> bool {
-        let mut result = true;
-        for (_key, value) in &terminal.solution {
-            if *value == 0 {
-                result = false
-            }
-        }
-        result
-    }
-}
-
-fn pane(meta: i16, name: &str) -> ItemStack {
-    ItemStack {
-        item: 160,
-        stack_size: 1,
-        metadata: meta,
-        tag_compound: Some(NBT::with_nodes(vec![
-            NBT::compound("display", vec![
-                NBT::string("Name", name)
-            ])
-        ])),
+    fn check(terminal: &Terminal) -> bool {
+        !terminal.solution.values().any(|&v| v == 0)
     }
 }

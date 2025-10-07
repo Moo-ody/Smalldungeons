@@ -46,7 +46,7 @@ pub fn apply_lava_boost(player: &mut Player, world: &World, is_in_boss_room: boo
     if !is_player_touching_lava(player, world) {
         return;
     }
-    
+
     // 4) Are we basically on the ground? (within 0.5 above the integer Y)
     // Note: Removed this check since touching lava should always bounce
     // if !is_near_ground(player) {
