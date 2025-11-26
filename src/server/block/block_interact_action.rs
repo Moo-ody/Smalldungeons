@@ -204,10 +204,10 @@ impl BlockInteractAction {
 
                 world.spawn_entity(
                     DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
-                    EntityMetadata {
-                        variant: EntityVariant::ArmorStand,
-                        is_invisible: true,
-                        custom_name: None,
+                    {
+                        let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                        metadata.is_invisible = true;
+                        metadata
                     },
                     NoEntityImpl,
                 ).unwrap();
@@ -387,10 +387,10 @@ impl BlockInteractAction {
                                             block_world_pos.y as f64 - 0.65, 
                                             block_world_pos.z as f64 + 0.5
                                         ),
-                                        crate::server::entity::entity_metadata::EntityMetadata {
-                                            variant: crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false },
-                                            is_invisible: true,
-                                            custom_name: None,
+                                        {
+                                            let mut metadata = crate::server::entity::entity_metadata::EntityMetadata::new(crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false });
+                                            metadata.is_invisible = true;
+                                            metadata
                                         },
                                         crate::dungeon::room::levers::LeverEntityImpl::new(current_block, 5.0, 20),
                                     );

@@ -161,9 +161,15 @@ impl Server {
     
                         for entity_id in chunk.entities.iter_mut() {
                             let (entity, entity_impl) = &mut self.world.entities.get_mut(&entity_id).unwrap();
-                            let buffer = &mut chunk.packet_buffer;
-                            entity.write_spawn_packet(buffer);
-                            entity_impl.spawn(entity, buffer);
+                            // Send spawn packets directly to player instead of using chunk buffer
+                            entity.write_spawn_packet(&mut player.packet_buffer);
+                            entity_impl.spawn(entity, &mut player.packet_buffer);
+                            
+                            // Resync equipment if this entity has equipment
+                            if let Some(equipment) = self.world.entity_equipment.get(&*entity_id) {
+                                use crate::server::entity::spawn_equipped::send_equipment_packets;
+                                send_equipment_packets(&mut player.packet_buffer, *entity_id, equipment);
+                            }
                         } 
                     }
                 );
@@ -251,9 +257,10 @@ impl Server {
                     walk_speed: playerspeed,
                 });
                 
+                 // Send Hypixel brand to make mods like Skytils detect this as Hypixel
                  let mut buf = Vec::new();
-                 "hypixel".write(&mut buf);
-                
+                 "Hypixel Network".write(&mut buf);
+                 
                  player.write_packet(&CustomPayload {
                      channel: "MC|Brand".into(),
                      data: &buf,

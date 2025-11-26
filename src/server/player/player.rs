@@ -176,57 +176,57 @@ impl Player {
         self.check_fallingblocks_collision();
         
         // Check for lava bounce
-        self.check_lava_bounce();
+        // self.check_lava_bounce();
     }
     
-    /// Check for lava bounce when player enters lava
-    fn check_lava_bounce(&mut self) {
-        use crate::server::block::blocks::Blocks;
-        use crate::net::protocol::play::clientbound::EntityVelocity;
-        use crate::net::var_int::VarInt;
-        
-        let world = self.world_mut();
-        let block_pos = DVec3::new(
-            self.position.x.floor(),
-            self.position.y.floor(),
-            self.position.z.floor(),
-        );
-        
-        // Check if player's feet are touching lava surface (at floor level)
-        let feet_block = world.get_block_at(block_pos.x as i32, block_pos.y as i32, block_pos.z as i32);
-        let in_lava = match feet_block {
-            Blocks::Lava { .. } | Blocks::FlowingLava { .. } => true,
-            _ => false,
-        };
-        
-        let was_in_lava = self.in_lava;
-        self.in_lava = in_lava;
-        
-        // Only bounce when entering lava (not already in lava) and if enabled
-        if in_lava && !was_in_lava && self.lava_bounce_enabled {
-            let current_tick = world.tick_count;
-            const LAVA_BOUNCE_COOLDOWN_TICKS: u64 = 10; // 500ms cooldown like Java
-            
-            // Use a shorter cooldown for 0 ping to prevent double bouncing
-            const SHORT_BOUNCE_COOLDOWN_TICKS: u64 = 5; // 250ms for 0 ping scenarios
-            
-            if current_tick - self.lava_bounce_last_tick >= SHORT_BOUNCE_COOLDOWN_TICKS {
-                
-                // Apply upward velocity for lava bounce
-                const LAVA_BOUNCE_VELOCITY: f64 = 0.5; // Upward velocity for instant surface bounce
-                
-                self.write_packet(&EntityVelocity {
-                    entity_id: VarInt(self.entity_id),
-                    velocity_x: (0.0 * 8000.0) as i16, // Keep horizontal motion
-                    velocity_y: (LAVA_BOUNCE_VELOCITY * 8000.0) as i16, // Upward bounce
-                    velocity_z: (0.0 * 8000.0) as i16, // Keep horizontal motion
-                });
-                
-                self.lava_bounce_last_tick = current_tick;
-                
-            }
-        }
-    }
+    // /// Check for lava bounce when player enters lava
+    // fn check_lava_bounce(&mut self) {
+    //     use crate::server::block::blocks::Blocks;
+    //     use crate::net::protocol::play::clientbound::EntityVelocity;
+    //     use crate::net::var_int::VarInt;
+    //     
+    //     let world = self.world_mut();
+    //     let block_pos = DVec3::new(
+    //         self.position.x.floor(),
+    //         self.position.y.floor(),
+    //         self.position.z.floor(),
+    //     );
+    //     
+    //     // Check if player's feet are touching lava surface (at floor level)
+    //     let feet_block = world.get_block_at(block_pos.x as i32, block_pos.y as i32, block_pos.z as i32);
+    //     let in_lava = match feet_block {
+    //         Blocks::Lava { .. } | Blocks::FlowingLava { .. } => true,
+    //         _ => false,
+    //     };
+    //     
+    //     let was_in_lava = self.in_lava;
+    //     self.in_lava = in_lava;
+    //     
+    //     // Only bounce when entering lava (not already in lava) and if enabled
+    //     if in_lava && !was_in_lava && self.lava_bounce_enabled {
+    //         let current_tick = world.tick_count;
+    //         const LAVA_BOUNCE_COOLDOWN_TICKS: u64 = 10; // 500ms cooldown like Java
+    //         
+    //         // Use a shorter cooldown for 0 ping to prevent double bouncing
+    //         const SHORT_BOUNCE_COOLDOWN_TICKS: u64 = 5; // 250ms for 0 ping scenarios
+    //         
+    //         if current_tick - self.lava_bounce_last_tick >= SHORT_BOUNCE_COOLDOWN_TICKS {
+    //             
+    //             // Apply upward velocity for lava bounce
+    //             const LAVA_BOUNCE_VELOCITY: f64 = 0.5; // Upward velocity for instant surface bounce
+    //             
+    //             self.write_packet(&EntityVelocity {
+    //                 entity_id: VarInt(self.entity_id),
+    //                 velocity_x: (0.0 * 8000.0) as i16, // Keep horizontal motion
+    //                 velocity_y: (LAVA_BOUNCE_VELOCITY * 8000.0) as i16, // Upward bounce
+    //                 velocity_z: (0.0 * 8000.0) as i16, // Keep horizontal motion
+    //             });
+    //             
+    //             self.lava_bounce_last_tick = current_tick;
+    //             
+    //         }
+    //     }
+    // }
     
     pub fn collision_aabb(&self) -> AABB {
         let w = 0.3;

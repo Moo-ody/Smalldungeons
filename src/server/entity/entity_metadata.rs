@@ -1,5 +1,6 @@
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::items::item_stack::ItemStack;
+use crate::server::entity::player_skin_bits::SkinParts;
 
 /// Represents an entity type in Minecraft.
 #[derive(Debug, Clone)]
@@ -11,7 +12,9 @@ pub enum EntityVariant {
     ArmorStand,
     Zombie {
         is_child: bool,
-        is_villager: bool
+        is_villager: bool,
+        is_converting: bool,
+        is_attacking: bool,
     },
     Bat {
         hanging: bool
@@ -33,7 +36,7 @@ impl EntityVariant {
     pub const fn get_id(&self) -> i8 {
         match self {
             // players need to be spawned with SpawnPlayer packet
-            EntityVariant::Player => unreachable!(),
+            EntityVariant::Player => 0, // unused for Player entities
             EntityVariant::DroppedItem { .. } => 2,
             EntityVariant::ArmorStand => 30,
             EntityVariant::Zombie { .. } => 54,
@@ -81,14 +84,26 @@ pub struct EntityMetadata {
     pub variant: EntityVariant,
     pub is_invisible: bool,
     pub custom_name: Option<String>,
+    pub custom_name_visible: bool,
+    pub ai_disabled: bool,
+    pub skin_parts: Option<SkinParts>, // For Player entities
 }
 
 impl EntityMetadata {
     pub fn new(variant: EntityVariant) -> Self {
+        let skin_parts = if variant.is_player() {
+            Some(SkinParts::default())
+        } else {
+            None
+        };
+        
         Self {
             variant,
             is_invisible: false,
             custom_name: None,
+            custom_name_visible: false,
+            ai_disabled: false,
+            skin_parts,
         }
     }
 }
@@ -110,7 +125,11 @@ impl PacketSerializable for EntityMetadata {
         let mut flags: u8 = 0;
 
         if self.is_invisible {
-            flags |= 0b0010_0000;
+            flags |= 0b0010_0000; // Bit 5: Invisible
+        }
+
+        if self.ai_disabled {
+            flags |= 0b0100_0000; // Bit 6: AI disabled
         }
 
         write_data(buf, BYTE, 0, flags);
@@ -118,15 +137,25 @@ impl PacketSerializable for EntityMetadata {
         // Add custom name if present
         if let Some(ref name) = self.custom_name {
             write_data(buf, STRING, 2, name.clone());
+            // Index 3: CustomNameVisible (BYTE) - required for name to show
+            write_data(buf, BYTE, 3, self.custom_name_visible as u8);
         }
 
         match &self.variant {
+            EntityVariant::Player => {
+                // Index 10: Player skin parts (0x7E = jacket+sleeves+pants+hat)
+                let skin_parts = self.skin_parts.map(|s| s.bits()).unwrap_or(0x7E);
+                write_data(buf, BYTE, 10, skin_parts);
+            }
             EntityVariant::DroppedItem { item } => {
                 write_data(buf, ITEM_STACK, 10, Some(item.clone()))
             }
-            EntityVariant::Zombie { is_child, is_villager } => {
+            EntityVariant::Zombie { is_child, is_villager, is_converting, is_attacking } => {
                 write_data(buf, BYTE, 12, *is_child);
                 write_data(buf, BYTE, 13, *is_villager);
+                write_data(buf, BYTE, 14, *is_converting);
+                // Index 15: Try zombie aggressive flag - this controls arm pose in 1.8
+                write_data(buf, BYTE, 15, *is_attacking as u8);
             }
             EntityVariant::Bat { hanging } => {
                 write_data(buf, BYTE, 16, *hanging);

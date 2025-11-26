@@ -7,11 +7,11 @@ use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::{RoomData, RoomType};
-use crate::dungeon::room::room::Room;
+// use crate::dungeon::room::room::Room;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound;
-use crate::net::protocol::play::clientbound::AddEffect;
+use crate::net::protocol::play::clientbound::{AddEffect, PlayerListItem, Teams};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
@@ -20,16 +20,19 @@ use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::chunk::chunk_grid::ChunkDiff;
-use crate::server::entity::entity::{Entity, EntityImpl};
+use crate::server::entity::entity::{Entity, EntityImpl, NoEntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
-use crate::server::lava_boost::apply_lava_boost;
+use crate::server::entity::spawn_equipped::spawn_following_nametag;
+// use crate::server::lava_boost::apply_lava_boost;
 use crate::server::player::container_ui::UI;
-use crate::server::player::player::Player;
-use crate::server::player::scoreboard::ScoreboardLines;
+use crate::server::player::player::{Player, GameProfile, GameProfileProperty};
+use crate::server::utils::player_list::player_profile::{PlayerData, GameType};
+use crate::server::player::scoreboard::{ScoreboardLines, CREATE_TEAM, ADD_PLAYER};
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
 use crate::server::utils::dvec3::DVec3;
+use crate::server::utils::sized_string::SizedString;
 use crate::server::world::VIEW_DISTANCE;
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use crate::utils::seeded_rng::SeededRng;
@@ -43,6 +46,11 @@ use std::env;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::unbounded_channel;
+use uuid::Uuid;
+
+// Mort skin constants
+const MORT_SKIN_VALUE: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMDcyNTkwMDEzOSwKICAicHJvZmlsZUlkIiA6ICJhNzdkNmQ2YmFjOWE0NzY3YTFhNzU1NjYxOTllYmY5MiIsCiAgInByb2ZpbGVOYW1lIiA6ICIwOEJFRDUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWI1Njg5NWI5NjU5ODk2YWQ2NDdmNTg1OTkyMzhhZjUzMmQ0NmRiOWMxYjAzODliOGJiZWI3MDk5OWRhYjMzZCIKICAgIH0KICB9Cn0=";
+const MORT_SKIN_SIGNATURE: &str = "ihevlFAZ1u+xG/eeEnUzMRu1l8i+2j6pw1jIw0yxcsLn1x749GL+ToaVRyU56+13vDg9G6QjWRHQaA1DpPIkgmthhZsxQ067Q2A2SASywQiQIvIPJwmzjRmkP3eYHtKnJ7t4uZ31qjMazaONNq00Nq2t8s983u2TPfCFZJQlx8RqNWjRZjmGh7Gw+YXKbecwnlQmvpKZSiPolCcTgobPl0aZCr+benffxA0bcAohkr5Kp8U2VZW73wF0P7FGkANIhLYOtokLTemaYOMPWe4q/SU3D5yZswM6/SQ63g0mAvZJfQW/Vb+lAGzlm3zXia7T6tAJjFYuV1kg5yVcODbYOb2fgLJK3OQvUjnf9xlXXyDcESOILsPhft5SYVbBQuDkuLitG7YecJMV9cbCqldnvv4Z4XKs3jaCzZqYDRql4MVx8rYd+7hLaGXuprfrwBYL1xzzgMFSTFUCkIm942L5B7/6tZJGT5GT7g4DN1vrJpnZz4+gxdebcbcUEfP313/gHFU/U3phfN89TBbbNAfi0t5uQ5SRCGXdCz+YbO56zTKjzeUg57u49XOZaKwNZyF6hmv2IdO9CJctYw9cvljEkALOkMjMShaP95QYHsahc3mFLavJbseY7x5/vlexjRvPxdnxQCDG+Fkf9eBwUjyCqUjQozYYM6euDHFqib7uBHM=";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -140,7 +148,7 @@ async fn main() -> Result<()> {
     println!("Rng Seed: {}", rng_seed);
     SeededRng::set_seed(rng_seed);
 
-    let mut dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
+    let dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
     
     let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
     server.world.server = &mut server;
@@ -154,77 +162,77 @@ async fn main() -> Result<()> {
     ));
 
     // Load the bossroom at fixed coordinates first
-    {
-        // Load the bossroom JSON data
-        let bossroom_json = include_str!("room_data/146,bossroom,-8,-8.json");
-        let bossroom_data = RoomData::from_raw_json(bossroom_json);
-        
-        // Extract dimensions before using bossroom_data
-        let bossroom_width = bossroom_data.width;
-        let bossroom_length = bossroom_data.length;
-        let bossroom_height = bossroom_data.height;
-        
-        // Store boss room dimensions in dungeon for detection
-        server.dungeon.boss_room_width = bossroom_width;
-        server.dungeon.boss_room_length = bossroom_length;
-        server.dungeon.boss_room_height = bossroom_height;
-        
-        // Create a single segment for the bossroom at the specified coordinates
-        let bossroom_segments = vec![crate::dungeon::room::room::RoomSegment {
-            x: 0, // This will be overridden by our custom positioning
-            z: 0, // This will be overridden by our custom positioning
-            neighbours: [None; 4],
-        }];
-        
-        // Create the bossroom with North rotation (no rotation)
-        let bossroom = Room::new(
-            bossroom_segments,
-            &[], // empty doors array
-            bossroom_data,
-        );
-        
-        // Override the corner position to spawn at -8, 254, -8
-        // We need to manually load the bossroom since it's not part of the regular dungeon grid
-        let corner = BlockPos { x: -8, y: 254, z: -8 };
-        
-        // Update the dungeon's boss room corner to match the actual loaded position
-        server.dungeon.boss_room_corner = corner;
-        
-        // Manually load the bossroom blocks at the specified position
-        for (i, block) in bossroom.room_data.block_data.iter().enumerate() {
-            if *block == Blocks::Air {
-                continue;
-            }
-            
-            let block = block.clone();
-            // No rotation needed since we're placing it directly
-            
-            let ind = i as i32;
-            let x = ind % bossroom.room_data.width;
-            let z = (ind / bossroom.room_data.width) % bossroom.room_data.length;
-            let y = bossroom.room_data.bottom + ind / (bossroom.room_data.width * bossroom.room_data.length);
-            
-            // Place the block at the world position
-            server.world.set_block_at(block, corner.x + x, y, corner.z + z);
-        }
-        
-        println!("Bossroom loaded at coordinates: x={}, y={}, z={} with dimensions: {}x{}x{}", 
-            corner.x, corner.y, corner.z, 
-            server.dungeon.boss_room_width, 
-            server.dungeon.boss_room_length, 
-            server.dungeon.boss_room_height);
-        
-        // Bossroom chunks will be sent to players individually when they get near it
-        // No need to send to all players immediately - this saves bandwidth and memory
-        let bossroom_chunk_x_min = corner.x >> 4;
-        let bossroom_chunk_z_min = corner.z >> 4;
-        let bossroom_chunk_x_max = (corner.x + bossroom.room_data.width) >> 4;
-        let bossroom_chunk_z_max = (corner.z + bossroom.room_data.length) >> 4;
-        
-        let total_chunks = (bossroom_chunk_x_max - bossroom_chunk_x_min + 1) * (bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
-        println!("Bossroom loaded with {} chunks ({}x{}), will be sent to players when they get near", 
-            total_chunks, bossroom_chunk_x_max - bossroom_chunk_x_min + 1, bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
-    }
+    // {
+    //     // Load the bossroom JSON data
+    //     let bossroom_json = include_str!("room_data/146,bossroom,-8,-8.json");
+    //     let bossroom_data = RoomData::from_raw_json(bossroom_json);
+    //     
+    //     // Extract dimensions before using bossroom_data
+    //     let bossroom_width = bossroom_data.width;
+    //     let bossroom_length = bossroom_data.length;
+    //     let bossroom_height = bossroom_data.height;
+    //     
+    //     // Store boss room dimensions in dungeon for detection
+    //     server.dungeon.boss_room_width = bossroom_width;
+    //     server.dungeon.boss_room_length = bossroom_length;
+    //     server.dungeon.boss_room_height = bossroom_height;
+    //     
+    //     // Create a single segment for the bossroom at the specified coordinates
+    //     let bossroom_segments = vec![crate::dungeon::room::room::RoomSegment {
+    //         x: 0, // This will be overridden by our custom positioning
+    //         z: 0, // This will be overridden by our custom positioning
+    //         neighbours: [None; 4],
+    //     }];
+    //     
+    //     // Create the bossroom with North rotation (no rotation)
+    //     let bossroom = Room::new(
+    //         bossroom_segments,
+    //         &[], // empty doors array
+    //         bossroom_data,
+    //     );
+    //     
+    //     // Override the corner position to spawn at -8, 254, -8
+    //     // We need to manually load the bossroom since it's not part of the regular dungeon grid
+    //     let corner = BlockPos { x: -8, y: 254, z: -8 };
+    //     
+    //     // Update the dungeon's boss room corner to match the actual loaded position
+    //     server.dungeon.boss_room_corner = corner;
+    //     
+    //     // Manually load the bossroom blocks at the specified position
+    //     for (i, block) in bossroom.room_data.block_data.iter().enumerate() {
+    //         if *block == Blocks::Air {
+    //             continue;
+    //         }
+    //         
+    //         let block = block.clone();
+    //         // No rotation needed since we're placing it directly
+    //         
+    //         let ind = i as i32;
+    //         let x = ind % bossroom.room_data.width;
+    //         let z = (ind / bossroom.room_data.width) % bossroom.room_data.length;
+    //         let y = bossroom.room_data.bottom + ind / (bossroom.room_data.width * bossroom.room_data.length);
+    //         
+    //         // Place the block at the world position
+    //         server.world.set_block_at(block, corner.x + x, y, corner.z + z);
+    //     }
+    //     
+    //     println!("Bossroom loaded at coordinates: x={}, y={}, z={} with dimensions: {}x{}x{}", 
+    //         corner.x, corner.y, corner.z, 
+    //         server.dungeon.boss_room_width, 
+    //         server.dungeon.boss_room_length, 
+    //         server.dungeon.boss_room_height);
+    //     
+    //     // Bossroom chunks will be sent to players individually when they get near it
+    //     // No need to send to all players immediately - this saves bandwidth and memory
+    //     let bossroom_chunk_x_min = corner.x >> 4;
+    //     let bossroom_chunk_z_min = corner.z >> 4;
+    //     let bossroom_chunk_x_max = (corner.x + bossroom.room_data.width) >> 4;
+    //     let bossroom_chunk_z_max = (corner.z + bossroom.room_data.length) >> 4;
+    //     
+    //     let total_chunks = (bossroom_chunk_x_max - bossroom_chunk_x_min + 1) * (bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
+    //     println!("Bossroom loaded with {} chunks ({}x{}), will be sent to players when they get near", 
+    //         total_chunks, bossroom_chunk_x_max - bossroom_chunk_x_min + 1, bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
+    // }
 
     let dungeon = &mut server.dungeon;
     
@@ -240,6 +248,7 @@ async fn main() -> Result<()> {
             }
         }
 
+        
         // Set the spawn point to be inside of the spawn room
         if room.room_data.room_type == RoomType::Entrance {
             server.world.set_spawn_point(
@@ -259,6 +268,61 @@ async fn main() -> Result<()> {
             pub struct MortImpl;
             
             impl EntityImpl for MortImpl {
+                fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+                    // Add Mort to player list so the player entity can be spawned properly
+                    if let Some(uuid) = entity.uuid {
+                        let mort_profile = GameProfile {
+                            uuid,
+                            username: "Mort".to_string(),
+                            properties: HashMap::from([
+                                ("textures".to_string(), GameProfileProperty {
+                                    value: MORT_SKIN_VALUE.to_string(),
+                                    signature: Some(MORT_SKIN_SIGNATURE.to_string()),
+                                })
+                            ]),
+                        };
+                        
+                        let player_data = PlayerData {
+                            ping: 20, // More realistic ping for NPCs
+                            game_mode: GameType::Survival, // Use Survival instead of Creative for better modded client compatibility
+                            profile: mort_profile,
+                            display_name: Some(ChatComponentTextBuilder::new("Mort").build()),
+                        };
+                        
+                        // Send PlayerInfo Add packet
+                        buffer.write_packet(&PlayerListItem {
+                            action: VarInt(0), // ADD_PLAYER
+                            players: vec![&player_data],
+                        });
+                        
+                        // First create the hidden team to prevent vanilla nameplate from showing
+                        buffer.write_packet(&Teams {
+                            name: SizedString::truncated("npc_hide"),
+                            display_name: SizedString::truncated("npc_hide"),
+                            prefix: SizedString::truncated(""),
+                            suffix: SizedString::truncated(""),
+                            name_tag_visibility: SizedString::truncated("never"),
+                            color: 0,
+                            players: vec![],
+                            action: CREATE_TEAM,
+                            friendly_flags: 0,
+                        });
+                        
+                        // Then add Mort to the hidden team
+                        buffer.write_packet(&Teams {
+                            name: SizedString::truncated("npc_hide"),
+                            display_name: SizedString::truncated("npc_hide"),
+                            prefix: SizedString::truncated(""),
+                            suffix: SizedString::truncated(""),
+                            name_tag_visibility: SizedString::truncated("never"),
+                            color: 0,
+                            players: vec![SizedString::truncated("Mort")],
+                            action: ADD_PLAYER,
+                            friendly_flags: 0,
+                        });
+                    }
+                }
+                
                 fn tick(&mut self, _: &mut Entity, _: &mut PacketBuffer) {
                     // rotate
                 }
@@ -270,15 +334,94 @@ async fn main() -> Result<()> {
                 }
             }
             
-            let id = server.world.spawn_entity(
+            // Generate deterministic UUID for Mort NPC using parse_str with a fixed UUID
+            let mort_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(); // Mort NPC UUID
+            
+            let id = server.world.spawn_entity_with_uuid(
                 room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
                     .as_dvec3()
                     .add(DVec3::new(0.5, 0.0, 0.5)),
-                EntityMetadata::new(EntityVariant::Zombie { is_child: false, is_villager: false }),
+                EntityMetadata::new(EntityVariant::Player),
                 MortImpl,
+                Some(mort_uuid),
             )?;
             if let Some((entity, _)) = server.world.entities.get_mut(&id) {
                 entity.yaw = 0.0.rotate(room.rotation);
+            }
+            
+            // Create two-line armorstand nametag for Mort
+            // Get Mort's position first
+            let mort_pos = if let Some((entity, _)) = server.world.entities.get(&id) {
+                entity.position
+            } else {
+                // Fallback to the original position if entity not found yet
+                room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
+                    .as_dvec3()
+                    .add(DVec3::new(0.5, 0.0, 0.5))
+            };
+            
+            // Try following nametags first
+            match spawn_following_nametag(&mut server.world, id, "§bMort", 0.4) {
+                Ok(_top_nametag_id) => {
+                    // Spawn bottom nametag
+                    match spawn_following_nametag(&mut server.world, id, "§eCLICK", 0.1) {
+                        Ok(_bottom_nametag_id) => {
+                            // Both nametags spawned successfully
+                        }
+                        Err(e) => {
+                            println!("Failed to spawn bottom nametag: {}", e);
+                            // Fallback to static armorstands
+                            let _bottom_nametag_id = server.world.spawn_entity(
+                                mort_pos + DVec3::new(0.0, 0.1, 0.0),
+                                {
+                                    let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                                    metadata.is_invisible = true;
+                                    metadata.custom_name = Some("§eCLICK".to_string());
+                                    metadata.custom_name_visible = true;
+                                    metadata.ai_disabled = true;
+                                    metadata
+                                },
+                                NoEntityImpl,
+                            )?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to spawn top nametag: {}", e);
+                    // Fallback to static armorstands
+                    let _top_nametag_id = server.world.spawn_entity(
+                        mort_pos + DVec3::new(0.0, 0.4, 0.0),
+                        {
+                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                            metadata.is_invisible = true;
+                            metadata.custom_name = Some("§bMort".to_string());
+                            metadata.custom_name_visible = true;
+                            metadata.ai_disabled = true;
+                            metadata
+                        },
+                        NoEntityImpl,
+                    )?;
+                    
+                    let _bottom_nametag_id = server.world.spawn_entity(
+                        mort_pos + DVec3::new(0.0, 0.1, 0.0),
+                        {
+                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                            metadata.is_invisible = true;
+                            metadata.custom_name = Some("§eCLICK".to_string());
+                            metadata.custom_name_visible = true;
+                            metadata.ai_disabled = true;
+                            metadata
+                        },
+                        NoEntityImpl,
+                    )?;
+                }
+            }
+            
+            // Ensure entity is properly visible first, then add team hiding if needed
+            if let Some((_entity, _)) = server.world.entities.get(&id) {
+                // Player entity should be properly registered now
+                // For modded clients, we might want to ensure no immediate team modifications
+                // that could interfere with visibility
             }
         }
     }
@@ -474,8 +617,6 @@ async fn main() -> Result<()> {
                     eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, server.dungeon.rooms.len());
                     ""
                 }
-            } else if server.dungeon.is_player_in_boss_room(player) {
-                "bossroom"
             } else {
                 ""
             };
@@ -564,11 +705,11 @@ async fn main() -> Result<()> {
             }
             
             // Apply lava boost system (only in boss rooms)
-            let is_in_boss_room = server.dungeon.is_player_in_boss_room(player);
+            // let is_in_boss_room = server.dungeon.is_player_in_boss_room(player);
             // We need to check lava in the world, but we can't borrow world while player is mutably borrowed
             // So we'll pass the world reference through the player's world_mut method
-            let world_ref = player.world_mut();
-            apply_lava_boost(player, world_ref, is_in_boss_room);
+            // let world_ref = player.world_mut();
+            // apply_lava_boost(player, world_ref, is_in_boss_room);
             
             player.last_position = player.position;
             player.flush_packets();

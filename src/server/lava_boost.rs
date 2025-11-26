@@ -27,38 +27,35 @@ fn is_player_touching_lava(player: &Player, world: &World) -> bool {
     standing_on_lava || in_lava
 }
 
-// Ground proximity check removed - touching lava should always bounce
+// /// Apply lava boost to a player if they meet all conditions
+// /// This function should be called every tick for each player
+// pub fn apply_lava_boost(player: &mut Player, world: &World, is_in_boss_room: bool) {
+//     // 1) Singleplayer gate
+//     if !IS_SINGLEPLAYER {
+//         return;
+//     }
+//     
+//     // 2) Must be in boss room
+//     if !is_in_boss_room {
+//         return;
+//     }
+//     
+//     // 3) Are our feet touching lava?
+//     if !is_player_touching_lava(player, world) {
+//         return;
+//     }
 
-/// Apply lava boost to a player if they meet all conditions
-/// This function should be called every tick for each player
-pub fn apply_lava_boost(player: &mut Player, world: &World, is_in_boss_room: bool) {
-    // 1) Singleplayer gate
-    if !IS_SINGLEPLAYER {
-        return;
-    }
-    
-    // 2) Must be in boss room
-    if !is_in_boss_room {
-        return;
-    }
-    
-    // 3) Are our feet touching lava?
-    if !is_player_touching_lava(player, world) {
-        return;
-    }
-
-    // 4) Are we basically on the ground? (within 0.5 above the integer Y)
-    // Note: Removed this check since touching lava should always bounce
-    // if !is_near_ground(player) {
-    //     return;
-    // }
-    
-    // 5) Apply boost: set player velocity upward like the Java version
-    // This creates a proper bounce effect instead of just teleporting
-    player.write_packet(&EntityVelocity {
-        entity_id: VarInt(player.entity_id),
-        velocity_x: 0, // Keep current horizontal velocity
-        velocity_y: (BOOST_VELOCITY_Y * 8000.0) as i16, // Convert to packet format
-        velocity_z: 0, // Keep current horizontal velocity
-    });
-}
+//     // 4) Are we basically on the ground? (within 0.5 above the integer Y)
+//     // if !is_near_ground(player) {
+//     //     return;
+//     // }
+//     
+//     // 5) Apply boost: set player velocity upward like the Java version
+//     // This creates a proper bounce effect instead of just teleporting
+//     player.write_packet(&EntityVelocity {
+//         entity_id: VarInt(player.entity_id),
+//         velocity_x: 0, // Keep current horizontal velocity
+//         velocity_y: (BOOST_VELOCITY_Y * 8000.0) as i16, // Convert to packet format
+//         velocity_z: 0, // Keep current horizontal velocity
+//     });
+// }

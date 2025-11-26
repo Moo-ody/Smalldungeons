@@ -124,10 +124,10 @@ impl Door {
 
             let id = world.spawn_entity(
                 DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),
-                EntityMetadata {
-                    variant: EntityVariant::Bat { hanging: false },
-                    is_invisible: true,
-                    custom_name: None,
+                {
+                    let mut metadata = EntityMetadata::new(EntityVariant::Bat { hanging: false });
+                    metadata.is_invisible = true;
+                    metadata
                 },
                 DoorEntityImpl::new(self.door_type.get_block(), 5.0, 20),
             ).unwrap();

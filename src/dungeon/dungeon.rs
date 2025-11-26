@@ -40,10 +40,10 @@ pub struct Dungeon {
     pub temp_player_mushroom_up: HashMap<u32, Vec<BlockPos>>,
     
     // Boss room data
-    pub boss_room_corner: BlockPos,
-    pub boss_room_width: i32,
-    pub boss_room_length: i32,
-    pub boss_room_height: i32,
+    // pub boss_room_corner: BlockPos,
+    // pub boss_room_width: i32,
+    // pub boss_room_length: i32,
+    // pub boss_room_height: i32,
     
 }
 
@@ -126,10 +126,10 @@ impl Dungeon {
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
             temp_player_mushroom_up: HashMap::new(),
-            boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
-            boss_room_width: 0, // Will be set when boss room is loaded
-            boss_room_length: 0, // Will be set when boss room is loaded
-            boss_room_height: 30, // Default height
+            // boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
+            // boss_room_width: 0, // Will be set when boss room is loaded
+            // boss_room_length: 0, // Will be set when boss room is loaded
+            // boss_room_height: 30, // Default height
         })
     }
 
@@ -477,21 +477,21 @@ impl Dungeon {
         )
     }
 
-    /// Check if a player is inside the boss room
-    pub fn is_player_in_boss_room(&self, player: &Player) -> bool {
-        let player_x = player.position.x as i32;
-        let player_y = player.position.y as i32;
-        let player_z = player.position.z as i32;
-        
-        // Check if player is within boss room bounds using stored dimensions
-        // Boss room spans from Y=0 to Y=height (254), regardless of corner.y
-        player_x >= self.boss_room_corner.x 
-            && player_x < self.boss_room_corner.x + self.boss_room_width
-            && player_z >= self.boss_room_corner.z 
-            && player_z < self.boss_room_corner.z + self.boss_room_length
-            && player_y >= 0  // Boss room starts from Y=0 (bottom)
-            && player_y <= self.boss_room_height  // Up to the height of the room (254)
-    }
+    // /// Check if a player is inside the boss room
+    // pub fn is_player_in_boss_room(&self, player: &Player) -> bool {
+    //     let player_x = player.position.x as i32;
+    //     let player_y = player.position.y as i32;
+    //     let player_z = player.position.z as i32;
+    //     
+    //     // Check if player is within boss room bounds using stored dimensions
+    //     // Boss room spans from Y=0 to Y=height (254), regardless of corner.y
+    //     player_x >= self.boss_room_corner.x 
+    //         && player_x < self.boss_room_corner.x + self.boss_room_width
+    //         && player_z >= self.boss_room_corner.z 
+    //         && player_z < self.boss_room_corner.z + self.boss_room_length
+    //         && player_y >= 0  // Boss room starts from Y=0 (bottom)
+    //         && player_y <= self.boss_room_height  // Up to the height of the room (254)
+    // }
 
     pub fn start_dungeon(&mut self) {
         let world = &mut self.server_mut().world;

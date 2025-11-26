@@ -3,8 +3,10 @@ use crate::server::commands::command::CommandMetadata;
 use crate::server::commands::outcome::Outcome;
 use crate::server::commands::r#impl::locraw::Locraw;
 use crate::server::commands::r#impl::mort::Mort;
-use crate::server::commands::r#impl::p3::P3;
-use crate::server::commands::r#impl::p3s::P3S;
+// use crate::server::commands::r#impl::p3::P3;
+// use crate::server::commands::r#impl::p3s::P3S;
+use crate::server::commands::r#impl::zombie_spawn::ZombieSpawn;
+use crate::server::commands::r#impl::spawn_zombie::SpawnZombie;
 use crate::server::commands::r#impl::term::Term;
 use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
@@ -19,8 +21,8 @@ mod outcome;
 crate::command_registry! {
     Mort,
     Locraw,
-    P3,
-    P3S,
+    ZombieSpawn,
+    SpawnZombie,
     Term
 }
 

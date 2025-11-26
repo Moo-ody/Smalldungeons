@@ -71,93 +71,41 @@ impl ProcessPacket for PlayerDigging {
         match self.action {
             PlayerDiggingAction::StartDestroyBlock => {
                 // Check for Simon Says puzzle first
-                println!("PlayerDigging: StartDestroyBlock at {:?}", self.position);
-                let action = {
-                    let world = player.world_mut();
-                    world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
-                };
-                println!("PlayerDigging: Simon Says action: {:?}", action);
-                match action {
-                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::BlockClick) => {
-                        return; // Block the click
-                    }
-                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::ShowSolution) => {
-                        // Show the solution sequence immediately
-                        let world = player.world_mut();
-                        world.simon_says.showing_solution = true;
-                        
-                        // Remove buttons manually to avoid borrowing conflicts
-                        for y in 0..4 {
-                            for z in 0..4 {
-                                let pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
-                                    .add(crate::server::block::block_position::BlockPos::new(0, y, z));
-                                world.set_block_at(crate::server::block::blocks::Blocks::Air, pos.x, pos.y, pos.z);
-                            }
-                        }
-                        
-                        // Schedule solution display with proper timing
-                        let solution = world.simon_says.solution.clone();
-                        let current_tick = world.tick_count;
-                        world.simon_says.pending_actions.clear();
-                        
-                        // Schedule sea lanterns to show one by one
-                        for (i, button_pos) in solution.iter().enumerate() {
-                            let display_pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
-                                .add(button_pos.to_block_pos())
-                                .add(crate::server::block::block_position::BlockPos::new(1, 0, 0));
-                            
-                            // Show sea lantern at position i * 8 ticks (each button shows for 8 ticks)
-                            world.simon_says.pending_actions.push((
-                                current_tick + (i * 8) as u64, 
-                                crate::dungeon::p3::simon_says::SolutionAction::ShowSeaLantern(display_pos)
-                            ));
-                            
-                            // Hide sea lantern at (i + 1) * 8 ticks
-                            world.simon_says.pending_actions.push((
-                                current_tick + ((i + 1) * 8) as u64, 
-                                crate::dungeon::p3::simon_says::SolutionAction::HideSeaLantern(display_pos)
-                            ));
-                        }
-                        
-                        // Replace buttons after showing solution
-                        let replace_tick = current_tick + (8 * (solution.len() + 1)) as u64;
-                        world.simon_says.pending_actions.push((
-                            replace_tick, 
-                            crate::dungeon::p3::simon_says::SolutionAction::ReplaceButtons
-                        ));
-                        
-                        return;
-                    }
-                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::Continue) => {
-                        return; // Continue with puzzle
-                    }
-                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::Fail) => {
-                        // TODO: Handle failure - simplified for now
-                        return;
-                    }
-                    Some(crate::dungeon::p3::simon_says::SimonSaysAction::Completed) => {
-                        // Puzzle completed - display splits
-                        let world = player.world_mut();
-                        if let Some(splits_str) = world.simon_says.get_splits_string() {
-                            let splits_message = crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder::new(format!("Simon Says completed! Splits: {}", splits_str))
-                                .color(crate::server::utils::color::MCColors::Gold)
-                                .bold()
-                                .build();
-                            
-                            player.write_packet(&crate::net::protocol::play::clientbound::Chat {
-                                component: splits_message,
-                                chat_type: 0
-                            });
-                        }
-                        
-                        // Now reset the puzzle after sending the completion message
-                        world.simon_says.reset(true);
-                        return;
-                    }
-                    None => {
-                        // Not a Simon Says button, continue with normal processing
-                    }
-                }
+                // let action = {
+                //     let world = player.world_mut();
+                //     world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
+                // };
+                // Simon Says puzzle handling - commented out
+                // let action = {
+                //     let world = player.world_mut();
+                //     world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
+                // };
+                // match action {
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::BlockClick) => {
+                //         return; // Block the click
+                //     }
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::ShowSolution) => {
+                //         // ... (all Simon Says handling code)
+                //         return;
+                //     }
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::Continue) => {
+                //         return; // Continue with puzzle
+                //     }
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::SequenceCompleted) => {
+                //         // ... (sequence completion handling)
+                //         return;
+                //     }
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::Fail) => {
+                //         return;
+                //     }
+                //     Some(crate::dungeon::p3::simon_says::SimonSaysAction::Completed) => {
+                //         // ... (completion handling)
+                //         return;
+                //     }
+                //     None => {
+                //         // Not a Simon Says button, continue with normal processing
+                //     }
+                // }
                 // todo:
                 // when block toughness is added,
                 // replace check with if vanilla toughness would match
@@ -206,98 +154,23 @@ impl ProcessPacket for PlayerDigging {
 
 impl ProcessPacket for PlayerBlockPlacement {
     fn process_with_player(&self, player: &mut Player) {
-        // Check for Simon Says puzzle first
-        if !self.position.is_invalid() {
-            println!("PlayerBlockPlacement: at {:?}", self.position);
-            let action = {
-                let world = player.world_mut();
-                world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
-            };
-            println!("PlayerBlockPlacement: Simon Says action: {:?}", action);
-            match action {
-                Some(crate::dungeon::p3::simon_says::SimonSaysAction::BlockClick) => {
-                    return; // Block the click
-                }
-                Some(crate::dungeon::p3::simon_says::SimonSaysAction::ShowSolution) => {
-                    // Show the solution sequence immediately
-                    let world = player.world_mut();
-                    world.simon_says.showing_solution = true;
-                    
-                    // Remove buttons manually to avoid borrowing conflicts
-                    for y in 0..4 {
-                        for z in 0..4 {
-                            let pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
-                                .add(crate::server::block::block_position::BlockPos::new(0, y, z));
-                            world.set_block_at(crate::server::block::blocks::Blocks::Air, pos.x, pos.y, pos.z);
-                        }
-                    }
-                    
-                    // Schedule solution display with proper timing
-                    let solution = world.simon_says.solution.clone();
-                    let current_tick = world.tick_count;
-                    world.simon_says.pending_actions.clear();
-                    
-                    // Schedule sea lanterns to show one by one
-                    for (i, button_pos) in solution.iter().enumerate() {
-                        let display_pos = crate::dungeon::p3::simon_says::BOT_LEFT.to_block_pos()
-                            .add(button_pos.to_block_pos())
-                            .add(crate::server::block::block_position::BlockPos::new(1, 0, 0));
-                        
-                        // Show sea lantern at position i * 8 ticks (each button shows for 8 ticks)
-                        world.simon_says.pending_actions.push((
-                            current_tick + (i * 8) as u64, 
-                            crate::dungeon::p3::simon_says::SolutionAction::ShowSeaLantern(display_pos)
-                        ));
-                        
-                        // Hide sea lantern at (i + 1) * 8 ticks
-                        world.simon_says.pending_actions.push((
-                            current_tick + ((i + 1) * 8) as u64, 
-                            crate::dungeon::p3::simon_says::SolutionAction::HideSeaLantern(display_pos)
-                        ));
-                    }
-                    
-                    // Replace buttons after showing solution
-                    let replace_tick = current_tick + (8 * (solution.len() + 1)) as u64;
-                    world.simon_says.pending_actions.push((
-                        replace_tick, 
-                        crate::dungeon::p3::simon_says::SolutionAction::ReplaceButtons
-                    ));
-                    
-                    return;
-                }
-                Some(crate::dungeon::p3::simon_says::SimonSaysAction::Continue) => {
-                    // Continue with puzzle - this means a correct solution button was clicked
-                    // The Simon Says logic has already handled the progress update
-                    return;
-                }
-                Some(crate::dungeon::p3::simon_says::SimonSaysAction::Fail) => {
-                    // TODO: Handle failure - simplified for now
-                    return;
-                }
-                Some(crate::dungeon::p3::simon_says::SimonSaysAction::Completed) => {
-                    // Puzzle completed - display splits
-                    let world = player.world_mut();
-                    if let Some(splits_str) = world.simon_says.get_splits_string() {
-                        let splits_message = crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder::new(format!("Simon Says completed! Splits: {}", splits_str))
-                            .color(crate::server::utils::color::MCColors::Gold)
-                            .bold()
-                            .build();
-                        
-                        player.write_packet(&crate::net::protocol::play::clientbound::Chat {
-                            component: splits_message,
-                            chat_type: 0
-                        });
-                    }
-                    
-                    // Now reset the puzzle after sending the completion message
-                    world.simon_says.reset(true);
-                    return;
-                }
-                None => {
-                    // Not a Simon Says button, continue with normal processing
-                }
-            }
-        }
+        // Check for Simon Says puzzle first - commented out
+        // if !self.position.is_invalid() {
+        //     let action = {
+        //         let world = player.world_mut();
+        //         world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
+        //     };
+        //     match action {
+        // Simon Says puzzle handling - commented out
+        // if !self.position.is_invalid() {
+        //     let action = {
+        //         let world = player.world_mut();
+        //         world.simon_says.handle_button_click(self.position, player.client_id, world.tick_count)
+        //     };
+        //     match action {
+        //         ... (all Simon Says handling code)
+        //     }
+        // }
         
         // Check if player is holding Bonzo Staff or Jerry-Chine Gun and handle accordingly
         if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {

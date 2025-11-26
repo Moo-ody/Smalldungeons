@@ -121,10 +121,17 @@ fn create_item(item: i16, metadata: i16, enchanted: bool) -> ItemStack {
         metadata,
         tag_compound: if enchanted {
             Some(NBT::with_nodes(vec![
+                NBT::compound("display", vec![
+                    NBT::string("Name", "")
+                ]),
                 NBT::list("ench", 0, Vec::new())
             ]))
         } else {
-            None
+            Some(NBT::with_nodes(vec![
+                NBT::compound("display", vec![
+                    NBT::string("Name", "")
+                ])
+            ]))
         },
     }
 }

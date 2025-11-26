@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{EntityTeleport, SpawnMob, SpawnObject};
+use crate::net::protocol::play::clientbound::{EntityTeleport, SpawnMob, SpawnObject, SpawnPlayer};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::chunk::chunk::Chunk;
@@ -7,6 +7,7 @@ use crate::server::entity::entity_metadata::EntityMetadata;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
+use uuid::Uuid;
 
 pub type EntityId = i32;
 
@@ -42,6 +43,7 @@ pub struct Entity {
     pub ticks_existed: u32,
     
     pub metadata: EntityMetadata,
+    pub uuid: Option<Uuid>, // For Player entities
 }
 
 impl Entity {
@@ -65,6 +67,7 @@ impl Entity {
             last_pitch: 0.0,
             ticks_existed: 0,
             metadata,
+            uuid: None,
         }
     }
 
@@ -79,18 +82,19 @@ impl Entity {
     pub fn write_spawn_packet(&self, buffer: &mut PacketBuffer) {
         let variant = &self.metadata.variant;
         if variant.is_player() {
-            // needs player list item
-            // buffer.write_packet(&SpawnPlayer {
-            //     entity_id: VarInt(self.id),
-            //     uuid,
-            //     x: self.position.x,
-            //     y: self.position.y,
-            //     z: self.position.z,
-            //     yaw: self.yaw,
-            //     pitch: self.pitch,
-            //     current_item: 0,
-            //     metadata: self.metadata.clone(),
-            // });
+            if let Some(uuid) = self.uuid {
+                buffer.write_packet(&SpawnPlayer {
+                    entity_id: VarInt(self.id),
+                    uuid,
+                    x: self.position.x,
+                    y: self.position.y,
+                    z: self.position.z,
+                    yaw: self.yaw,
+                    pitch: self.pitch,
+                    current_item: 0,
+                    metadata: self.metadata.clone(),
+                });
+            }
         } else if variant.is_object() { 
             buffer.write_packet(&SpawnObject {
                 entity_id: VarInt(self.id),

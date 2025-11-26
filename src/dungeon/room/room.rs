@@ -256,28 +256,28 @@ impl Room {
         let min_x = segments.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x;
         let min_z = segments.iter().min_by(|a, b| a.z.cmp(&b.z)).unwrap().z;
 
-        // Special handling for bossrooms
-        if room_data.room_type == crate::dungeon::room::room_data::RoomType::Boss {
-            match rotation {
-                Direction::North => BlockPos { x: -8, y: 254, z: -8 },
-                Direction::East => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 },
-                Direction::South => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 + room_data.width - 1 },
-                Direction::West => BlockPos { x: -8, y: 254, z: -8 + room_data.width - 1 },
-                _ => unreachable!(),
-            }
-        } else {
-            let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
-            let y = 68;
-            let z = min_z as i32 * 32 + DUNGEON_ORIGIN.1;
-            
-            match rotation {
-                Direction::North => BlockPos { x, y, z },
-                Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
-                Direction::South => BlockPos { x: x + room_data.length - 1, y, z: z + room_data.width - 1 },
-                Direction::West => BlockPos { x, y, z: z + room_data.width - 1 },
-                _ => unreachable!(),
-            }
+        // Special handling for bossrooms - commented out
+        // if room_data.room_type == crate::dungeon::room::room_data::RoomType::Boss {
+        //     match rotation {
+        //         Direction::North => BlockPos { x: -8, y: 254, z: -8 },
+        //         Direction::East => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 },
+        //         Direction::South => BlockPos { x: -8 + room_data.length - 1, y: 254, z: -8 + room_data.width - 1 },
+        //         Direction::West => BlockPos { x: -8, y: 254, z: -8 + room_data.width - 1 },
+        //         _ => unreachable!(),
+        //     }
+        // } else {
+        let x = min_x as i32 * 32 + DUNGEON_ORIGIN.0;
+        let y = 68;
+        let z = min_z as i32 * 32 + DUNGEON_ORIGIN.1;
+        
+        match rotation {
+            Direction::North => BlockPos { x, y, z },
+            Direction::East => BlockPos { x: x + room_data.length - 1, y, z },
+            Direction::South => BlockPos { x: x + room_data.length - 1, y, z: z + room_data.width - 1 },
+            Direction::West => BlockPos { x, y, z: z + room_data.width - 1 },
+            _ => unreachable!(),
         }
+        // }
     }
 
     pub fn tick(&mut self, world: &mut World) {
@@ -510,10 +510,10 @@ impl Room {
                 // Spawn falling block entity for animation
                 let _ = world.spawn_entity(
                     crate::server::utils::dvec3::DVec3::new(x as f64 + 0.5, y as f64 - crate::dungeon::room::fallingblocks::FALLING_FLOOR_ENTITY_OFFSET, z as f64 + 0.5),
-                    crate::server::entity::entity_metadata::EntityMetadata {
-                        variant: crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false },
-                        is_invisible: true,
-                        custom_name: None,
+                    {
+                        let mut metadata = crate::server::entity::entity_metadata::EntityMetadata::new(crate::server::entity::entity_metadata::EntityVariant::Bat { hanging: false });
+                        metadata.is_invisible = true;
+                        metadata
                     },
                     crate::dungeon::room::fallingblocks::FallingFloorEntityImpl::new(current_block, 5.0, 20),
                 );
