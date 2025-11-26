@@ -119,6 +119,7 @@ pub struct RoomData {
     pub height: i32,
     pub block_data: Vec<Blocks>,
     pub crusher_data: Vec<Value>, // Needs to be parsed when rooms are generated
+    pub secrets: u8, // Total number of secrets in this room
 }
 
 impl RoomData {
@@ -133,6 +134,12 @@ impl RoomData {
         let width = json_data["width"].as_number().unwrap().as_u64().unwrap() as i32;
         let length = json_data["length"].as_number().unwrap().as_u64().unwrap() as i32;
         let height = json_data["height"].as_number().unwrap().as_u64().unwrap() as i32;
+
+        let secrets = json_data["secrets"]
+            .as_number()
+            .and_then(|n| n.as_u64())
+            .map(|n| n as u8)
+            .unwrap_or(0);
 
         let crusher_data: Vec<Value> = json_data["crushers"].as_array().unwrap_or(&Vec::new()).to_vec();
 
@@ -160,6 +167,7 @@ impl RoomData {
             height,
             block_data,
             crusher_data,
+            secrets,
         }
     }
 
@@ -175,6 +183,7 @@ impl RoomData {
             height: 30,
             block_data: vec![],
             crusher_data: vec![],
+            secrets: 0,
         }
     }
 }

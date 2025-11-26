@@ -7,12 +7,15 @@ use crate::dungeon::room::mushroom::{get_room_mushrooms, MushroomSets};
 use crate::dungeon::room::superboomwalls::{get_room_superboomwalls, SuperboomWallPattern, rotate_superboomwall_pos};
 use crate::dungeon::room::fallingblocks::{get_room_fallingblocks, FallingBlockPattern, rotate_fallingblock_pos};
 use crate::dungeon::room::levers::{get_room_levers, LeverData};
+use crate::dungeon::room::locked_chests::{get_room_locked_chests, facing_string_to_direction};
+use crate::dungeon::dungeon::{Dungeon, LockedChestState};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
 use std::collections::HashSet;
+use rand::Rng;
 
 #[derive(Debug)]
 pub struct RoomSegment {
@@ -49,6 +52,7 @@ pub struct Room {
     pub lever_data: Vec<LeverData>, // Store lever data for this room
     
     pub entered: bool,
+    pub found_secrets: u8, // Number of secrets found in this room (runtime tracking)
 }
 
 impl Room {
@@ -245,6 +249,7 @@ impl Room {
             mushroom_sets,
             lever_data,
             entered: false,
+            found_secrets: 0,
         }
     }
 
@@ -771,6 +776,91 @@ impl Room {
             .rotate(self.rotation)
             .add_x(corner.x)
             .add_z(corner.z)
+    }
+
+    /// Spawn locked chests for this room
+    pub fn spawn_locked_chests(
+        &self,
+        world: &mut World,
+        locked_chests: &mut std::collections::HashMap<BlockPos, LockedChestState>,
+        lever_to_chests: &mut std::collections::HashMap<BlockPos, Vec<BlockPos>>,
+    ) {
+        if let Some(locked_chest_entries) = get_room_locked_chests(&self.room_data.name) {
+            let corner = self.get_corner_pos();
+            let mut rng = rand::rng();
+
+            for entry in locked_chest_entries {
+                // Convert relative chest position to world coordinates
+                let relative_chest_pos = BlockPos {
+                    x: entry.x,
+                    y: entry.y,
+                    z: entry.z,
+                };
+                let rotated_chest = relative_chest_pos.rotate(self.rotation);
+                let chest_world_pos = BlockPos {
+                    x: corner.x + rotated_chest.x,
+                    y: rotated_chest.y, // Y coordinates are absolute
+                    z: corner.z + rotated_chest.z,
+                };
+
+                // Convert relative lever position to world coordinates
+                let relative_lever_pos = BlockPos {
+                    x: entry.lever[0],
+                    y: entry.lever[1],
+                    z: entry.lever[2],
+                };
+                let rotated_lever = relative_lever_pos.rotate(self.rotation);
+                let lever_world_pos = BlockPos {
+                    x: corner.x + rotated_lever.x,
+                    y: rotated_lever.y, // Y coordinates are absolute
+                    z: corner.z + rotated_lever.z,
+                };
+
+                // 50/50 chance to be locked
+                let locked = rng.random::<f64>() < 0.5;
+
+                // Place the chest block
+                let facing_direction = facing_string_to_direction(&entry.facing);
+                let rotated_facing = facing_direction.rotate(self.rotation);
+                world.set_block_at(
+                    Blocks::Chest { direction: rotated_facing },
+                    chest_world_pos.x,
+                    chest_world_pos.y,
+                    chest_world_pos.z,
+                );
+
+                // Register chest as interactable
+                world.interactable_blocks.insert(
+                    chest_world_pos,
+                    crate::server::block::block_interact_action::BlockInteractAction::Chest {
+                        secret: std::rc::Rc::new(std::cell::RefCell::new(
+                            crate::dungeon::room::secrets::DungeonSecret::new(
+                                crate::dungeon::room::secrets::SecretType::Chest {
+                                    direction: rotated_facing,
+                                },
+                                chest_world_pos,
+                                0.0,
+                            ),
+                        )),
+                    },
+                );
+
+                // Store locked chest state
+                locked_chests.insert(
+                    chest_world_pos,
+                    LockedChestState {
+                        locked,
+                        lever_world_pos,
+                    },
+                );
+
+                // Add to lever -> chests mapping
+                lever_to_chests
+                    .entry(lever_world_pos)
+                    .or_insert_with(Vec::new)
+                    .push(chest_world_pos);
+            }
+        }
     }
 }
 

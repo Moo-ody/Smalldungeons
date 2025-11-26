@@ -126,7 +126,8 @@ fn is_passable_for_transmission(block: crate::server::block::blocks::Blocks) -> 
         | crate::server::block::blocks::Blocks::RedFlower { .. }
         | crate::server::block::blocks::Blocks::Vine { .. }
         | crate::server::block::blocks::Blocks::Fire
-        | crate::server::block::blocks::Blocks::Lilypad => true,
+        | crate::server::block::blocks::Blocks::Lilypad
+        | crate::server::block::blocks::Blocks::Carpet { .. } => true,
         _ => false,
     }
 }

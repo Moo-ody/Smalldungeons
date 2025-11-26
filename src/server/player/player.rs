@@ -8,6 +8,7 @@ use crate::server::player::container_ui::UI;
 use crate::server::player::inventory::{Inventory, ItemSlot};
 use crate::server::player::terminal::Terminal;
 use crate::server::player::scoreboard::Scoreboard;
+use crate::server::player::dungeon_stats::DungeonPlayerStats;
 use crate::server::server::Server;
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
@@ -83,6 +84,12 @@ pub struct Player {
     pub in_lava: bool,
     pub lava_bounce_last_tick: u64,
     pub lava_bounce_enabled: bool,
+    
+    // Dungeon stats
+    pub dungeon_stats: DungeonPlayerStats,
+    
+    // Current room tracking for dynamic secrets display
+    pub current_room_index: Option<usize>,
 }
 
 impl Player {
@@ -135,6 +142,10 @@ impl Player {
             in_lava: false,
             lava_bounce_last_tick: 0,
             lava_bounce_enabled: true, // Enable lava bounce by default
+            
+            // Dungeon stats
+            dungeon_stats: DungeonPlayerStats::default(),
+            current_room_index: None,
             
             // observed_entities: HashSet::new(),
         }
@@ -442,6 +453,14 @@ impl Player {
         self.write_packet(&Chat {
             component: ChatComponentTextBuilder::new(msg).build(),
             chat_type: 0 
+        })
+    }
+    
+    pub fn send_action_bar(&mut self, legacy_text: &str) {
+        use crate::server::player::dungeon_stats::legacy_to_chat_component;
+        self.write_packet(&Chat {
+            component: legacy_to_chat_component(legacy_text),
+            chat_type: 2, // Position 2 = action bar
         })
     }
     

@@ -88,7 +88,7 @@ impl CommandMetadata for SpawnZombie {
             world,
             entity_id,
             "§6✰ §cZombie Commander §a3.5M§c❤",
-            0.4, // Standard offset for nametag positioning
+            0.2, // Lowered offset for nametag positioning
         ) {
             Ok(nametag_id) => {
                 // Final metadata update to ensure arms stay down after all operations

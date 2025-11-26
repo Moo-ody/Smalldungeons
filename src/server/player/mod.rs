@@ -6,3 +6,4 @@ pub mod attribute;
 pub mod packet_handling;
 pub mod terminals;
 pub mod terminal;
+pub mod dungeon_stats;

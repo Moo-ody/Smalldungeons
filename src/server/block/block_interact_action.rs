@@ -1,11 +1,13 @@
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::secrets::DungeonSecret;
-use crate::net::protocol::play::clientbound::{BlockAction, SoundEffect};
+use crate::net::protocol::play::clientbound::{BlockAction, Chat, SoundEffect};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::NoEntityImpl;
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::Player;
+use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
+use crate::server::utils::color::MCColors;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use crate::server::redstone::is_special_lever;
@@ -28,7 +30,7 @@ pub enum BlockInteractAction {
         secret: Rc<RefCell<DungeonSecret>>,
     },
     WitherEssence {
-        secret: Rc<RefCell<DungeonSecret>>
+        secret: Rc<RefCell<DungeonSecret>>,
     },
     Lever,
     // Mushroom secret: bottom mushrooms (start) and top mushrooms (return nodes)
@@ -99,6 +101,24 @@ impl BlockInteractAction {
             }
 
             Self::Chest { secret } => {
+                // Check if this chest is locked
+                let is_locked = {
+                    let dungeon = &player.server_mut().dungeon;
+                    dungeon.locked_chests.get(block_pos)
+                        .map(|chest_state| chest_state.locked)
+                        .unwrap_or(false)
+                };
+                if is_locked {
+                    // Chest is locked - send red message and cancel opening
+                    player.write_packet(&Chat {
+                        component: ChatComponentTextBuilder::new("That chest is locked!")
+                            .color(MCColors::Red)
+                            .build(),
+                        chat_type: 0,
+                    });
+                    return;
+                }
+
                 let mut secret = secret.borrow_mut();
                 if !secret.obtained {
                     // maybe make this a packet where it is sent to all players
@@ -117,6 +137,15 @@ impl BlockInteractAction {
                         pitch: 0.975,
                     });
                     secret.obtained = true;
+                    
+                    // Increment found_secrets for the room containing this secret (only if not already obtained)
+                    if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+                            if room.found_secrets < room.room_data.secrets {
+                                room.found_secrets += 1;
+                            }
+                        }
+                    }
                 }
                 /*
 [19:37:29] sound random.chestopen, 0.5 0.9206349 -94.0 82.0 -51.0
@@ -195,27 +224,55 @@ impl BlockInteractAction {
 
             Self::WitherEssence { secret } => {
                 let mut secret = secret.borrow_mut();
-                debug_assert!(!secret.obtained);
+                
+                // Only process if not already obtained
+                if !secret.obtained {
+                    let world = player.world_mut();
 
-                let world = player.world_mut();
+                    world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
+                    world.interactable_blocks.remove(block_pos);
 
-                world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
-                world.interactable_blocks.remove(block_pos);
+                    world.spawn_entity(
+                        DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
+                        {
+                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                            metadata.is_invisible = true;
+                            metadata
+                        },
+                        NoEntityImpl,
+                    ).unwrap();
 
-                world.spawn_entity(
-                    DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
-                    {
-                        let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
-                        metadata.is_invisible = true;
-                        metadata
-                    },
-                    NoEntityImpl,
-                ).unwrap();
-
-                secret.obtained = true;
+                    secret.obtained = true;
+                    
+                    // Increment found_secrets for the room containing this secret (only if not already obtained)
+                    if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+                            if room.found_secrets < room.room_data.secrets {
+                                room.found_secrets += 1;
+                            }
+                        }
+                    }
+                }
             }
             
             Self::Lever => {
+                // Check if this lever unlocks any chests and unlock them
+                {
+                    let dungeon = &mut player.server_mut().dungeon;
+                    if let Some(chest_positions) = dungeon.lever_to_chests.get(block_pos) {
+                        // Unlock all chests linked to this lever
+                        for chest_pos in chest_positions {
+                            if let Some(chest_state) = dungeon.locked_chests.get_mut(chest_pos) {
+                                if chest_state.locked {
+                                    // Unlock the chest
+                                    chest_state.locked = false;
+                                }
+                                // If already unlocked, do nothing (as per requirements)
+                            }
+                        }
+                    }
+                }
+                
                 let world = &mut player.server_mut().world;
                 
                 // Check if this is one of the special levers at the specified coordinates

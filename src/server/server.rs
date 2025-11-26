@@ -260,7 +260,7 @@ impl Server {
                  // Send Hypixel brand to make mods like Skytils detect this as Hypixel
                  let mut buf = Vec::new();
                  "Hypixel Network".write(&mut buf);
-                 
+                
                  player.write_packet(&CustomPayload {
                      channel: "MC|Brand".into(),
                      data: &buf,

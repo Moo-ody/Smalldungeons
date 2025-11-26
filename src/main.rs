@@ -61,17 +61,46 @@ async fn main() -> Result<()> {
 
     let rooms_dir = include_dir!("src/room_data/");
 
+    // Load secrets from bettermapRooms.json
+    let bettermap_rooms_json = include_str!("room_data/bettermapRooms.json");
+    let bettermap_rooms: serde_json::Value = serde_json::from_str(bettermap_rooms_json).unwrap();
+    let mut secrets_map: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
+    
+    if let Some(rooms_array) = bettermap_rooms.as_array() {
+        for room in rooms_array {
+            if let Some(name) = room.get("name").and_then(|n| n.as_str()) {
+                if let Some(secrets) = room.get("secrets")
+                    .and_then(|s| s.as_number())
+                    .and_then(|n| n.as_u64())
+                    .map(|n| n as u8) {
+                    secrets_map.insert(name.to_string(), secrets);
+                }
+            }
+        }
+    }
+
     // roomdata first digit (the key) is just a list of numbers 0..etc. this could just be a vec with roomid lookups.
     let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir
         .entries()
         .iter()
         .filter_map(|file| {
             let file = file.as_file()?;
+            let file_name = file.path().file_name()?.to_str()?;
+            
+            // Skip bettermapRooms.json - it's not a room file
+            if file_name == "bettermapRooms.json" {
+                return None;
+            }
+            
             let contents = file.contents_utf8()?;
-            let name = file.path().file_name()?.to_str()?;
-            let room_data = RoomData::from_raw_json(contents);
+            let mut room_data = RoomData::from_raw_json(contents);
 
-            let name_parts: Vec<&str> = name.split(",").collect();
+            // Override secrets from bettermapRooms.json if available
+            if let Some(secrets) = secrets_map.get(&room_data.name) {
+                room_data.secrets = *secrets;
+            }
+
+            let name_parts: Vec<&str> = file_name.split(",").collect();
             let room_id = name_parts.first()?.parse::<usize>().ok()?;
 
             Some((room_id, room_data))
@@ -426,6 +455,15 @@ async fn main() -> Result<()> {
         }
     }
     
+    // Spawn locked chests for all rooms
+    for room in &dungeon.rooms {
+        room.spawn_locked_chests(
+            &mut server.world,
+            &mut dungeon.locked_chests,
+            &mut dungeon.lever_to_chests,
+        );
+    }
+    
     // Lever system is now integrated into room generation (like crypts and superboom walls)
 
     for door in &dungeon.doors {
@@ -497,6 +535,40 @@ async fn main() -> Result<()> {
         // also needs to actually be in a vanilla adjacent way.
         for player in server.world.players.values_mut() {
             player.ticks_existed += 1;
+            
+            // Send action bar every 5 ticks
+            if player.ticks_existed % 5 == 0 {
+                let stats = &player.dungeon_stats;
+                let (found_secrets, total_secrets) = {
+                    // Always try to get the current room
+                    let room_index = server.dungeon.get_room_at(
+                        player.position.x as i32,
+                        player.position.z as i32
+                    );
+                    if let Some(room_index) = room_index {
+                        // Update tracked room index
+                        player.current_room_index = Some(room_index);
+                        let dungeon = &server.dungeon;
+                        if let Some(room) = dungeon.rooms.get(room_index) {
+                            (room.found_secrets, room.room_data.secrets)
+                        } else {
+                            (0, 0)
+                        }
+                    } else {
+                        // Player not in any room - clear tracked index
+                        player.current_room_index = None;
+                        (0, 0)
+                    }
+                };
+                
+                let action_bar_component = crate::server::player::dungeon_stats::build_action_bar_component(stats, found_secrets, total_secrets);
+                // Debug: print the JSON to see what's being sent
+                println!("Action bar JSON: {}", action_bar_component.serialize());
+                player.write_packet(&clientbound::Chat {
+                    component: action_bar_component,
+                    chat_type: 2, // Position 2 = action bar
+                });
+            }
             player.write_packet(&clientbound::ConfirmTransaction {
                 window_id: 0,
                 action_number: -1,

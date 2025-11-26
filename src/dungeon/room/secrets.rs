@@ -82,7 +82,7 @@ impl DungeonSecret {
             }
             SecretType::Chest { direction } => {
                 world.set_block_at(
-                    Blocks::Chest { direction: direction.clone() },
+                    Blocks::Chest { direction: *direction },
                     secret.block_pos.x,
                     secret.block_pos.y,
                     secret.block_pos.z,

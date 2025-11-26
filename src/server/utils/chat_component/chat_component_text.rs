@@ -2,7 +2,7 @@ use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::color::MCColors;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct ChatComponentText {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -28,9 +28,92 @@ pub struct ChatComponentText {
     hover_event: Option<HoverEvent>,
 }
 
+impl Serialize for ChatComponentText {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        
+        map.serialize_entry("text", &self.text)?;
+        
+        if let Some(ref color) = self.color {
+            // Use our custom Serialize for MCColors
+            let color_str = match color {
+                MCColors::Black => "black",
+                MCColors::DarkBlue => "dark_blue",
+                MCColors::DarkGreen => "dark_green",
+                MCColors::DarkCyan => "dark_cyan",
+                MCColors::DarkRed => "dark_red",
+                MCColors::DarkPurple => "dark_purple",
+                MCColors::Gold => "gold",
+                MCColors::Gray => "gray",
+                MCColors::DarkGray => "dark_gray",
+                MCColors::Blue => "blue",
+                MCColors::Green => "green",
+                MCColors::Aqua => "aqua",
+                MCColors::Red => "red",
+                MCColors::LightPurple => "light_purple",
+                MCColors::Yellow => "yellow",
+                MCColors::White => "white",
+                MCColors::Reset => "reset",
+            };
+            map.serialize_entry("color", color_str)?;
+        }
+        
+        if let Some(bold) = self.bold {
+            map.serialize_entry("bold", &bold)?;
+        }
+        if let Some(italic) = self.italic {
+            map.serialize_entry("italic", &italic)?;
+        }
+        if let Some(underlined) = self.underlined {
+            map.serialize_entry("underlined", &underlined)?;
+        }
+        if let Some(strikethrough) = self.strikethrough {
+            map.serialize_entry("strikethrough", &strikethrough)?;
+        }
+        if let Some(obfuscated) = self.obfuscated {
+            map.serialize_entry("obfuscated", &obfuscated)?;
+        }
+        if let Some(ref siblings) = self.siblings {
+            map.serialize_entry("extra", siblings)?;
+        }
+        if let Some(ref click_event) = self.click_event {
+            map.serialize_entry("clickEvent", click_event)?;
+        }
+        if let Some(ref hover_event) = self.hover_event {
+            map.serialize_entry("hoverEvent", hover_event)?;
+        }
+        
+        map.end()
+    }
+}
+
 impl ChatComponentText {
     pub fn serialize(&self) -> String {
         serde_json::to_string(self).unwrap()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty() && self.siblings.is_none()
+    }
+
+    pub fn has_siblings(&self) -> bool {
+        self.siblings.is_some()
+    }
+
+    pub fn siblings_mut(&mut self) -> &mut Option<Vec<ChatComponentText>> {
+        &mut self.siblings
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    
+    pub fn set_color(&mut self, color: MCColors) {
+        self.color = Some(color);
     }
 }
 
@@ -82,7 +165,7 @@ impl ChatComponentTextBuilder {
         }
     }
 
-    pub const fn color(mut self, color: MCColors) -> Self {
+    pub fn color(mut self, color: MCColors) -> Self {
         self.component.color = Some(color);
         self
     }

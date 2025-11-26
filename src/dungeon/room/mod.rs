@@ -6,3 +6,4 @@ pub mod crypts;
 pub mod mushroom;
 pub mod superboomwalls;
 pub mod fallingblocks;
+pub mod locked_chests;
