@@ -1,6 +1,6 @@
 use crate::net::packets::packet::IdentifiedPacket;
-use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::net::var_int::{write_var_int, VarInt};
+use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::register_packets;
 use crate::server::block::block_position::BlockPos;
 use crate::server::entity::entity_metadata::EntityMetadata;
@@ -66,7 +66,7 @@ register_packets! {
     ConfirmTransaction = 0x32;
     // UpdateSign = 0x33;
     Maps = 0x34;
-    // UpdateBlockEntity = 0x35;
+    UpdateBlockEntity = 0x35;
     // SignEditorOpen = 0x36;
     // Statistics = 0x37;
     PlayerListItem<'_> = 0x38;
@@ -374,6 +374,24 @@ packet_serializable! {
         pub count: i32,
         // maybe figure out args,
         // not sure if we'll ever need them
+    }
+}
+
+pub struct UpdateBlockEntity {
+    pub block_pos: BlockPos,
+    pub action: u8, // 0 = set data, 1 = remove, 2 = update data
+    pub nbt_data: Option<Vec<u8>>, // NBT data, None if action is 1 (remove)
+}
+
+impl crate::net::packets::packet_serialize::PacketSerializable for UpdateBlockEntity {
+    fn write(&self, buf: &mut Vec<u8>) {
+        self.block_pos.write(buf);
+        self.action.write(buf);
+        if let Some(ref nbt_data) = self.nbt_data {
+            // In 1.8, NBT data is written directly without length prefix
+            // The NBT compound tag is complete and ends with TAG_END (0)
+            buf.extend_from_slice(nbt_data);
+        }
     }
 }
 

@@ -47,6 +47,8 @@ id_enum! {
         FireworksTwinkle("fireworks.twinkle"),
         RandomFizz("random.fizz"),
         RandomWoodClick("random.wood_click"),
+        BatDeath("mob.bat.death"),
+        BatHurt("mob.bat.hurt"),
         
     }
 }

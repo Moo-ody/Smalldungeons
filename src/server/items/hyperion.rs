@@ -1,18 +1,20 @@
-use crate::net::protocol::play::clientbound::{SoundEffect, PositionLook};
+use crate::net::protocol::play::clientbound::{SoundEffect, PositionLook, Particles};
 use crate::server::player::player::Player;
 use crate::server::utils::sounds::Sounds;
 use crate::server::utils::dvec3::DVec3;
+use crate::server::utils::aabb::AABB;
+use crate::server::entity::entity_metadata::EntityVariant;
 use crate::net::internal_packets::NetworkThreadMessage;
 use tokio::sync::mpsc::UnboundedSender;
 use std::f64::consts::PI;
 
 pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
     // Use the exact same teleport logic as ether transmission, but with 10 blocks
-    let server = &player.server_mut();
+    let server = &mut player.server_mut();
     let teleport_result = handle_hyperion_teleport(player, &server.network_tx);
     
     // Only play sounds if teleport was successful
-    if teleport_result.is_ok() {
+    if let Ok(Some(dest_pos)) = teleport_result {
         // Always play endermen portal sound on right-click
         let _ = player.write_packet(&SoundEffect {
             sound: Sounds::EndermenPortal.id(),
@@ -23,26 +25,121 @@ pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
             pos_z: player.position.z,
         });
 
-        // Always play random.explode sound
-        let _ = player.write_packet(&SoundEffect {
+        // Trigger explosion at destination
+        handle_hyperion_explosion(server, dest_pos);
+    }
+
+    Ok(())
+}
+
+fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosion_pos: DVec3) {
+    const EXPLOSION_RADIUS: f64 = 7.0; // 7 block radius = 13x13x13 area
+    
+    // Create explosion AABB (13x13x13 centered at explosion_pos)
+    let explosion_aabb = AABB {
+        min: DVec3::new(
+            explosion_pos.x - EXPLOSION_RADIUS,
+            explosion_pos.y - EXPLOSION_RADIUS,
+            explosion_pos.z - EXPLOSION_RADIUS,
+        ),
+        max: DVec3::new(
+            explosion_pos.x + EXPLOSION_RADIUS,
+            explosion_pos.y + EXPLOSION_RADIUS,
+            explosion_pos.z + EXPLOSION_RADIUS,
+        ),
+    };
+    
+    // Play explosion particles and sound for all players
+    let explosion_particle = Particles {
+        particle_id: 1, // largeexplode
+        long_distance: true,
+        x: explosion_pos.x as f32,
+        y: explosion_pos.y as f32,
+        z: explosion_pos.z as f32,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        offset_z: 0.0,
+        speed: 0.0,
+        count: 0,
+    };
+    
+    for (_, player) in &mut server.world.players {
+        player.write_packet(&explosion_particle);
+        player.write_packet(&SoundEffect {
             sound: Sounds::RandomExplode.id(),
             volume: 1.0,
             pitch: 1.0,
-            pos_x: player.position.x,
-            pos_y: player.position.y,
-            pos_z: player.position.z,
+            pos_x: explosion_pos.x,
+            pos_y: explosion_pos.y,
+            pos_z: explosion_pos.z,
         });
     }
-
-    // TODO: AoE damage + particles/sounds at destination
-
-    Ok(())
+    
+    // Check for bats in explosion range
+    let mut bats_to_kill = Vec::new();
+    for (entity_id, (entity, _)) in &server.world.entities {
+        // Check if entity is a bat
+        if let EntityVariant::Bat { .. } = &entity.metadata.variant {
+            // Check if bat is within explosion range
+            let bat_aabb = AABB {
+                min: DVec3::new(entity.position.x - 0.3, entity.position.y, entity.position.z - 0.3),
+                max: DVec3::new(entity.position.x + 0.3, entity.position.y + 0.9, entity.position.z + 0.3),
+            };
+            
+            if explosion_aabb.intersects(&bat_aabb) {
+                bats_to_kill.push(*entity_id);
+            }
+        }
+    }
+    
+    // Kill bats and mark associated secrets as obtained
+    for bat_id in bats_to_kill {
+        // Find secret associated with this bat and mark it as obtained
+        for (room_index, room) in server.dungeon.rooms.iter_mut().enumerate() {
+            for secret_rc in &room.json_secrets {
+                let mut secret = secret_rc.borrow_mut();
+                if let Some(secret_bat_id) = secret.bat_entity_id {
+                    if secret_bat_id == bat_id {
+                        // Mark secret as obtained and counted
+                        if !secret.obtained {
+                            secret.obtained = true;
+                            if !secret.counted {
+                                secret.counted = true;
+                                // Increment room's found_secrets count
+                                room.found_secrets = room.found_secrets.saturating_add(1);
+                            }
+                        }
+                        secret.bat_entity_id = None;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Play bat death sound
+        if let Some((bat_entity, _)) = server.world.entities.get(&bat_id) {
+            let bat_pos = bat_entity.position;
+            for (_, player) in &mut server.world.players {
+                let _ = player.write_packet(&SoundEffect {
+                    sound: Sounds::BatDeath.id(),
+                    pos_x: bat_pos.x,
+                    pos_y: bat_pos.y,
+                    pos_z: bat_pos.z,
+                    volume: 1.0,
+                    pitch: 1.0,
+                });
+            }
+        }
+        
+        // Despawn the bat
+        server.world.despawn_entity(bat_id);
+    }
 }
 
 fn handle_hyperion_teleport(
     player: &mut Player,
     _network_tx: &UnboundedSender<NetworkThreadMessage>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<DVec3>> {
     const MAX_DISTANCE: f64 = 10.0; // Hyperion has 10 block range
     
     // Start from eye position
@@ -98,9 +195,15 @@ fn handle_hyperion_teleport(
             pitch: 0.0,
             flags: 24,
         });
+        
+        // Update player position immediately for explosion calculation
+        player.position = DVec3::new(dest_x, dest_y, dest_z);
+        
+        // Return destination position for explosion
+        return Ok(Some(DVec3::new(dest_x, dest_y, dest_z)));
     }
 
-    Ok(())
+    Ok(None)
 }
 
 #[inline]

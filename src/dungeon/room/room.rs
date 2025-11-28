@@ -53,6 +53,8 @@ pub struct Room {
     
     pub entered: bool,
     pub found_secrets: u8, // Number of secrets found in this room (runtime tracking)
+    pub json_secrets: Vec<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>>, // Secrets from secrets.json
+    pub room_entry_secrets_spawned: bool, // Track if schest/sess have been spawned on room entry
 }
 
 impl Room {
@@ -250,6 +252,8 @@ impl Room {
             lever_data,
             entered: false,
             found_secrets: 0,
+            json_secrets: Vec::new(),
+            room_entry_secrets_spawned: false,
         }
     }
 
@@ -729,7 +733,7 @@ impl Room {
         }
     }
 
-    pub fn load_into_world(&self, world: &mut World) {
+    pub fn load_into_world(&mut self, world: &mut World) {
         if self.room_data.block_data.is_empty() {
             self.load_default(world);
             return;
@@ -737,8 +741,21 @@ impl Room {
 
         let corner = self.get_corner_pos();
         
+        // Load secrets from secrets.json
+        self.json_secrets = crate::dungeon::room::secrets_loader::load_secrets_for_room(
+            &self.room_data.name,
+            corner,
+            self.rotation
+        );
+        
         // Register levers for this room
         self.register_levers(world);
+
+        // Special placement for Gold room
+        if self.room_data.name == "Gold" {
+            let pos = BlockPos { x: 15, y: 100, z: 15 }.rotate(self.rotation);
+            world.set_block_at(Blocks::GoldBlock, corner.x + pos.x, 100, corner.z + pos.z);
+        }
 
         for (i, block) in self.room_data.block_data.iter().enumerate() {
             if *block == Blocks::Air {

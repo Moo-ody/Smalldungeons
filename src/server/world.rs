@@ -23,7 +23,7 @@ use std::mem::take;
 use uuid::Uuid;
 
 pub mod tactical_insertion;
-pub use tactical_insertion::{TacticalInsertionMarker, ScheduledSound};
+pub use tactical_insertion::{TacticalInsertionMarker, ScheduledSound, ScheduledFixedSound};
 
 pub const VIEW_DISTANCE: u8 = 6;
 
@@ -69,6 +69,8 @@ pub struct World {
     
     // Scheduled tactical insertions (teleport back after delay)
     pub tactical_insertions: Vec<(TacticalInsertionMarker, Vec<ScheduledSound>)>,
+    // Scheduled sounds at fixed positions
+    pub scheduled_fixed_sounds: Vec<ScheduledFixedSound>,
     pub tick_count: u64,
     
     // Lava flow control
@@ -114,6 +116,7 @@ impl World {
             
             // NEW FIELDS
             tactical_insertions: Vec::new(),
+            scheduled_fixed_sounds: Vec::new(),
             tick_count: 0,
             redstone_system: RedstoneSystem::new(),
             // simon_says: SimonSays::new(),
@@ -214,6 +217,28 @@ impl World {
         
                 // Process scheduled tactical insertions
         tactical_insertion::process(self)?;
+        
+        // Process scheduled fixed-position sounds
+        let now = self.tick_count;
+        let mut remaining_sounds = Vec::new();
+        for sound in self.scheduled_fixed_sounds.drain(..) {
+            if sound.due_tick <= now {
+                // Send sound to all players
+                for (_, player) in &mut self.players {
+                    player.write_packet(&crate::net::protocol::play::clientbound::SoundEffect {
+                        sound: sound.sound.id(),
+                        pos_x: sound.pos_x,
+                        pos_y: sound.pos_y,
+                        pos_z: sound.pos_z,
+                        volume: sound.volume,
+                        pitch: sound.pitch,
+                    });
+                }
+            } else {
+                remaining_sounds.push(sound);
+            }
+        }
+        self.scheduled_fixed_sounds = remaining_sounds;
         
         // Process Simon Says puzzle timing system
         // self.simon_says.tick(self.tick_count);
@@ -351,6 +376,8 @@ impl World {
     pub fn send_metadata_update(&mut self, entity_id: EntityId) {
         if let Some((entity, _)) = self.entities.get(&entity_id) {
             for player in self.players.values_mut() {
+                // Log when sending EntityMetadata packet
+                eprintln!("[WORLD] Sending PacketEntityMetadata for entity {}", entity_id);
                 player.write_packet(&crate::net::protocol::play::clientbound::PacketEntityMetadata {
                     entity_id: crate::net::var_int::VarInt(entity_id),
                     metadata: entity.metadata.clone(),

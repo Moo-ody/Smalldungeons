@@ -1,6 +1,6 @@
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::secrets::DungeonSecret;
-use crate::net::protocol::play::clientbound::{BlockAction, Chat, SoundEffect};
+use crate::net::protocol::play::clientbound::{BlockAction, Chat, Particles, SoundEffect};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::NoEntityImpl;
@@ -228,10 +228,57 @@ impl BlockInteractAction {
                 // Only process if not already obtained
                 if !secret.obtained {
                     let world = player.world_mut();
+                    let server = player.server_mut();
+
+                    // Send BlockAction for animation BEFORE removing the block
+                    // Get the actual block and its state ID before removing the block
+                    let block = world.chunk_grid.get_block_at(block_pos.x, block_pos.y, block_pos.z);
+                    let block_state_id = block.get_block_state_id();
+                    
+                    // Send BlockAction to all players
+                    // Try both event_id 0 and 1 - skull blocks might use different values
+                    let block_center = (block_pos.x as f32 + 0.5, block_pos.y as f32 + 0.5, block_pos.z as f32 + 0.5);
+                    for (_, other_player) in &mut server.world.players {
+                        // Try event_id 0 first (some blocks use 0)
+                        other_player.write_packet(&BlockAction {
+                            block_pos: block_pos.clone(),
+                            event_id: 0,
+                            event_data: 1,
+                            block_id: block_state_id,
+                        });
+                        // Also try event_id 1 (like chests)
+                        other_player.write_packet(&BlockAction {
+                            block_pos: block_pos.clone(),
+                            event_id: 1,
+                            event_data: 1,
+                            block_id: block_state_id,
+                        });
+                    }
+
+                    // Play note.harp sounds with ascending pitches (animation sequence)
+                    // Schedule sounds to play at specific ticks with 0.25s (5 ticks) spacing
+                    let pitches = [0.7936508, 0.8888889, 1.0, 1.0952381, 1.1904762];
+                    let world_tick = world.tick_count;
+                    let block_pos_f64 = (block_pos.x as f64, block_pos.y as f64, block_pos.z as f64);
+                    
+                    // Schedule fixed-position sounds
+                    for (i, &pitch) in pitches.iter().enumerate() {
+                        world.scheduled_fixed_sounds.push(crate::server::world::ScheduledFixedSound {
+                            due_tick: world_tick + (i as u64 * 5), // 5 ticks apart (0.25s)
+                            sound: Sounds::Harp,
+                            volume: 1.0,
+                            pitch,
+                            pos_x: block_pos_f64.0,
+                            pos_y: block_pos_f64.1,
+                            pos_z: block_pos_f64.2,
+                        });
+                    }
 
                     world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
                     world.interactable_blocks.remove(block_pos);
 
+                    // Spawn essence entity with animation
+                    use crate::dungeon::room::secrets::EssenceEntityImpl;
                     world.spawn_entity(
                         DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
                         {
@@ -239,14 +286,14 @@ impl BlockInteractAction {
                             metadata.is_invisible = true;
                             metadata
                         },
-                        NoEntityImpl,
+                        EssenceEntityImpl,
                     ).unwrap();
 
                     secret.obtained = true;
                     
                     // Increment found_secrets for the room containing this secret (only if not already obtained)
-                    if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
-                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+                    if let Some(room_index) = server.dungeon.get_room_at(block_pos.x, block_pos.z) {
+                        if let Some(room) = server.dungeon.rooms.get_mut(room_index) {
                             if room.found_secrets < room.room_data.secrets {
                                 room.found_secrets += 1;
                             }

@@ -24,6 +24,18 @@ pub struct ScheduledSound {
     pub pitch: f32,
 }
 
+/// Scheduled sound at a fixed position (not following a player)
+#[derive(Debug, Clone, Copy)]
+pub struct ScheduledFixedSound {
+    pub due_tick: u64,
+    pub sound: Sounds,
+    pub volume: f32,
+    pub pitch: f32,
+    pub pos_x: f64,
+    pub pos_y: f64,
+    pub pos_z: f64,
+}
+
 /// Process scheduled tactical insertions and return teleports
 pub fn process(world: &mut World) -> anyhow::Result<()> {
     if world.tactical_insertions.is_empty() {

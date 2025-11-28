@@ -64,6 +64,12 @@ impl Item {
             Item::SpiritSceptre => {
                 // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but
                 // when they hit a solid block they blow up in like 10 block radius (or square) or something
+                
+                // Always restore stack size to prevent consumption
+                let hotbar_slot = player.held_slot as usize + 36;
+                player.inventory.set_slot(ItemSlot::Filled(Item::SpiritSceptre, 1), hotbar_slot);
+                // Sync inventory to ensure client sees the restored stack
+                let _ = player.sync_inventory();
             }
             Item::TacticalInsertion => {
                 // Mark current location for tactical insertion

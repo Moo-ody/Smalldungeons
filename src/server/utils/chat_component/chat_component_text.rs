@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Debug, Clone)]
 pub struct ChatComponentText {
     text: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     color: Option<MCColors>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bold: Option<bool>,
@@ -39,8 +38,8 @@ impl Serialize for ChatComponentText {
         map.serialize_entry("text", &self.text)?;
         
         if let Some(ref color) = self.color {
-            // Use our custom Serialize for MCColors
-            let color_str = match color {
+            // Serialize color as lowercase string - Minecraft expects exact lowercase names
+            let color_str: &str = match color {
                 MCColors::Black => "black",
                 MCColors::DarkBlue => "dark_blue",
                 MCColors::DarkGreen => "dark_green",
@@ -59,7 +58,7 @@ impl Serialize for ChatComponentText {
                 MCColors::White => "white",
                 MCColors::Reset => "reset",
             };
-            map.serialize_entry("color", color_str)?;
+            map.serialize_entry("color", &color_str)?;
         }
         
         if let Some(bold) = self.bold {
@@ -94,6 +93,12 @@ impl Serialize for ChatComponentText {
 impl ChatComponentText {
     pub fn serialize(&self) -> String {
         serde_json::to_string(self).unwrap()
+    }
+
+    /// Creates a ChatComponentText from a raw JSON string
+    /// Useful for section-sign based coloring: `{"text":"§c100/100❤"}`
+    pub fn from_json_str(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
     }
 
     pub fn is_empty(&self) -> bool {

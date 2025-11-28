@@ -148,6 +148,12 @@ impl PacketSerializable for EntityMetadata {
                 write_data(buf, BYTE, 10, skin_parts);
             }
             EntityVariant::DroppedItem { item } => {
+                // Log the ItemStack right before writing metadata
+                eprintln!("[METADATA] Entity metadata ItemStack: id={}, count={}, meta={}, has_nbt={}", 
+                    item.item, item.stack_size, item.metadata, item.tag_compound.is_some());
+                if item.item == 1 {
+                    eprintln!("[METADATA] ERROR: Item ID is 1 (stone) in metadata!");
+                }
                 write_data(buf, ITEM_STACK, 10, Some(item.clone()))
             }
             EntityVariant::Zombie { is_child, is_villager, is_converting, is_attacking } => {

@@ -95,7 +95,14 @@ impl Entity {
                     metadata: self.metadata.clone(),
                 });
             }
-        } else if variant.is_object() { 
+        } else if variant.is_object() {
+            // Log SpawnObject creation
+            use crate::server::entity::entity_metadata::EntityVariant;
+            if let EntityVariant::DroppedItem { item } = variant {
+                eprintln!("[SPAWN] SpawnObject for entity {}: type=2 (dropped item), item_id={}", 
+                    self.id, item.item);
+            }
+            
             buffer.write_packet(&SpawnObject {
                 entity_id: VarInt(self.id),
                 entity_variant: variant.get_id(),
@@ -104,11 +111,20 @@ impl Entity {
                 z: self.position.z,
                 yaw: self.yaw,
                 pitch: self.pitch,
-                data: 0,
+                data: 0, // data field doesn't matter for dropped items - item comes from metadata
                 velocity_x: self.velocity.x,
                 velocity_y: self.velocity.y,
                 velocity_z: self.velocity.z,
-            })
+            });
+            
+            // CRITICAL: For DroppedItem, we MUST send metadata packet immediately after SpawnObject
+            // The item visual comes from metadata slot 10, not the SpawnObject data field
+            use crate::net::protocol::play::clientbound::PacketEntityMetadata;
+            buffer.write_packet(&PacketEntityMetadata {
+                entity_id: VarInt(self.id),
+                metadata: self.metadata.clone(),
+            });
+            eprintln!("[SPAWN] Sent PacketEntityMetadata immediately after SpawnObject for entity {}", self.id);
         } else {
             buffer.write_packet(&SpawnMob {
                 entity_id: VarInt(self.id),

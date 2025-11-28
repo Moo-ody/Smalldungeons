@@ -561,9 +561,20 @@ async fn main() -> Result<()> {
                     }
                 };
                 
-                let action_bar_component = crate::server::player::dungeon_stats::build_action_bar_component(stats, found_secrets, total_secrets);
-                // Debug: print the JSON to see what's being sent
-                println!("Action bar JSON: {}", action_bar_component.serialize());
+                // Use section-sign approach (guaranteed to work in 1.8.9)
+                let legacy_string = crate::server::player::dungeon_stats::build_action_bar_string(stats, found_secrets, total_secrets);
+                let json_str = crate::server::player::dungeon_stats::legacy_to_actionbar_json(&legacy_string);
+                
+                // Parse JSON string into ChatComponentText
+                let action_bar_component = match crate::server::utils::chat_component::chat_component_text::ChatComponentText::from_json_str(&json_str) {
+                    Ok(component) => component,
+                    Err(e) => {
+                        eprintln!("Failed to parse action bar JSON: {} - Falling back to component approach", e);
+                        // Fallback to component approach
+                        crate::server::player::dungeon_stats::build_action_bar_component(stats, found_secrets, total_secrets)
+                    }
+                };
+                
                 player.write_packet(&clientbound::Chat {
                     component: action_bar_component,
                     chat_type: 2, // Position 2 = action bar
@@ -574,6 +585,18 @@ async fn main() -> Result<()> {
                 action_number: -1,
                 accepted: false,
             });
+
+            // Continuously refresh SpiritSceptre in hotbar to prevent consumption
+            if let Some(crate::server::player::inventory::ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
+                if let crate::server::items::Item::SpiritSceptre = item {
+                    let hotbar_slot = player.held_slot as usize + 36;
+                    player.write_packet(&clientbound::SetSlot {
+                        window_id: 0,
+                        slot: hotbar_slot as i16,
+                        item_stack: Some(item.get_item_stack()),
+                    });
+                }
+            }
 
             let chunk_x = (player.position.x.floor() as i32) >> 4;
             let chunk_z = (player.position.z.floor() as i32) >> 4;

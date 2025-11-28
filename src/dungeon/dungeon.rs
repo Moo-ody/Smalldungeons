@@ -9,6 +9,7 @@ use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
+use crate::server::utils::dvec3::DVec3;
 use crate::server::world;
 use crate::server::utils::sounds::Sounds;
 use crate::net::protocol::play::clientbound::SoundEffect;
@@ -473,7 +474,7 @@ impl Dungeon {
         unsafe { self.server.as_mut().expect("server is null") }
     }
 
-    pub fn get_room_at(&mut self, x: i32, z: i32) -> Option<usize> {
+    pub fn get_room_at(&self, x: i32, z: i32) -> Option<usize> {
         if x < DUNGEON_ORIGIN.0 || z < DUNGEON_ORIGIN.1 {
             return None;
         }
@@ -485,7 +486,7 @@ impl Dungeon {
         entry.and_then(|e| *e)
     }
     
-    pub fn get_player_room(&mut self, player: &Player) -> Option<usize> {
+    pub fn get_player_room(&self, player: &Player) -> Option<usize> {
         self.get_room_at(
             player.position.x as i32,
             player.position.z as i32
@@ -533,7 +534,23 @@ impl Dungeon {
                 }
             );
         }
-        // probably mark room connected to entrance as entered
+        
+        // Mark entrance room as entered and draw it on the map
+        let mut entrance_room_index = None;
+        for (room_index, room) in self.rooms.iter_mut().enumerate() {
+            if room.room_data.room_type == crate::dungeon::room::room_data::RoomType::Entrance {
+                if !room.entered {
+                    room.entered = true;
+                    entrance_room_index = Some(room_index);
+                }
+                break; // Only one entrance room, so we can break after finding it
+            }
+        }
+        
+        // Draw the entrance room on the map if it was just marked as entered
+        if let Some(room_index) = entrance_room_index {
+            self.map.draw_room(&self.rooms, &self.doors, room_index);
+        }
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
@@ -661,54 +678,203 @@ impl Dungeon {
                 }
                 
                 let mut room_index_and_player_ids: Vec<(usize, u32)> = Vec::new();
-                for (player_id, player) in &mut server.world.players  {
-                    if let Some(room_index) = self.get_player_room(player) {
-                        // Update player's current room index for dynamic secrets display
-                        // This updates every tick so the secrets display stays current
-                        player.current_room_index = Some(room_index);
-                        
-                        // Limit mutable borrow scope to avoid conflicts with immutable borrows later
-                        let mut did_mark_entered = false;
-                        {
-                            let room = self.rooms.get_mut(room_index).unwrap();
-
+                // Collect all operations that need to happen on server.world, then execute them after the player loop
+                let mut secrets_to_spawn_all: Vec<(std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>, usize, u64)> = Vec::new();
+                let mut bat_deaths_to_check_all: Vec<(std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>, crate::server::entity::entity::EntityId, Option<u64>, usize)> = Vec::new();
+                let mut room_secrets_found: HashMap<usize, u8> = HashMap::new();
+                
+                // First pass: collect room indices for each player (store positions to avoid borrow conflicts)
+                // We need to calculate room indices outside the mutable borrow of self.state
+                let room_grid = &self.room_grid; // Get immutable reference to room_grid before using it
+                let mut player_data: Vec<(u32, f64, f64)> = Vec::new();
+                for (player_id, player) in &server.world.players  {
+                    player_data.push((*player_id, player.position.x, player.position.z));
+                }
+                
+                // Get room indices for each player using the room_grid reference
+                let mut player_room_indices: Vec<(u32, Option<usize>)> = Vec::new();
+                for (player_id, x, z) in player_data {
+                    // Calculate room index manually to avoid borrowing self
+                    let x_i32 = x as i32;
+                    let z_i32 = z as i32;
+                    let room_index = if x_i32 < crate::dungeon::dungeon::DUNGEON_ORIGIN.0 || z_i32 < crate::dungeon::dungeon::DUNGEON_ORIGIN.1 {
+                        None
+                    } else {
+                        let grid_x = ((x_i32 - crate::dungeon::dungeon::DUNGEON_ORIGIN.0) / 32) as usize;
+                        let grid_z = ((z_i32 - crate::dungeon::dungeon::DUNGEON_ORIGIN.1) / 32) as usize;
+                        room_grid.get(grid_x + (grid_z * 6)).and_then(|e| *e)
+                    };
+                    player_room_indices.push((player_id, room_index));
+                }
+                
+                // Update player room indices
+                for (player_id, room_index) in &player_room_indices {
+                    if let Some(room_index) = room_index {
+                        if let Some(p) = server.world.players.get_mut(player_id) {
+                            p.current_room_index = Some(*room_index);
+                        }
+                    }
+                }
+                
+                // Second pass: process each player's room
+                // First, mark rooms as entered and collect entry secrets to spawn immediately (like locked chests)
+                let mut rooms_just_entered: std::collections::HashSet<usize> = std::collections::HashSet::new();
+                let mut entry_secrets_to_spawn: Vec<(std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>, usize)> = Vec::new();
+                
+                for (player_id, room_index_opt) in &player_room_indices {
+                    if let Some(room_index) = room_index_opt {
+                        let room = self.rooms.get_mut(*room_index).unwrap();
+                        if !room.entered {
+                            room.entered = true;
+                            rooms_just_entered.insert(*room_index);
+                            
+                            // Collect entry secrets (schest, sess) to spawn immediately when room is entered
+                            if !room.room_entry_secrets_spawned {
+                                room.room_entry_secrets_spawned = true;
+                                for secret_rc in &room.json_secrets {
+                                    let secret = secret_rc.borrow();
+                                    if secret.has_spawned {
+                                        continue;
+                                    }
+                                    
+                                    match &secret.secret_type {
+                                        crate::dungeon::room::secrets::SecretType::SecretChest { .. }
+                                        | crate::dungeon::room::secrets::SecretType::SecretEssence => {
+                                            entry_secrets_to_spawn.push((secret_rc.clone(), *room_index));
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Spawn entry secrets immediately (like locked chests)
+                for (secret_rc, _room_index) in entry_secrets_to_spawn {
+                    let mut secret = secret_rc.borrow_mut();
+                    secret.has_spawned = true;
+                    
+                    crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(
+                        &secret_rc,
+                        secret,
+                        &mut server.world
+                    );
+                }
+                
+                // Collect player data (without ticking crushers)
+                let mut player_room_data: Vec<(u32, usize, crate::server::utils::aabb::AABB)> = Vec::new();
+                for (player_id, room_index_opt) in &player_room_indices {
+                    if let Some(room_index) = room_index_opt {
+                        let player = server.world.players.get_mut(player_id).unwrap();
+                        let player_aabb = player.collision_aabb();
+                        player_room_data.push((*player_id, *room_index, player_aabb));
+                    }
+                }
+                
+                // Tick crushers separately (they need mutable server access)
+                for (player_id, room_index_opt) in &player_room_indices {
+                    if let Some(room_index) = room_index_opt {
+                        if let Some(player) = server.world.players.get_mut(player_id) {
+                            let room = self.rooms.get_mut(*room_index).unwrap();
                             for crusher in room.crushers.iter_mut() {
                                 crusher.tick(player);
                             }
-
-                            if !room.entered {
-                                room.entered = true;
-                                did_mark_entered = true;
+                        }
+                    }
+                }
+                
+                // Now process secrets for each player's room
+                for (player_id, room_index, player_aabb) in player_room_data {
+                    let did_mark_entered = rooms_just_entered.contains(&room_index);
+                        
+                        // Tick secrets for this room
+                        let is_secret_tick = *current_ticks % 20 == 0;
+                        
+                        // Collect secrets to spawn and bat IDs to check
+                        let (proximity_secrets, bat_checks) = {
+                            let room = self.rooms.get_mut(room_index).unwrap();
+                            
+                            let mut proximity_secrets = Vec::new();
+                            let mut bat_checks = Vec::new();
+                            
+                            // Handle proximity-based secrets (rchest, ress, batsp, batdie, itemsp)
+                            if is_secret_tick {
+                                
+                                for secret_rc in &room.json_secrets {
+                                    let secret = secret_rc.borrow();
+                                    if secret.has_spawned {
+                                        continue;
+                                    }
+                                    
+                                    // Check if player AABB intersects with secret's 8-block bounding box
+                                    match &secret.secret_type {
+                                        crate::dungeon::room::secrets::SecretType::RegularChest { .. }
+                                        | crate::dungeon::room::secrets::SecretType::RegularEssence
+                                        | crate::dungeon::room::secrets::SecretType::BatSpawn { .. }
+                                        | crate::dungeon::room::secrets::SecretType::BatDie
+                                        | crate::dungeon::room::secrets::SecretType::ItemSpawn { .. } => {
+                                            if player_aabb.intersects(&secret.spawn_aabb) {
+                                                proximity_secrets.push(secret_rc.clone());
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
+                            
+                            
+                            // Collect bat tracking info
+                            for secret_rc in &room.json_secrets {
+                                let secret = secret_rc.borrow();
+                                if let Some(bat_id) = secret.bat_entity_id {
+                                    bat_checks.push((secret_rc.clone(), bat_id, secret.bat_spawn_tick));
+                                }
+                            }
+                            
+                            
+                            (proximity_secrets, bat_checks)
+                        };
+                        
+                        // Collect secrets to spawn (we'll execute after the player loop)
+                        for secret_rc in proximity_secrets {
+                            secrets_to_spawn_all.push((secret_rc, room_index, *current_ticks));
                         }
                         
+                        // Collect bat checks (we'll execute after the player loop)
+                        for (secret_rc, bat_id, spawn_tick) in bat_checks {
+                            bat_deaths_to_check_all.push((secret_rc, bat_id, spawn_tick, room_index));
+                        }
+                        
+                        // Draw room on map if just entered
                         if did_mark_entered {
                             self.map.draw_room(&self.rooms, &self.doors, room_index);
 
-                            // this needs to happen once a tick,
-                            // but currently the ticking stuff is a mess
-                            if let Some((region, data)) = self.map.get_updated_area() {
-                                let width = region.max_x - region.min_x;
-                                let height = region.max_y - region.min_y;
+                            // Send map update to player
+                            if let Some(player) = server.world.players.get_mut(&player_id) {
+                                if let Some((region, data)) = self.map.get_updated_area() {
+                                    let width = region.max_x - region.min_x;
+                                    let height = region.max_y - region.min_y;
 
-                                player.write_packet(&Maps {
-                                    id: 1,
-                                    scale: 0,
-                                    columns: width as u8,
-                                    rows: height as u8,
-                                    x: region.min_x as u8,
-                                    z: region.min_y as u8,
-                                    map_data: data,
-                                });
-                            };
+                                    player.write_packet(&Maps {
+                                        id: 1,
+                                        scale: 0,
+                                        columns: width as u8,
+                                        rows: height as u8,
+                                        x: region.min_x as u8,
+                                        z: region.min_y as u8,
+                                        map_data: data,
+                                    });
+                                }
+                            }
                         }
-
-                        // Register mushroom secret interactables for this player: store up list, and insert bottom/top positions as interactables
+                        
+                        // Register mushroom secret interactables for this player
                         let room_ref = &self.rooms[room_index];
                         if !room_ref.mushroom_sets.is_empty() {
                             // Store per-player up positions for set index resolution
                             let up_list: Vec<BlockPos> = room_ref.mushroom_sets.iter().map(|s| s.up.get(0).cloned().unwrap_or(BlockPos::new(0,0,0))).collect();
-                            self.temp_player_mushroom_up.insert(*player_id, up_list);
+                            self.temp_player_mushroom_up.insert(player_id, up_list);
 
                             for (idx, set) in room_ref.mushroom_sets.iter().enumerate() {
                                 for bp in &set.bottom {
@@ -720,8 +886,109 @@ impl Dungeon {
                             }
                         }
 
-                        room_index_and_player_ids.push((room_index, *player_id));
+                        room_index_and_player_ids.push((room_index, player_id));
+                }
+                
+                // Now execute all world operations after the player loop is done
+                // Spawn all secrets
+                for (secret_rc, _room_index, current_ticks_val) in secrets_to_spawn_all {
+                    let mut secret = secret_rc.borrow_mut();
+                    secret.has_spawned = true;
+                    
+                    // Set spawn tick for batdie
+                    if matches!(secret.secret_type, crate::dungeon::room::secrets::SecretType::BatDie) {
+                        secret.bat_spawn_tick = Some(current_ticks_val);
                     }
+                    
+                    crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(
+                        &secret_rc,
+                        secret,
+                        &mut server.world
+                    );
+                }
+                
+                // Handle bat death tracking
+                for (secret_rc, bat_id, spawn_tick, room_index) in bat_deaths_to_check_all {
+                    let mut secret = secret_rc.borrow_mut();
+                    
+                    // Check batdie - kill bat after 5 ticks (0.25s)
+                    if let Some(spawn_tick_val) = spawn_tick {
+                        if matches!(secret.secret_type, crate::dungeon::room::secrets::SecretType::BatDie) {
+                            if *current_ticks >= spawn_tick_val + 5 {
+                                // Kill the bat and count as secret
+                                if server.world.entities.contains_key(&bat_id) {
+                                    // Get bat position before despawning for sound
+                                    let bat_pos = if let Some((bat_entity, _)) = server.world.entities.get(&bat_id) {
+                                        bat_entity.position
+                                    } else {
+                                        DVec3::new(
+                                            secret.block_pos.x as f64 + 0.5,
+                                            secret.block_pos.y as f64 + 0.5,
+                                            secret.block_pos.z as f64 + 0.5
+                                        )
+                                    };
+                                    
+                                    // Play bat death sound
+                                    for (_, player) in &mut server.world.players {
+                                        let _ = player.write_packet(&crate::net::protocol::play::clientbound::SoundEffect {
+                                            sound: crate::server::utils::sounds::Sounds::BatDeath.id(),
+                                            pos_x: bat_pos.x,
+                                            pos_y: bat_pos.y,
+                                            pos_z: bat_pos.z,
+                                            volume: 1.0,
+                                            pitch: 1.0,
+                                        });
+                                    }
+                                    
+                                    // Despawn the bat
+                                    server.world.despawn_entity(bat_id);
+                                    
+                                    // Count as secret
+                                    if !secret.obtained {
+                                        secret.obtained = true;
+                                        *room_secrets_found.entry(room_index).or_insert(0u8) += 1u8;
+                                    }
+                                }
+                                secret.bat_entity_id = None;
+                            }
+                        }
+                    }
+                    
+                    // Check batsp - if bat died naturally, count as secret
+                    if matches!(secret.secret_type, crate::dungeon::room::secrets::SecretType::BatSpawn { .. }) {
+                        if !server.world.entities.contains_key(&bat_id) {
+                            // Bat died naturally
+                            if !secret.obtained {
+                                secret.obtained = true;
+                                *room_secrets_found.entry(room_index).or_insert(0u8) += 1u8;
+                            }
+                            secret.bat_entity_id = None;
+                        }
+                    }
+                }
+                
+                // Check for ItemSpawn secrets that have been obtained (only count once)
+                for room_index in 0..self.rooms.len() {
+                    let room = &self.rooms[room_index];
+                    for secret_rc in &room.json_secrets {
+                        let mut secret = secret_rc.borrow_mut();
+                        if matches!(secret.secret_type, crate::dungeon::room::secrets::SecretType::ItemSpawn { .. })
+                            && secret.obtained && secret.has_spawned && !secret.counted {
+                            // Count it once and mark as counted
+                            secret.counted = true;
+                            *room_secrets_found.entry(room_index).or_insert(0u8) += 1u8;
+                        }
+                    }
+                }
+                
+                // Update found_secrets count for all rooms
+                for (room_index, count) in room_secrets_found.into_iter() {
+                    let count_u8: u8 = count; // Explicitly type as u8
+                    let room = self.rooms.get_mut(room_index).unwrap();
+                    let current: u16 = room.found_secrets as u16;
+                    let add: u16 = count_u8 as u16;
+                    let new_count: u8 = current.saturating_add(add).min(255) as u8;
+                    room.found_secrets = new_count;
                 }
 
                 // After loop, send debug per (room, player) without borrow conflicts

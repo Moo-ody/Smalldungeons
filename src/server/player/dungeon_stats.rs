@@ -22,8 +22,54 @@ impl Default for DungeonPlayerStats {
     }
 }
 
+/// Formats a number with commas (e.g., 12000 -> "12,000")
+fn format_with_commas(n: i32) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    
+    for (i, &ch) in chars.iter().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+/// Builds action bar using section-sign color codes (guaranteed to work in 1.8.9)
+/// Returns a simple JSON string with § color codes in the text field
+pub fn build_action_bar_string(
+    stats: &DungeonPlayerStats,
+    found_secrets: u8,
+    total_secrets: u8,
+) -> String {
+    let mana_formatted = format_with_commas(stats.mana);
+    let max_mana_formatted = format_with_commas(stats.max_mana);
+    
+    if total_secrets > 0 {
+        format!(
+            "&c{}/{}❤   &a{}❈ Defense   &b{}/{}✎ Mana      &7{}/{} &7Secrets",
+            stats.hp, stats.max_hp, stats.defense, mana_formatted, max_mana_formatted, found_secrets, total_secrets
+        )
+    } else {
+        format!(
+            "&c{}/{}❤   &a{}❈ Defense   &b{}/{}✎ Mana",
+            stats.hp, stats.max_hp, stats.defense, mana_formatted, max_mana_formatted
+        )
+    }
+}
+
+/// Converts legacy & color codes to § and wraps in minimal JSON
+pub fn legacy_to_actionbar_json(legacy: &str) -> String {
+    let with_section = legacy.replace('&', "§");
+    format!("{{\"text\":\"{}\"}}", with_section)
+}
+
 /// Builds action bar ChatComponentText directly with colors
 /// Secrets are shown if total_secrets > 0
+/// Workaround for 1.8.9: Root has first text but NO color, all components (including first) are siblings with colors
 pub fn build_action_bar_component(
     stats: &DungeonPlayerStats,
     found_secrets: u8,
@@ -33,28 +79,35 @@ pub fn build_action_bar_component(
     let def_text = format!("   {}❈ Defense", stats.defense);
     let mana_text = format!("   {}✎ Mana", stats.mana);
     
-    // Build root with explicit color setting
-    let mut root = ChatComponentTextBuilder::new(&hp_text).build();
-    root.set_color(MCColors::Red);
+    // Root with empty text and NO color - prevents color inheritance in 1.8.9
+    let mut root = ChatComponentTextBuilder::new("").build();
     
-    // Build siblings with explicit color setting
-    let mut def_component = ChatComponentTextBuilder::new(&def_text).build();
-    def_component.set_color(MCColors::Green);
+    // All components as siblings with explicit colors
+    let hp_component = ChatComponentTextBuilder::new(&hp_text)
+        .color(MCColors::Red)
+        .build();
     
-    let mut mana_component = ChatComponentTextBuilder::new(&mana_text).build();
-    mana_component.set_color(MCColors::Aqua);
+    let def_component = ChatComponentTextBuilder::new(&def_text)
+        .color(MCColors::Green)
+        .build();
     
-    let mut siblings = vec![def_component, mana_component];
+    let mana_component = ChatComponentTextBuilder::new(&mana_text)
+        .color(MCColors::Aqua)
+        .build();
+    
+    let mut siblings = vec![hp_component, def_component, mana_component];
     
     if total_secrets > 0 {
         let secrets_count_text = format!("      {}/{} ", found_secrets, total_secrets);
         let secrets_label_text = "Secrets".to_string();
         
-        let mut secrets_count_component = ChatComponentTextBuilder::new(&secrets_count_text).build();
-        secrets_count_component.set_color(MCColors::Yellow);
+        let secrets_count_component = ChatComponentTextBuilder::new(&secrets_count_text)
+            .color(MCColors::Yellow)
+            .build();
         
-        let mut secrets_label_component = ChatComponentTextBuilder::new(&secrets_label_text).build();
-        secrets_label_component.set_color(MCColors::Gray);
+        let secrets_label_component = ChatComponentTextBuilder::new(&secrets_label_text)
+            .color(MCColors::Gray)
+            .build();
         
         siblings.push(secrets_count_component);
         siblings.push(secrets_label_component);
