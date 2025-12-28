@@ -97,12 +97,6 @@ impl Entity {
             }
         } else if variant.is_object() {
             // Log SpawnObject creation
-            use crate::server::entity::entity_metadata::EntityVariant;
-            if let EntityVariant::DroppedItem { item } = variant {
-                eprintln!("[SPAWN] SpawnObject for entity {}: type=2 (dropped item), item_id={}", 
-                    self.id, item.item);
-            }
-            
             buffer.write_packet(&SpawnObject {
                 entity_id: VarInt(self.id),
                 entity_variant: variant.get_id(),
@@ -124,7 +118,6 @@ impl Entity {
                 entity_id: VarInt(self.id),
                 metadata: self.metadata.clone(),
             });
-            eprintln!("[SPAWN] Sent PacketEntityMetadata immediately after SpawnObject for entity {}", self.id);
         } else {
             buffer.write_packet(&SpawnMob {
                 entity_id: VarInt(self.id),

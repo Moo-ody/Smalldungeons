@@ -16,10 +16,10 @@ impl CommandMetadata for SpawnZombie {
     const NAME: &'static str = "spawn";
 
     fn run(world: &mut World, player: &mut Player, args: &[&str]) -> anyhow::Result<Outcome> {
-        // Check if the command is "/spawn zombie"
-        if args.len() < 1 || args[0] != "zombie" {
+        // Check if the command is "/spawn zombie_commander"
+        if args.len() < 1 || args[0] != "zombie_commander" {
             return Ok(Outcome::Failure(
-                ChatComponentTextBuilder::new("Usage: /spawn zombie")
+                ChatComponentTextBuilder::new("Usage: /spawn zombie_commander")
                     .color(MCColors::Red)
                     .build()
             ));
@@ -38,7 +38,7 @@ impl CommandMetadata for SpawnZombie {
             chat_type: 0,
         });
 
-        // Get the zombie commander equipment (red leather armor with fishing rod)
+        // Get the zombie commander equipment 
         let equipment = dungeons_loadouts::zombie_commander();
 
         // Spawn the equipped zombie
@@ -88,7 +88,7 @@ impl CommandMetadata for SpawnZombie {
             world,
             entity_id,
             "§6✰ §cZombie Commander §a3.5M§c❤",
-            0.2, // Lowered offset for nametag positioning
+            0.1, // Position armor stand base just above zombie feet (zombie is 1.95 tall)
         ) {
             Ok(nametag_id) => {
                 // Final metadata update to ensure arms stay down after all operations
@@ -136,7 +136,7 @@ impl CommandMetadata for SpawnZombie {
 
     fn arguments(_world: &mut World, _player: &mut Player) -> Vec<Argument> {
         vec![
-            Argument::new("zombie", true, vec!["zombie".to_string()]),
+            Argument::new("zombie_commander", true, vec!["zombie_commander".to_string()]),
         ]
     }
 }

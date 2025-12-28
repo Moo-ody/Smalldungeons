@@ -34,7 +34,9 @@ const ROTATABLE_TYPES: &[&str] = &[
     "ButtonDirection",
     "StairDirection", 
     "Direction",
-    "Axis"
+    "Axis",
+    "LeverOrientation",
+    "VineMetadata"
 ];
 
 #[proc_macro]

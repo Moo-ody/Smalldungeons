@@ -492,6 +492,32 @@ impl Dungeon {
             player.position.z as i32
         )
     }
+    
+    /// Update the map for a specific room and send the update to all players
+    pub fn update_map_for_room(&mut self, room_index: usize) {
+        let server = self.server_mut();
+        
+        // Redraw the room on the map
+        self.map.draw_room(&self.rooms, &self.doors, room_index);
+        
+        // Send map update to all players
+        if let Some((region, data)) = self.map.get_updated_area() {
+            let width = region.max_x - region.min_x;
+            let height = region.max_y - region.min_y;
+            
+            for (_, player) in &mut server.world.players {
+                player.write_packet(&Maps {
+                    id: 1,
+                    scale: 0,
+                    columns: width as u8,
+                    rows: height as u8,
+                    x: region.min_x as u8,
+                    z: region.min_y as u8,
+                    map_data: data.clone(),
+                });
+            }
+        }
+    }
 
     // /// Check if a player is inside the boss room
     // pub fn is_player_in_boss_room(&self, player: &Player) -> bool {
@@ -982,13 +1008,43 @@ impl Dungeon {
                 }
                 
                 // Update found_secrets count for all rooms
+                let mut rooms_to_update_map: Vec<usize> = Vec::new();
                 for (room_index, count) in room_secrets_found.into_iter() {
                     let count_u8: u8 = count; // Explicitly type as u8
                     let room = self.rooms.get_mut(room_index).unwrap();
                     let current: u16 = room.found_secrets as u16;
                     let add: u16 = count_u8 as u16;
                     let new_count: u8 = current.saturating_add(add).min(255) as u8;
+                    let old_count = room.found_secrets;
                     room.found_secrets = new_count;
+                    
+                    // Track rooms that need map update (if secret count changed and room is entered)
+                    if old_count != new_count && room.entered {
+                        rooms_to_update_map.push(room_index);
+                    }
+                }
+                
+                // Redraw rooms on map if secrets changed
+                for room_index in rooms_to_update_map {
+                    self.map.draw_room(&self.rooms, &self.doors, room_index);
+                    
+                    // Send map update to all players
+                    if let Some((region, data)) = self.map.get_updated_area() {
+                        let width = region.max_x - region.min_x;
+                        let height = region.max_y - region.min_y;
+                        
+                        for (_, player) in &mut server.world.players {
+                            player.write_packet(&Maps {
+                                id: 1,
+                                scale: 0,
+                                columns: width as u8,
+                                rows: height as u8,
+                                x: region.min_x as u8,
+                                z: region.min_y as u8,
+                                map_data: data.clone(),
+                            });
+                        }
+                    }
                 }
 
                 // After loop, send debug per (room, player) without borrow conflicts

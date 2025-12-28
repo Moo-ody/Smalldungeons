@@ -147,29 +147,64 @@ pub fn legacy_to_chat_component(legacy_text: &str) -> ChatComponentText {
     let mut components = Vec::<ChatComponentText>::new();
     let mut current_text = String::new();
     let mut current_color: Option<MCColors> = None;
+    let mut current_italic: Option<bool> = None;
     let mut chars = legacy_text.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch == '&' {
-            if let Some(&color_code) = chars.peek() {
-                if let Some(color) = color_map.get(&color_code) {
+            if let Some(&format_code) = chars.peek() {
+                if let Some(color) = color_map.get(&format_code) {
                     // Flush current text if any
                     if !current_text.is_empty() {
-                        let component = match current_color {
-                            Some(ref c) => ChatComponentTextBuilder::new(&current_text)
-                                .color(c.clone())
-                                .build(),
-                            None => ChatComponentTextBuilder::new(&current_text).build(),
-                        };
-                        components.push(component);
+                        let mut builder = ChatComponentTextBuilder::new(&current_text);
+                        if let Some(ref c) = current_color {
+                            builder = builder.color(c.clone());
+                        }
+                        if let Some(italic) = current_italic {
+                            builder = builder.italic();
+                        }
+                        components.push(builder.build());
                         current_text.clear();
                     }
                     current_color = Some(color.clone());
                     chars.next(); // consume the color code
                     continue;
+                } else if format_code == 'r' {
+                    // Reset: flush current text and clear formatting
+                    if !current_text.is_empty() {
+                        let mut builder = ChatComponentTextBuilder::new(&current_text);
+                        if let Some(ref c) = current_color {
+                            builder = builder.color(c.clone());
+                        }
+                        if let Some(italic) = current_italic {
+                            builder = builder.italic();
+                        }
+                        components.push(builder.build());
+                        current_text.clear();
+                    }
+                    current_color = None;
+                    current_italic = None;
+                    chars.next(); // consume the 'r'
+                    continue;
+                } else if format_code == 'o' {
+                    // Italic: flush current text if any, then set italic
+                    if !current_text.is_empty() {
+                        let mut builder = ChatComponentTextBuilder::new(&current_text);
+                        if let Some(ref c) = current_color {
+                            builder = builder.color(c.clone());
+                        }
+                        if let Some(italic) = current_italic {
+                            builder = builder.italic();
+                        }
+                        components.push(builder.build());
+                        current_text.clear();
+                    }
+                    current_italic = Some(true);
+                    chars.next(); // consume the 'o'
+                    continue;
                 }
             }
-            // If not a valid color code, just add the &
+            // If not a valid format code, just add the &
             current_text.push(ch);
         } else {
             current_text.push(ch);
@@ -178,13 +213,14 @@ pub fn legacy_to_chat_component(legacy_text: &str) -> ChatComponentText {
 
     // Flush remaining text
     if !current_text.is_empty() {
-        let component = match current_color {
-            Some(ref c) => ChatComponentTextBuilder::new(&current_text)
-                .color(c.clone())
-                .build(),
-            None => ChatComponentTextBuilder::new(&current_text).build(),
-        };
-        components.push(component);
+        let mut builder = ChatComponentTextBuilder::new(&current_text);
+        if let Some(ref c) = current_color {
+            builder = builder.color(c.clone());
+        }
+        if let Some(italic) = current_italic {
+            builder = builder.italic();
+        }
+        components.push(builder.build());
     }
 
     // Build the final ChatComponentText - use first as root

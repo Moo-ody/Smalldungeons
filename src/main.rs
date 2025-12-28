@@ -100,6 +100,11 @@ async fn main() -> Result<()> {
                 room_data.secrets = *secrets;
             }
 
+            // Override specific room secrets
+            if room_data.name == "Golden Oasis" {
+                room_data.secrets = 3;
+            }
+
             let name_parts: Vec<&str> = file_name.split(",").collect();
             let room_id = name_parts.first()?.parse::<usize>().ok()?;
 
@@ -464,6 +469,70 @@ async fn main() -> Result<()> {
         );
     }
     
+    // Remove vines from specific rooms and add special blocks after all rooms are loaded
+    for room in &dungeon.rooms {
+        let corner = room.get_corner_pos();
+        
+        if room.room_data.name == "Rails" {
+            // Remove vines at 15 58 15, 15 57 15, 15 56 15, 15 55 15, 15 54 15 (no rotation)
+            let vines_to_remove = [
+                (15, 58, 15),
+                (15, 57, 15),
+                (15, 56, 15),
+                (15, 55, 15),
+                (15, 54, 15),
+            ];
+            
+            for (rel_x, rel_y, rel_z) in &vines_to_remove {
+                let vine_world_pos = BlockPos {
+                    x: corner.x + *rel_x,
+                    y: *rel_y,
+                    z: corner.z + *rel_z,
+                };
+                
+                // Remove the vine block
+                server.world.set_block_at(
+                    Blocks::Air,
+                    vine_world_pos.x,
+                    vine_world_pos.y,
+                    vine_world_pos.z
+                );
+            }
+        } else if room.room_data.name == "Flags" {
+            // Remove vine at 55 88 47 (no rotation)
+            let vine_world_pos = BlockPos {
+                x: corner.x + 55,
+                y: 88,
+                z: corner.z + 47,
+            };
+            
+            // Remove the vine block
+            server.world.set_block_at(
+                Blocks::Air,
+                vine_world_pos.x,
+                vine_world_pos.y,
+                vine_world_pos.z
+            );
+        } else if room.room_data.name == "Grand Library" {
+            // Spawn torch at 47 86 15 (no rotation, like vines)
+            let torch_world_pos = BlockPos {
+                x: corner.x + 47,
+                y: 86,
+                z: corner.z + 15,
+            };
+            
+            // Spawn the torch block (default direction is up - placed on top of block below)
+            server.world.set_block_at(
+                Blocks::Torch {
+                    direction: crate::server::block::block_parameter::TorchDirection::Up,
+                },
+                torch_world_pos.x,
+                torch_world_pos.y,
+                torch_world_pos.z
+            );
+        }
+    }
+    
     // Lever system is now integrated into room generation (like crypts and superboom walls)
 
     for door in &dungeon.doors {
@@ -701,86 +770,172 @@ async fn main() -> Result<()> {
                 format!("{} {}{}", SKYBLOCK_MONTHS[month], day_of_month, suffix)
             };
 
-            let room_id = if let Some(room_index) = server.dungeon.get_player_room(player) {
-                if room_index < server.dungeon.rooms.len() {
-                    let room = &server.dungeon.rooms[room_index];
-                    
-                    // removed periodic room bounds chat
-                    
-                    &room.room_data.id
-                } else {
-                    eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, server.dungeon.rooms.len());
-                    ""
+            // Track when player first enters the dungeon (when dungeon becomes Started)
+            let dungeon_state = &server.dungeon.state;
+            if matches!(dungeon_state, DungeonState::Started { .. }) {
+                if player.dungeon_entry_tick.is_none() {
+                    // Player just entered the dungeon - record the current tick and hide scoreboard
+                    if let DungeonState::Started { current_ticks } = dungeon_state {
+                        player.dungeon_entry_tick = Some(*current_ticks);
+                        // Hide the scoreboard when first entering
+                        use crate::net::protocol::play::clientbound::DisplayScoreboard;
+                        player.write_packet(&DisplayScoreboard {
+                            position: -1, // -1 means hide the scoreboard
+                            score_name: "SBScoreboard".into(),
+                        });
+                    }
                 }
             } else {
-                ""
+                // Reset when not in dungeon
+                player.dungeon_entry_tick = None;
+            }
+            
+            // Check if we should skip scoreboard (first 5 ticks after joining dungeon)
+            let skip_scoreboard = if let (Some(entry_tick), DungeonState::Started { current_ticks }) = 
+                (player.dungeon_entry_tick, dungeon_state) {
+                let ticks_since_entry = current_ticks.saturating_sub(entry_tick);
+                ticks_since_entry < 5  // Skip for first 5 ticks (0-4)
+            } else {
+                false
             };
-
-            sidebar_lines.push(formatdoc! {r#"
-                §e§lSKYBLOCK
-                §7{date} §8local {room_id}
-
-                {current_skyblock_month}
-                §7{time}
-                 §7⏣ §cThe Catacombs §7(F7)
-
-            "#});
-
-            match server.dungeon.state {
-                DungeonState::NotReady => {
-                    for p in player.server_mut().world.players.values() {
-                        sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
+            
+            // Skip scoreboard update for first 5 ticks after joining
+            if skip_scoreboard {
+                // Hide scoreboard every tick during the first 5 ticks
+                use crate::net::protocol::play::clientbound::DisplayScoreboard;
+                player.write_packet(&DisplayScoreboard {
+                    position: -1, // -1 means hide the scoreboard
+                    score_name: "SBScoreboard".into(),
+                });
+            } else {
+                // Show scoreboard again after 5 ticks (only once when ticks_since_entry == 5)
+                if let (Some(entry_tick), DungeonState::Started { current_ticks }) = 
+                    (player.dungeon_entry_tick, dungeon_state) {
+                    let ticks_since_entry = current_ticks.saturating_sub(entry_tick);
+                    if ticks_since_entry == 5 {
+                        // Show scoreboard again after 5 ticks
+                        use crate::net::protocol::play::clientbound::DisplayScoreboard;
+                        player.write_packet(&DisplayScoreboard {
+                            position: 1, // 1 means show on sidebar
+                            score_name: "SBScoreboard".into(),
+                        });
                     }
-                    sidebar_lines.new_line();
                 }
-                DungeonState::Starting { tick_countdown } => {
-                    for p in player.server_mut().world.players.values() {
-                        sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
-                    }
-                    sidebar_lines.new_line();
-                    sidebar_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
-                    sidebar_lines.new_line();
-                }
-                DungeonState::Started { current_ticks } => {
-                    // this is scuffed but it works
-                    let seconds = current_ticks / 20;
-                    let time = if seconds >= 60 {
-                        let minutes = seconds / 60;
-                        let seconds = seconds % 60;
-                        format!(
-                            "{}{}m{}{}s",
-                            if minutes < 10 { "0" } else { "" },
-                            minutes,
-                            if seconds < 10 { "0" } else { "" },
-                            seconds
-                        )
+            // Normal scoreboard logic
+            let show_simplified = false; // No longer using simplified scoreboard
+
+            if show_simplified {
+                // Simplified scoreboard for first 5 ticks (0.25s) when entering dungeon
+                // Line 0: Header (title) - must be first
+                sidebar_lines.push_str("SKYBLOCK");
+                // Line 1: Date
+                sidebar_lines.push_str(&format!("{date} m19BH"));
+                // Line 2: Blank
+                sidebar_lines.new_line();
+                // Line 3: In-game day
+                sidebar_lines.push_str(&current_skyblock_month);
+                // Line 4: In-game time
+                sidebar_lines.push_str(&time);
+                // Line 5: Area line (None)
+                sidebar_lines.push_str(" ⏣ None");
+                // Line 6: Blank
+                sidebar_lines.new_line();
+                // Line 7: Website
+                sidebar_lines.push_str("www.hypixel.net");
+            } else {
+                // Normal scoreboard
+                let room_id = if let Some(room_index) = server.dungeon.get_player_room(player) {
+                    if room_index < server.dungeon.rooms.len() {
+                        let room = &server.dungeon.rooms[room_index];
+                        
+                        // removed periodic room bounds chat
+                        
+                        &room.room_data.id
                     } else {
-                        let seconds = seconds % 60;
-                        format!("{}{}s", if seconds < 10 { "0" } else { "" }, seconds)
-                    };
-                    // TODO: display correct keys, and cleared percentage
-                    // clear percentage is based on amount of tiles that are cleared.
-                    sidebar_lines.push(formatdoc! {r#"
-                        Keys: §c■ §c✖ §8§8■ §a0x
-                        Time elapsed: §a§a{time}
-                        Cleared: §c{clear_percent}% §8§8({score})
+                        eprintln!("Warning: Room index {} out of bounds for rooms vector of length {}", room_index, server.dungeon.rooms.len());
+                        ""
+                    }
+                } else {
+                    ""
+                };
 
-                        §3§lSolo
+                sidebar_lines.push(formatdoc! {r#"
+                    §e§lSKYBLOCK
+                    §7{date} §8local {room_id}
 
-                    "#,
-                    clear_percent = "0",
-                    score = "0",
-                    });
+                    {current_skyblock_month}
+                    §7{time}
+                     §7⏣ §cThe Catacombs §7(F7)
+
+                "#});
+            }
+
+            // Only add dungeon state-specific lines if not showing simplified scoreboard
+            if !show_simplified {
+                match server.dungeon.state {
+                    DungeonState::NotReady => {
+                        for p in player.server_mut().world.players.values() {
+                            sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
+                        }
+                        sidebar_lines.new_line();
+                    }
+                    DungeonState::Starting { tick_countdown } => {
+                        for p in player.server_mut().world.players.values() {
+                            sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
+                        }
+                        sidebar_lines.new_line();
+                        sidebar_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
+                        sidebar_lines.new_line();
+                    }
+                    DungeonState::Started { current_ticks } => {
+                        // this is scuffed but it works
+                        let seconds = current_ticks / 20;
+                        let time = if seconds >= 60 {
+                            let minutes = seconds / 60;
+                            let seconds = seconds % 60;
+                            format!(
+                                "{}{}m{}{}s",
+                                if minutes < 10 { "0" } else { "" },
+                                minutes,
+                                if seconds < 10 { "0" } else { "" },
+                                seconds
+                            )
+                        } else {
+                            let seconds = seconds % 60;
+                            format!("{}{}s", if seconds < 10 { "0" } else { "" }, seconds)
+                        };
+                        // TODO: display correct keys, and cleared percentage
+                        // clear percentage is based on amount of tiles that are cleared.
+                        sidebar_lines.push(formatdoc! {r#"
+                            Keys: §c■ §c✖ §8§8■ §a0x
+                            Time elapsed: §a§a{time}
+                            Cleared: §c{clear_percent}% §8§8({score})
+
+                            §3§lSolo
+
+                        "#,
+                        clear_percent = "0",
+                        score = "0",
+                        });
+                    }
+                    DungeonState::Finished => {}
                 }
-                DungeonState::Finished => {}
             }
 
             if let Some(tab_list) = &tab_list_packet {
                 player.write_packet(tab_list);
             }
 
-            sidebar_lines.push_str("§emc.hypixel.net");
+            // Only add website line if not showing simplified scoreboard (already added there)
+            if !show_simplified {
+                sidebar_lines.push_str("§emc.hypixel.net");
+            }
+
+            if let Some(tab_list) = &tab_list_packet {
+                player.write_packet(tab_list);
+            }
             player.sidebar.write_update(sidebar_lines, &mut player.packet_buffer);
+            } // End of skip_scoreboard else block
 
             if player.ticks_existed % 60 == 0 {
                 player.write_packet(&AddEffect {

@@ -43,7 +43,6 @@ impl Axis {
     }
 }
 
-// TODO: This needs rotation
 /// Used for exclusively lever.
 #[repr(u8)]
 #[derive(PartialEq, Debug, Copy, Clone, Eq, BlockMetadata)]
@@ -58,6 +57,51 @@ pub enum LeverOrientation {
     DownZ
 }
 
+impl Rotatable for LeverOrientation {
+    fn rotate(&self, other: Direction) -> Self {
+        match other {
+            Direction::North => *self, // No rotation
+            Direction::East => {
+                match self {
+                    LeverOrientation::North => LeverOrientation::East,
+                    LeverOrientation::East => LeverOrientation::South,
+                    LeverOrientation::South => LeverOrientation::West,
+                    LeverOrientation::West => LeverOrientation::North,
+                    LeverOrientation::DownX => LeverOrientation::DownZ,
+                    LeverOrientation::DownZ => LeverOrientation::DownX,
+                    LeverOrientation::UpX => LeverOrientation::UpZ,
+                    LeverOrientation::UpZ => LeverOrientation::UpX,
+                }
+            }
+            Direction::South => {
+                match self {
+                    LeverOrientation::North => LeverOrientation::South,
+                    LeverOrientation::East => LeverOrientation::West,
+                    LeverOrientation::South => LeverOrientation::North,
+                    LeverOrientation::West => LeverOrientation::East,
+                    LeverOrientation::DownX => LeverOrientation::DownX,
+                    LeverOrientation::DownZ => LeverOrientation::DownZ,
+                    LeverOrientation::UpX => LeverOrientation::UpX,
+                    LeverOrientation::UpZ => LeverOrientation::UpZ,
+                }
+            }
+            Direction::West => {
+                match self {
+                    LeverOrientation::North => LeverOrientation::West,
+                    LeverOrientation::East => LeverOrientation::North,
+                    LeverOrientation::South => LeverOrientation::East,
+                    LeverOrientation::West => LeverOrientation::South,
+                    LeverOrientation::DownX => LeverOrientation::DownZ,
+                    LeverOrientation::DownZ => LeverOrientation::DownX,
+                    LeverOrientation::UpX => LeverOrientation::UpZ,
+                    LeverOrientation::UpZ => LeverOrientation::UpX,
+                }
+            }
+            _ => *self, // Up/Down don't affect horizontal rotation
+        }
+    }
+}
+
 // TODO: Rotate, or maybe wrap around a different direction and just have different Blockmetadata impl
 #[repr(u8)]
 #[derive(PartialEq, Debug, Copy, Clone, Eq, BlockMetadata)]
@@ -68,7 +112,6 @@ pub enum TrapdoorDirection {
     East
 }
 
-// TODO: This needs rotation
 #[repr(transparent)]
 #[derive(PartialEq, Debug, Copy, Clone, Eq)]
 pub struct VineMetadata(u8);
@@ -82,6 +125,43 @@ impl VineMetadata {
     }
     pub fn from_meta(meta: u8) -> Self {
         VineMetadata(meta)
+    }
+}
+
+impl Rotatable for VineMetadata {
+    fn rotate(&self, other: Direction) -> Self {
+        let meta = self.0;
+        match other {
+            Direction::North => *self, // No rotation
+            Direction::East => {
+                // Rotate 90° clockwise: North→East, East→South, South→West, West→North
+                let mut new_meta = 0u8;
+                if meta & 0x1 != 0 { new_meta |= 0x4; } // North → East
+                if meta & 0x4 != 0 { new_meta |= 0x2; } // East → South
+                if meta & 0x2 != 0 { new_meta |= 0x8; } // South → West
+                if meta & 0x8 != 0 { new_meta |= 0x1; } // West → North
+                VineMetadata(new_meta)
+            }
+            Direction::South => {
+                // Rotate 180°: North↔South, East↔West
+                let mut new_meta = 0u8;
+                if meta & 0x1 != 0 { new_meta |= 0x2; } // North → South
+                if meta & 0x2 != 0 { new_meta |= 0x1; } // South → North
+                if meta & 0x4 != 0 { new_meta |= 0x8; } // East → West
+                if meta & 0x8 != 0 { new_meta |= 0x4; } // West → East
+                VineMetadata(new_meta)
+            }
+            Direction::West => {
+                // Rotate 90° counter-clockwise: North→West, West→South, South→East, East→North
+                let mut new_meta = 0u8;
+                if meta & 0x1 != 0 { new_meta |= 0x8; } // North → West
+                if meta & 0x8 != 0 { new_meta |= 0x2; } // West → South
+                if meta & 0x2 != 0 { new_meta |= 0x4; } // South → East
+                if meta & 0x4 != 0 { new_meta |= 0x1; } // East → North
+                VineMetadata(new_meta)
+            }
+            _ => *self, // Up/Down don't affect horizontal rotation
+        }
     }
 }
 

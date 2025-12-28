@@ -756,6 +756,171 @@ impl Room {
             let pos = BlockPos { x: 15, y: 100, z: 15 }.rotate(self.rotation);
             world.set_block_at(Blocks::GoldBlock, corner.x + pos.x, 100, corner.z + pos.z);
         }
+        
+        // Special placement for Redstone Key room
+        if self.room_data.name == "Redstone Key" {
+            // Determine spawn position based on room orientation
+            // If room is facing north/south (has door on north/south), spawn at 19/66/7
+            // If room is facing east/west, spawn at 10/70/26
+            let (rel_x, rel_y, rel_z) = match self.rotation {
+                Direction::North | Direction::South => (19, 66, 7),
+                Direction::East | Direction::West => (10, 70, 26),
+                Direction::Up | Direction::Down => (19, 66, 7), // Fallback (shouldn't happen)
+            };
+            
+            let skull_pos = BlockPos { x: rel_x, y: rel_y, z: rel_z }.rotate(self.rotation);
+            let world_pos = BlockPos {
+                x: corner.x + skull_pos.x,
+                y: skull_pos.y,
+                z: corner.z + skull_pos.z,
+            };
+            
+            // Spawn the skull block
+            world.set_block_at(
+                Blocks::Skull { direction: Direction::Up, no_drop: false },
+                world_pos.x,
+                world_pos.y,
+                world_pos.z
+            );
+            
+            // Send UpdateBlockEntity with skull NBT
+            use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+            use crate::server::utils::nbt::serialize::serialize_nbt;
+            use crate::dungeon::room::secrets::DungeonSecret;
+            let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+            let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                crate::server::utils::nbt::nbt::NBT::int("x", world_pos.x),
+                crate::server::utils::nbt::nbt::NBT::int("y", world_pos.y),
+                crate::server::utils::nbt::nbt::NBT::int("z", world_pos.z),
+                crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                skull_owner,
+            ]);
+            let nbt_bytes = serialize_nbt(&full_te_nbt);
+            let update_packet = UpdateBlockEntity {
+                block_pos: world_pos,
+                action: 4, // 4 = skull update in 1.8
+                nbt_data: Some(nbt_bytes.clone()),
+            };
+            for (_, player) in &mut world.players {
+                player.write_packet(&update_packet);
+            }
+            let chunk_x = world_pos.x >> 4;
+            let chunk_z = world_pos.z >> 4;
+            if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                chunk.packet_buffer.write_packet(&update_packet);
+            }
+            
+            // Register as interactable block
+            world.interactable_blocks.insert(world_pos, crate::server::block::block_interact_action::BlockInteractAction::RedstoneKeySkull {
+                room_index: 0, // Not used in interaction handler
+            });
+        }
+        
+        // Special placement for Golden Oasis room
+        if self.room_data.name == "Golden Oasis" {
+            // Skull always spawns at 12 71 8 (no rotation, always same place)
+            let skull_rel_pos = BlockPos { x: 12, y: 71, z: 8 };
+            let skull_world_pos = BlockPos {
+                x: corner.x + skull_rel_pos.x,
+                y: skull_rel_pos.y,
+                z: corner.z + skull_rel_pos.z,
+            };
+            
+            // Spawn the skull block
+            world.set_block_at(
+                Blocks::Skull { direction: Direction::Up, no_drop: false },
+                skull_world_pos.x,
+                skull_world_pos.y,
+                skull_world_pos.z
+            );
+            
+            // Send UpdateBlockEntity with skull NBT
+            use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+            use crate::server::utils::nbt::serialize::serialize_nbt;
+            use crate::dungeon::room::secrets::DungeonSecret;
+            let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+            let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                crate::server::utils::nbt::nbt::NBT::int("x", skull_world_pos.x),
+                crate::server::utils::nbt::nbt::NBT::int("y", skull_world_pos.y),
+                crate::server::utils::nbt::nbt::NBT::int("z", skull_world_pos.z),
+                crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                skull_owner,
+            ]);
+            let nbt_bytes = serialize_nbt(&full_te_nbt);
+            let update_packet = UpdateBlockEntity {
+                block_pos: skull_world_pos,
+                action: 4, // 4 = skull update in 1.8
+                nbt_data: Some(nbt_bytes.clone()),
+            };
+            for (_, player) in &mut world.players {
+                player.write_packet(&update_packet);
+            }
+            let chunk_x = skull_world_pos.x >> 4;
+            let chunk_z = skull_world_pos.z >> 4;
+            if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                chunk.packet_buffer.write_packet(&update_packet);
+            }
+            
+            // Register as interactable block
+            world.interactable_blocks.insert(skull_world_pos, crate::server::block::block_interact_action::BlockInteractAction::RedstoneKeySkull {
+                room_index: 0, // Not used in interaction handler
+            });
+        }
+        
+        // Special placement for Redstone Crypt room
+        if self.room_data.name == "Redstone Crypt" {
+            // Skull always spawns at 4 71 4 (rotated based on room rotation)
+            let skull_rel_pos = BlockPos { x: 4, y: 71, z: 4 }.rotate(self.rotation);
+            let skull_world_pos = BlockPos {
+                x: corner.x + skull_rel_pos.x,
+                y: skull_rel_pos.y,
+                z: corner.z + skull_rel_pos.z,
+            };
+            
+            // Spawn the skull block
+            world.set_block_at(
+                Blocks::Skull { direction: Direction::Up, no_drop: false },
+                skull_world_pos.x,
+                skull_world_pos.y,
+                skull_world_pos.z
+            );
+            
+            // Send UpdateBlockEntity with skull NBT
+            use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+            use crate::server::utils::nbt::serialize::serialize_nbt;
+            use crate::dungeon::room::secrets::DungeonSecret;
+            let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+            let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                crate::server::utils::nbt::nbt::NBT::int("x", skull_world_pos.x),
+                crate::server::utils::nbt::nbt::NBT::int("y", skull_world_pos.y),
+                crate::server::utils::nbt::nbt::NBT::int("z", skull_world_pos.z),
+                crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                skull_owner,
+            ]);
+            let nbt_bytes = serialize_nbt(&full_te_nbt);
+            let update_packet = UpdateBlockEntity {
+                block_pos: skull_world_pos,
+                action: 4, // 4 = skull update in 1.8
+                nbt_data: Some(nbt_bytes.clone()),
+            };
+            for (_, player) in &mut world.players {
+                player.write_packet(&update_packet);
+            }
+            let chunk_x = skull_world_pos.x >> 4;
+            let chunk_z = skull_world_pos.z >> 4;
+            if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                chunk.packet_buffer.write_packet(&update_packet);
+            }
+            
+            // Register as interactable block
+            world.interactable_blocks.insert(skull_world_pos, crate::server::block::block_interact_action::BlockInteractAction::RedstoneKeySkull {
+                room_index: 0, // Not used in interaction handler
+            });
+        }
+        
 
         for (i, block) in self.room_data.block_data.iter().enumerate() {
             if *block == Blocks::Air {

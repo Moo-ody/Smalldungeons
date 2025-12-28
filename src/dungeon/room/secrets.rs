@@ -69,20 +69,45 @@ pub fn tick(dungeon_secret: &Rc<RefCell<DungeonSecret>>, player: &Player) {
 }
 
 impl DungeonSecret {
+    /// Create the redstone key skull NBT data
+    /// For tile entities in 1.8, use "Owner" not "SkullOwner"
+    pub fn create_redstone_key_skull_nbt() -> (String, NBTNode) {
+        // Create texture compound with Value and Signature
+        let texture_compound = NBTNode::Compound({
+            let mut map = HashMap::new();
+            map.insert("Value".into(), NBTNode::String("eyJ0aW1lc3RhbXAiOjE1NTk1ODAzNjI1NTMsInByb2ZpbGVJZCI6ImU3NmYwZDlhZjc4MjQyYzM5NDY2ZDY3MjE3MzBmNDUzIiwicHJvZmlsZU5hbWUiOiJLbGxscmFoIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsidXJsIjoiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yZjI0ZWQ2ODc1MzA0ZmE0YTFmMGM3ODViMmNiNmE2YTcyNTYzZTlmM2UyNGVhNTVlMTgxNzg0NTIxMTlhYTY2In19fQ==".to_string()));
+            map.insert("Signature".into(), NBTNode::String("dYEJC8GTGdDESqHrQn22ShF5sJWO7u3jpG2hKPSD9Yords2BsESC3RdrImpeMMyD9oS4INbtsDPAPOoev9wrQS3JTkJWjHdgrwd33UqL9IHvQOmqKLAX5gLIeNNzJ3djG23oVsQ6JuW/OfnhbwpSxFNNzfwwtOjzDaiS4LLCqvkdQziUCTdfuBbvSaI6Jae0HBk2qXIHJ9Kjr9sSmcFhaDXLXj/lhkdxXCCGD+5XAxhR47ORnBT2qhHlZdK3bvNts41Kk6qC6Gzz7JdpGZPhnGCkK4FZzr/MDYObQuWmCOJQtI4QavjKOqO97AcY8IKyyMgkAJHRyqlO+8Y1sCwA7Fl5vB1lF9gUscVKLNRrT46Skg9lPWjIl3xAfEHdWt0HyU4GJb6tBPP/b2qm5vOAQ9JnaJuMiJm3ISfocz+NxlpmUli/vrsG79wwB4hT1wJAUfLwoi+Z0y0oG+FP45yAnIO3ORA/WjiqfnWu76kPaSenUEMV81IQtAJB835fzV7VLZWR5EkN/knuMWPuAGz0kdG1Raevi7yJC3wkmIRs1B523IB7Reuq14IgFXGw1J1i4Df00ULTkdWgMtPSWOlKGoT7iEBmYtnvPKQ3ZkzkoG9HZOq+JN5UpacfipmR5kI16vKYjRGKThDokifn6PL9Lfo0DYtJb+96/sp2gf6VD4o=".to_string()));
+            map
+        });
+        
+        // Create Owner compound with Id, hypixelPopulated, and Properties
+        // Use "Owner" not "SkullOwner" for tile entities in 1.8
+        NBT::compound("Owner", vec![
+            NBT::string("Id", "2134ab1c-7c78-30e1-8513-a6346c2344fd"),
+            NBT::byte("hypixelPopulated", 1),
+            NBT::compound("Properties", vec![
+                NBT::list("textures", TAG_COMPOUND_ID, vec![texture_compound])
+            ])
+        ])
+    }
+
     /// Create the wither skull NBT data
+    /// For tile entities in 1.8, use "Owner" not "SkullOwner"
     pub fn create_wither_skull_nbt() -> (String, NBTNode) {
-        NBT::compound("SkullOwner", vec![
-            NBT::string("Name", ""),
+        // Create texture compound with Value and Signature
+        let texture_compound = NBTNode::Compound({
+            let mut map = HashMap::new();
+            map.insert("Value".into(), NBTNode::String("ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==".to_string()));
+            map.insert("Signature".into(), NBTNode::String("Mnf7PDLe+FPiO+wQ2St6XNRiiIXtZ3GuPTcLlM7pNQ6d6MXuzI7xXG24qaAMFuVwMB+F3dLYcaFlc+bWyi3Qm9msSq2mMUXdvzTamAslZHcdcTFNpppkYgdvkOhWK7W/amQyd2Q+pLDECe8Mg6gxBY17+xfaWlIynzEWEmHR+ye+hTC44kgiTZaYiRg7gpU002deY8WpX875cc5zJIroxVR52qHIV+suIMPwq47mpCp520J9R1HuYvvP/V3+PwL7skMlC1F/HHkG5A13fvSKMqq9XMsdqXR8qvWlcL5IQTS7ijtD9TZo8jcmhz/7HCXuJ912I1GqJp4hZ0Lqa0NB0TuI/giHr2i4yNzORe6oan47bpMXLoZWIrYZIOsF6wSObhwniF1jM/zUEkum9XswRImIvYYlmyLH+Kkh5uQJm244rOLPXmOZEid6PW5bhaSRpMOMpxboeOtjLbGC56Ev+DwoI37SrAYY6/LC7HwjVhvkcsLd/9BrF+Wl10bdLdsJEbd+TII59/45MM1x7+xgeAFU/ip0TjkMPfRLdNmfxOGssMFZOaM55iOb+8t4tOvXxnqeXpFCByDgPnqKV5zPXS1XMF2+5qEAv7ZKrqK8BLAHbWsKHHOMt1hJ8K+EgYfRDKq72YvN01ST288ysUv8b5stRu8O5uC+KvZXtnlGrKc=".to_string()));
+            map
+        });
+        
+        // Create Owner compound with Id and Properties
+        // Use "Owner" not "SkullOwner" for tile entities in 1.8
+        NBT::compound("Owner", vec![
             NBT::string("Id", "e0f3e929-869e-3dca-9504-54c666ee6f23"),
             NBT::compound("Properties", vec![
-                NBT::list("textures", TAG_COMPOUND_ID, vec![
-                    NBTNode::Compound({
-                        let mut map = HashMap::new();
-                        map.insert("Value".into(), NBTNode::String("ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==".to_string()));
-                        map.insert("Signature".into(), NBTNode::String("Mnf7PDLe+FPiO+wQ2St6XNRiiIXtZ3GuPTcLlM7pNQ6d6MXuzI7xXG24qaAMFuVwMB+F3dLYcaFlc+bWyi3Qm9msSq2mMUXdvzTamAslZHcdcTFNpppkYgdvkOhWK7W/amQyd2Q+pLDECe8Mg6gxBY17+xfaWlIynzEWEmHR+ye+hTC44kgiTZaYiRg7gpU002deY8WpX875cc5zJIroxVR52qHIV+suIMPwq47mpCp520J9R1HuYvvP/V3+PwL7skMlC1F/HHkG5A13fvSKMqq9XMsdqXR8qvWlcL5IQTS7ijtD9TZo8jcmhz/7HCXuJ912I1GqJp4hZ0Lqa0NB0TuI/giHr2i4yNzORe6oan47bpMXLoZWIrYZIOsF6wSObhwniF1jM/zUEkum9XswRImIvYYlmyLH+Kkh5uQJm244rOLPXmOZEid6PW5bhaSRpMOMpxboeOtjLbGC56Ev+DwoI37SrAYY6/LC7HwjVhvkcsLd/9BrF+Wl10bdLdsJEbd+TII59/45MM1x7+xgeAFU/ip0TjkMPfRLdNmfxOGssMFZOaM55iOb+8t4tOvXxnqeXpFCByDgPnqKV5zPXS1XMF2+5qEAv7ZKrqK8BLAHbWsKHHOMt1hJ8K+EgYfRDKq72YvN01ST288ysUv8b5stRu8O5uC+KvZXtnlGrKc=".to_string()));
-                        map
-                    })
-                ])
+                NBT::list("textures", TAG_COMPOUND_ID, vec![texture_compound])
             ])
         ])
     }

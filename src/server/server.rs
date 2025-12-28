@@ -46,6 +46,7 @@ impl Server {
     pub fn schedule(&mut self, run_in: u32, task: impl FnOnce(&mut Self) + 'static) {
         self.tasks.push(Task::new(run_in, task));
     }
+
     
     /// Schedule Bonzo projectile velocity application after delay
     pub fn schedule_bonzo_velocity(&mut self, projectile_id: EntityId, direction: DVec3, delay_ticks: u32) {
@@ -258,12 +259,37 @@ impl Server {
                 });
                 
                  // Send Hypixel brand to make mods like Skytils detect this as Hypixel
-                 let mut buf = Vec::new();
-                 "Hypixel Network".write(&mut buf);
-                
+                 // Fixed: Properly format as Minecraft string (varint length + bytes) with padding
+                 // to prevent IndexOutOfBoundsException in mods that over-read
+                 use crate::net::var_int::write_var_int;
+                 
+                 let mut data: Vec<u8> = Vec::new();
+                 
+                 // Minecraft String "Hypixel Network"
+                 let brand = b"Hypixel Network";
+                 write_var_int(&mut data, brand.len() as i32);
+                 data.extend_from_slice(brand);
+                 
+                 // Pad the payload to avoid OOB reads from mods (Skytils/Essential/Patcher)
+                 data.extend_from_slice(&[0u8; 4]);
+                 
+                 // Log the custom payload before sending
+                 let hex_dump: String = data.iter()
+                     .take(32) // Show first 32 bytes
+                     .map(|b| format!("{:02x}", b))
+                     .collect::<Vec<_>>()
+                     .join(" ");
+                 let hex_suffix = if data.len() > 32 { "..." } else { "" };
+                 println!(
+                     "[RC DEBUG] sending custom payload: channel='MC|Brand', len={}, hex={}{}",
+                     data.len(),
+                     hex_dump,
+                     hex_suffix
+                 );
+                 
                  player.write_packet(&CustomPayload {
                      channel: "MC|Brand".into(),
-                     data: &buf,
+                     data: &data,
                  });
                 
                 player.flush_packets();

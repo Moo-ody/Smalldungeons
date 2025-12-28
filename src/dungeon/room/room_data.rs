@@ -194,6 +194,7 @@ pub fn get_random_data_with_type(
     data_storage: &DeterministicHashMap<usize, RoomData>,
     current_rooms: &[Room],
 ) -> RoomData {
+    // Random selection from available rooms matching the criteria
     data_storage.iter()
         .filter(|data| {
             data.1.room_type == room_type &&

@@ -37,7 +37,7 @@ register_serverbound_packets! {
     TabComplete = 0x14;
     ClientSettings = 0x15;
     ClientStatus = 0x16;
-    // CustomPayload = 0x17;
+    CustomPayload = 0x17;
     // SpectateTeleport = 0x18;
     // ResourcePackStatus = 0x19;
 }
@@ -290,6 +290,27 @@ impl PacketDeserializable for ClientStatus {
                 2 => OpenInventory,
                 _ => bail!("failed to read client status, invalid index: {}", var_int.0)
             }
+        })
+    }
+}
+
+pub struct CustomPayload {
+    pub channel: String,
+    pub payload: Vec<u8>,
+}
+
+impl PacketDeserializable for CustomPayload {
+    fn read(buffer: &mut BytesMut) -> anyhow::Result<Self> {
+        // Read channel name (Minecraft string: VarInt length + bytes)
+        let channel: SizedString<32767> = PacketDeserializable::read(buffer)?;
+        let channel = channel.into_owned();
+        
+        // Read remaining bytes as payload
+        let payload = buffer.split_to(buffer.len()).to_vec();
+        
+        Ok(Self {
+            channel,
+            payload,
         })
     }
 }

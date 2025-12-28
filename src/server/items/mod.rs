@@ -34,6 +34,7 @@ pub enum Item {
     BonzoStaff,
     JerryChineGun,
     VanillaChest,
+    RedstoneKey,
 }
 
 impl Item {
@@ -604,6 +605,19 @@ impl Item {
                 stack_size: 64,
                 metadata: 0,
                 tag_compound: None,
+            },
+            Item::RedstoneKey => ItemStack {
+                item: 397, // player head
+                stack_size: 1,
+                metadata: 3,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§cRedstone Key"),
+                    ]),
+                    NBT::compound("ExtraAttributes", vec![
+                        NBT::string("id", "REDSTONE_KEY"),
+                    ]),
+                ])),
             },
         };
         if let Some(ref mut tag) = stack.tag_compound {

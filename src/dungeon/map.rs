@@ -220,11 +220,22 @@ impl DungeonMap {
         }
         
         {
-            let x = room.segments[0].x * 20 + 4;
-            let y = room.segments[0].z * 20 + 4;
+            // Skip checkmark for entrance room (green room) and fairy room (pink room)
+            // They stay their color with no checkmark
+            if room.room_data.room_type != Entrance && room.room_data.room_type != Fairy {
+                let x = room.segments[0].x * 20 + 4;
+                let y = room.segments[0].z * 20 + 4;
 
-            for (cx, cy) in CHECKMARK_POSITIONS {
-                self.set_px(x + cx, y + cy, GREEN)
+                // Checkmark color: white if secrets not all found, green if all secrets found
+                let checkmark_color = if room.found_secrets >= room.room_data.secrets && room.room_data.secrets > 0 {
+                    GREEN
+                } else {
+                    WHITE
+                };
+
+                for (cx, cy) in CHECKMARK_POSITIONS {
+                    self.set_px(x + cx, y + cy, checkmark_color)
+                }
             }
         }
     }

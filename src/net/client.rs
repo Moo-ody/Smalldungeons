@@ -106,7 +106,9 @@ async fn read_packets(
                         );
                     }
                     Err(err) => {
-                        eprintln!("Failed to parse packet from {err}")
+                        eprintln!("Failed to parse packet from {err}");
+                        // Continue processing - don't disconnect on parse errors
+                        continue;
                     }
                 }
             }

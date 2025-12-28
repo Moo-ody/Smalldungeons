@@ -90,6 +90,12 @@ pub struct Player {
     
     // Current room tracking for dynamic secrets display
     pub current_room_index: Option<usize>,
+    
+    // Redstone key tracking (stored on player but not in inventory)
+    pub has_redstone_key: bool,
+    
+    // Track when player first entered the dungeon (for simplified scoreboard)
+    pub dungeon_entry_tick: Option<u64>,
 }
 
 impl Player {
@@ -146,6 +152,12 @@ impl Player {
             // Dungeon stats
             dungeon_stats: DungeonPlayerStats::default(),
             current_room_index: None,
+            
+            // Redstone key tracking
+            has_redstone_key: false,
+            
+            // Dungeon entry tracking
+            dungeon_entry_tick: None,
             
             // observed_entities: HashSet::new(),
         }

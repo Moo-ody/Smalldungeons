@@ -376,8 +376,6 @@ impl World {
     pub fn send_metadata_update(&mut self, entity_id: EntityId) {
         if let Some((entity, _)) = self.entities.get(&entity_id) {
             for player in self.players.values_mut() {
-                // Log when sending EntityMetadata packet
-                eprintln!("[WORLD] Sending PacketEntityMetadata for entity {}", entity_id);
                 player.write_packet(&crate::net::protocol::play::clientbound::PacketEntityMetadata {
                     entity_id: crate::net::var_int::VarInt(entity_id),
                     metadata: entity.metadata.clone(),

@@ -93,6 +93,7 @@ fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosi
     }
     
     // Kill bats and mark associated secrets as obtained
+    let mut rooms_to_update_map: Vec<usize> = Vec::new();
     for bat_id in bats_to_kill {
         // Find secret associated with this bat and mark it as obtained
         for (room_index, room) in server.dungeon.rooms.iter_mut().enumerate() {
@@ -106,7 +107,13 @@ fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosi
                             if !secret.counted {
                                 secret.counted = true;
                                 // Increment room's found_secrets count
+                                let old_count = room.found_secrets;
                                 room.found_secrets = room.found_secrets.saturating_add(1);
+                                
+                                // Track room for map update if secret count changed and room is entered
+                                if old_count != room.found_secrets && room.entered {
+                                    rooms_to_update_map.push(room_index);
+                                }
                             }
                         }
                         secret.bat_entity_id = None;
@@ -133,6 +140,11 @@ fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosi
         
         // Despawn the bat
         server.world.despawn_entity(bat_id);
+    }
+    
+    // Update map for rooms that had secrets found
+    for room_index in rooms_to_update_map {
+        server.dungeon.update_map_for_room(room_index);
     }
 }
 
@@ -230,7 +242,27 @@ fn is_passable_for_transmission(block: crate::server::block::blocks::Blocks) -> 
         | crate::server::block::blocks::Blocks::Vine { .. }
         | crate::server::block::blocks::Blocks::Fire
         | crate::server::block::blocks::Blocks::Lilypad
-        | crate::server::block::blocks::Blocks::Carpet { .. } => true,
+        | crate::server::block::blocks::Blocks::Carpet { .. }
+        | crate::server::block::blocks::Blocks::SnowLayer { .. }
+        | crate::server::block::blocks::Blocks::Skull { .. }
+        | crate::server::block::blocks::Blocks::FlowerPot { .. }
+        | crate::server::block::blocks::Blocks::RedstoneComparator { .. }
+        | crate::server::block::blocks::Blocks::PoweredRedstoneComparator { .. }
+        | crate::server::block::blocks::Blocks::RedstoneRepeater { .. }
+        | crate::server::block::blocks::Blocks::PoweredRedstoneRepeater { .. }
+        | crate::server::block::blocks::Blocks::Rail { .. }
+        | crate::server::block::blocks::Blocks::PoweredRail { .. }
+        | crate::server::block::blocks::Blocks::DetectorRail { .. }
+        | crate::server::block::blocks::Blocks::DaylightSensor { .. }
+        | crate::server::block::blocks::Blocks::InvertedDaylightSensor { .. }
+        | crate::server::block::blocks::Blocks::Ladder { .. }
+        | crate::server::block::blocks::Blocks::Trapdoor { open: true, .. }
+        | crate::server::block::blocks::Blocks::IronTrapdoor { open: true, .. }
+        | crate::server::block::blocks::Blocks::SpruceFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::BirchFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::JungleFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::DarkOakFenceGate { open: true, .. }
+        | crate::server::block::blocks::Blocks::AcaciaFenceGate { open: true, .. } => true,
         _ => false,
     }
 }

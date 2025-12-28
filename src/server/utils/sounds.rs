@@ -49,6 +49,7 @@ id_enum! {
         RandomWoodClick("random.wood_click"),
         BatDeath("mob.bat.death"),
         BatHurt("mob.bat.hurt"),
+        PistonIn("tile.piston.in"),
         
     }
 }

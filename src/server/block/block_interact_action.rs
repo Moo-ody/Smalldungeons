@@ -6,6 +6,7 @@ use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::NoEntityImpl;
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::Player;
+use crate::server::player::inventory::ItemSlot;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
 use crate::server::utils::dvec3::DVec3;
@@ -38,6 +39,9 @@ pub enum BlockInteractAction {
         set_index: usize,
     },
     MushroomTop,
+    RedstoneKeySkull {
+        room_index: usize,
+    },
     // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
@@ -140,10 +144,20 @@ impl BlockInteractAction {
                     
                     // Increment found_secrets for the room containing this secret (only if not already obtained)
                     if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                        let should_update_map = {
+                            let room = player.server_mut().dungeon.rooms.get(room_index);
+                            room.map(|r| r.found_secrets < r.room_data.secrets && r.entered).unwrap_or(false)
+                        };
+                        
                         if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
                             if room.found_secrets < room.room_data.secrets {
                                 room.found_secrets += 1;
                             }
+                        }
+                        
+                        // Update map if room is entered and secret count changed
+                        if should_update_map {
+                            player.server_mut().dungeon.update_map_for_room(room_index);
                         }
                     }
                 }
@@ -293,10 +307,20 @@ impl BlockInteractAction {
                     
                     // Increment found_secrets for the room containing this secret (only if not already obtained)
                     if let Some(room_index) = server.dungeon.get_room_at(block_pos.x, block_pos.z) {
+                        let should_update_map = {
+                            let room = server.dungeon.rooms.get(room_index);
+                            room.map(|r| r.found_secrets < r.room_data.secrets && r.entered).unwrap_or(false)
+                        };
+                        
                         if let Some(room) = server.dungeon.rooms.get_mut(room_index) {
                             if room.found_secrets < room.room_data.secrets {
                                 room.found_secrets += 1;
                             }
+                        }
+                        
+                        // Update map if room is entered and secret count changed
+                        if should_update_map {
+                            server.dungeon.update_map_for_room(room_index);
                         }
                     }
                 }
@@ -540,6 +564,39 @@ impl BlockInteractAction {
                         player.send_message("§cThis lever has already been used.");
                     }
                 }
+            }
+            
+            Self::RedstoneKeySkull { .. } => {
+                // Prevent picking up redstone key if player already has one
+                if player.has_redstone_key {
+                    return;
+                }
+                
+                // Remove the skull block
+                let world = player.world_mut();
+                world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
+                world.interactable_blocks.remove(block_pos);
+                
+                // Play sound: random.pop, volume 1, pitch 1
+                player.write_packet(&SoundEffect {
+                    sound: Sounds::Pop.id(),
+                    volume: 1.0,
+                    pitch: 1.0,
+                    pos_x: block_pos.x as f64 + 0.5,
+                    pos_y: block_pos.y as f64 + 0.5,
+                    pos_z: block_pos.z as f64 + 0.5,
+                });
+                
+                // Store RedstoneKey on player (not in inventory)
+                player.has_redstone_key = true;
+                
+                // Send message: &r&aYou found a Secret Redstone Key!&r
+                use crate::server::player::dungeon_stats::legacy_to_chat_component;
+                use crate::net::protocol::play::clientbound::Chat;
+                player.write_packet(&Chat {
+                    component: legacy_to_chat_component("&r&aYou found a Secret Redstone Key!&r"),
+                    chat_type: 0,
+                });
             }
             
             Self::Callback(func) => {

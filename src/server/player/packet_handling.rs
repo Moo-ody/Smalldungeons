@@ -241,6 +241,592 @@ impl ProcessPacket for PlayerBlockPlacement {
                 });
             }
 
+            // Handle RedstoneKey right-click on redstone block (check if player has the key)
+            if player.has_redstone_key {
+                    let world = player.world_mut();
+                    let dungeon = &mut player.server_mut().dungeon;
+                    
+                    // Find the room the player is in
+                    if let Some(room_index) = dungeon.get_room_at(self.position.x, self.position.z) {
+                        let room_name = dungeon.rooms[room_index].room_data.name.clone();
+                        
+                        if room_name == "Redstone Key" {
+                            // Extract room data we need before we can mutate
+                            let (corner, rotation, max_secrets) = {
+                                let room = &dungeon.rooms[room_index];
+                                (room.get_corner_pos(), room.rotation, room.room_data.secrets)
+                            };
+                            
+                            // Redstone block is at 27/68/7 relative to room corner (needs rotation)
+                            let redstone_rel_pos = crate::server::block::block_position::BlockPos { x: 27, y: 68, z: 7 }.rotate(rotation);
+                            let redstone_world_pos = crate::server::block::block_position::BlockPos {
+                                x: corner.x + redstone_rel_pos.x,
+                                y: redstone_rel_pos.y,
+                                z: corner.z + redstone_rel_pos.z,
+                            };
+                            
+                            // Check if the clicked block is the redstone block
+                            if self.position == redstone_world_pos {
+                                // Check if it's actually a redstone block
+                                let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                                if matches!(block, crate::server::block::blocks::Blocks::RedstoneBlock) {
+                                    // Play sound: tile.piston.in, volume 1, pitch 1
+                                    use crate::net::protocol::play::clientbound::SoundEffect;
+                                    use crate::server::utils::sounds::Sounds;
+                                    player.write_packet(&SoundEffect {
+                                        sound: Sounds::PistonIn.id(),
+                                        volume: 1.0,
+                                        pitch: 1.0,
+                                        pos_x: self.position.x as f64 + 0.5,
+                                        pos_y: self.position.y as f64 + 0.5,
+                                        pos_z: self.position.z as f64 + 0.5,
+                                    });
+                                    
+                                    // Place skull on the clicked face
+                                    // placed_direction: 0=bottom, 1=top, 2=north, 3=south, 4=west, 5=east
+                                    let skull_direction = match self.placed_direction {
+                                        0 => crate::server::utils::direction::Direction::Down,
+                                        1 => crate::server::utils::direction::Direction::Up,
+                                        2 => crate::server::utils::direction::Direction::North,
+                                        3 => crate::server::utils::direction::Direction::South,
+                                        4 => crate::server::utils::direction::Direction::West,
+                                        _ => crate::server::utils::direction::Direction::East,
+                                    };
+                                    
+                                    // Calculate position where skull should be placed (adjacent to clicked face)
+                                    let mut skull_pos = self.position.clone();
+                                    match self.placed_direction {
+                                        0 => skull_pos.y -= 1, // bottom
+                                        1 => skull_pos.y += 1, // top
+                                        2 => skull_pos.z -= 1, // north
+                                        3 => skull_pos.z += 1, // south
+                                        4 => skull_pos.x -= 1, // west
+                                        _ => skull_pos.x += 1, // east
+                                    }
+                                    
+                                    // Place the skull block
+                                    world.set_block_at(
+                                        crate::server::block::blocks::Blocks::Skull { 
+                                            direction: skull_direction, 
+                                            no_drop: false 
+                                        },
+                                        skull_pos.x,
+                                        skull_pos.y,
+                                        skull_pos.z
+                                    );
+                                    
+                                    // Send UpdateBlockEntity with skull NBT
+                                    use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+                                    use crate::server::utils::nbt::serialize::serialize_nbt;
+                                    use crate::dungeon::room::secrets::DungeonSecret;
+                                    let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+                                    let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                                        crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                                        crate::server::utils::nbt::nbt::NBT::int("x", skull_pos.x),
+                                        crate::server::utils::nbt::nbt::NBT::int("y", skull_pos.y),
+                                        crate::server::utils::nbt::nbt::NBT::int("z", skull_pos.z),
+                                        crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                                        skull_owner,
+                                    ]);
+                                    let nbt_bytes = serialize_nbt(&full_te_nbt);
+                                    let update_packet = UpdateBlockEntity {
+                                        block_pos: skull_pos,
+                                        action: 4, // 4 = skull update in 1.8
+                                        nbt_data: Some(nbt_bytes.clone()),
+                                    };
+                                    for (_, other_player) in &mut world.players {
+                                        other_player.write_packet(&update_packet);
+                                    }
+                                    let chunk_x = skull_pos.x >> 4;
+                                    let chunk_z = skull_pos.z >> 4;
+                                    if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                                        chunk.packet_buffer.write_packet(&update_packet);
+                                    }
+                                    
+                                    // Make blocks at 18/68/23, 19/68/23, 20/68/23, 21/68/23 disappear
+                                    let blocks_to_remove = [
+                                        (18, 68, 23),
+                                        (19, 68, 23),
+                                        (20, 68, 23),
+                                        (21, 68, 23),
+                                    ];
+                                    
+                                    for (rel_x, rel_y, rel_z) in &blocks_to_remove {
+                                        let block_rel_pos = crate::server::block::block_position::BlockPos { 
+                                            x: *rel_x, 
+                                            y: *rel_y, 
+                                            z: *rel_z 
+                                        }.rotate(rotation);
+                                        let block_world_pos = crate::server::block::block_position::BlockPos {
+                                            x: corner.x + block_rel_pos.x,
+                                            y: *rel_y,
+                                            z: corner.z + block_rel_pos.z,
+                                        };
+                                        
+                                        // Remove the block
+                                        world.set_block_at(
+                                            crate::server::block::blocks::Blocks::Air,
+                                            block_world_pos.x,
+                                            block_world_pos.y,
+                                            block_world_pos.z
+                                        );
+                                    }
+                                    
+                                    // Spawn secret chest at 28/62/23 facing west (needs rotation)
+                                    let chest_rel_pos = crate::server::block::block_position::BlockPos { x: 28, y: 62, z: 23 }.rotate(rotation);
+                                    let chest_world_pos = crate::server::block::block_position::BlockPos {
+                                        x: corner.x + chest_rel_pos.x,
+                                        y: chest_rel_pos.y,
+                                        z: corner.z + chest_rel_pos.z,
+                                    };
+                                    
+                                    // Rotate the chest direction based on room rotation
+                                    use crate::server::block::rotatable::Rotatable;
+                                    let chest_direction = crate::server::utils::direction::Direction::West.rotate(rotation);
+                                    
+                                    world.set_block_at(
+                                        crate::server::block::blocks::Blocks::Chest { 
+                                            direction: chest_direction
+                                        },
+                                        chest_world_pos.x,
+                                        chest_world_pos.y,
+                                        chest_world_pos.z,
+                                    );
+                                    
+                                    // Create a secret for the chest
+                                    use std::rc::Rc;
+                                    use std::cell::RefCell;
+                                    use crate::dungeon::room::secrets::SecretType;
+                                    let secret = Rc::new(RefCell::new(DungeonSecret::new(
+                                        SecretType::SecretChest { 
+                                            direction: chest_direction
+                                        },
+                                        chest_world_pos,
+                                        8.0, // spawn radius
+                                    )));
+                                    secret.borrow_mut().has_spawned = true;
+                                    secret.borrow_mut().obtained = false;
+                                    
+                                    // Register chest as interactable
+                                    world.interactable_blocks.insert(chest_world_pos, crate::server::block::block_interact_action::BlockInteractAction::Chest {
+                                        secret: secret.clone(),
+                                    });
+                                    
+                                    // Count this as a secret for the room
+                                    // Use the room_index we already have (chest is in the same room)
+                                    let should_update_map = {
+                                        let room = dungeon.rooms.get(room_index);
+                                        room.map(|r| r.found_secrets < max_secrets && r.entered).unwrap_or(false)
+                                    };
+                                    
+                                    if let Some(room) = dungeon.rooms.get_mut(room_index) {
+                                        if room.found_secrets < max_secrets {
+                                            room.found_secrets += 1;
+                                        }
+                                    }
+                                    
+                                    // Update map if room is entered and secret count changed
+                                    if should_update_map {
+                                        dungeon.update_map_for_room(room_index);
+                                    }
+                                    
+                                    // Remove RedstoneKey from player (they used it)
+                                    player.has_redstone_key = false;
+                                    
+                                    // Remove the original redstone key skull interactable block so it can't be picked up again
+                                    let (rel_x, rel_y, rel_z) = match rotation {
+                                        crate::server::utils::direction::Direction::North | crate::server::utils::direction::Direction::South => (19, 66, 7),
+                                        crate::server::utils::direction::Direction::East | crate::server::utils::direction::Direction::West => (10, 70, 26),
+                                        _ => (19, 66, 7),
+                                    };
+                                    let original_skull_pos = crate::server::block::block_position::BlockPos { x: rel_x, y: rel_y, z: rel_z }.rotate(rotation);
+                                    let original_skull_world_pos = crate::server::block::block_position::BlockPos {
+                                        x: corner.x + original_skull_pos.x,
+                                        y: original_skull_pos.y,
+                                        z: corner.z + original_skull_pos.z,
+                                    };
+                                    world.interactable_blocks.remove(&original_skull_world_pos);
+                                    
+                                    // Send message: &r&7&oYou hear something open...&r
+                                    use crate::server::player::dungeon_stats::legacy_to_chat_component;
+                                    use crate::net::protocol::play::clientbound::Chat;
+                                    player.write_packet(&Chat {
+                                        component: legacy_to_chat_component("&r&7&oYou hear something open...&r"),
+                                        chat_type: 0,
+                                    });
+                                    
+                                    return; // Don't process further
+                                }
+                            }
+                        } else if room_name == "Golden Oasis" {
+                            // Extract room data we need before we can mutate
+                            let (corner, max_secrets) = {
+                                let room = &dungeon.rooms[room_index];
+                                (room.get_corner_pos(), room.room_data.secrets)
+                            };
+                            
+                            // Redstone block is at 10/71/3 relative to room corner (no rotation needed)
+                            let redstone_rel_pos = crate::server::block::block_position::BlockPos { x: 10, y: 71, z: 3 };
+                            let redstone_world_pos = crate::server::block::block_position::BlockPos {
+                                x: corner.x + redstone_rel_pos.x,
+                                y: redstone_rel_pos.y,
+                                z: corner.z + redstone_rel_pos.z,
+                            };
+                            
+                            // Check if the clicked block is the redstone block
+                            if self.position == redstone_world_pos {
+                                // Check if it's actually a redstone block
+                                let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                                if matches!(block, crate::server::block::blocks::Blocks::RedstoneBlock) {
+                                    // Play sound: tile.piston.in, volume 1, pitch 1
+                                    use crate::net::protocol::play::clientbound::SoundEffect;
+                                    use crate::server::utils::sounds::Sounds;
+                                    player.write_packet(&SoundEffect {
+                                        sound: Sounds::PistonIn.id(),
+                                        volume: 1.0,
+                                        pitch: 1.0,
+                                        pos_x: self.position.x as f64 + 0.5,
+                                        pos_y: self.position.y as f64 + 0.5,
+                                        pos_z: self.position.z as f64 + 0.5,
+                                    });
+                                    
+                                    // Place skull on the clicked face
+                                    let skull_direction = match self.placed_direction {
+                                        0 => crate::server::utils::direction::Direction::Down,
+                                        1 => crate::server::utils::direction::Direction::Up,
+                                        2 => crate::server::utils::direction::Direction::North,
+                                        3 => crate::server::utils::direction::Direction::South,
+                                        4 => crate::server::utils::direction::Direction::West,
+                                        _ => crate::server::utils::direction::Direction::East,
+                                    };
+                                    
+                                    // Calculate position where skull should be placed (adjacent to clicked face)
+                                    let mut skull_pos = self.position.clone();
+                                    match self.placed_direction {
+                                        0 => skull_pos.y -= 1, // bottom
+                                        1 => skull_pos.y += 1, // top
+                                        2 => skull_pos.z -= 1, // north
+                                        3 => skull_pos.z += 1, // south
+                                        4 => skull_pos.x -= 1, // west
+                                        _ => skull_pos.x += 1, // east
+                                    }
+                                    
+                                    // Place the skull block
+                                    world.set_block_at(
+                                        crate::server::block::blocks::Blocks::Skull { 
+                                            direction: skull_direction, 
+                                            no_drop: false 
+                                        },
+                                        skull_pos.x,
+                                        skull_pos.y,
+                                        skull_pos.z
+                                    );
+                                    
+                                    // Send UpdateBlockEntity with skull NBT
+                                    use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+                                    use crate::server::utils::nbt::serialize::serialize_nbt;
+                                    use crate::dungeon::room::secrets::DungeonSecret;
+                                    let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+                                    let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                                        crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                                        crate::server::utils::nbt::nbt::NBT::int("x", skull_pos.x),
+                                        crate::server::utils::nbt::nbt::NBT::int("y", skull_pos.y),
+                                        crate::server::utils::nbt::nbt::NBT::int("z", skull_pos.z),
+                                        crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                                        skull_owner,
+                                    ]);
+                                    let nbt_bytes = serialize_nbt(&full_te_nbt);
+                                    let update_packet = UpdateBlockEntity {
+                                        block_pos: skull_pos,
+                                        action: 4, // 4 = skull update in 1.8
+                                        nbt_data: Some(nbt_bytes.clone()),
+                                    };
+                                    for (_, other_player) in &mut world.players {
+                                        other_player.write_packet(&update_packet);
+                                    }
+                                    let chunk_x = skull_pos.x >> 4;
+                                    let chunk_z = skull_pos.z >> 4;
+                                    if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                                        chunk.packet_buffer.write_packet(&update_packet);
+                                    }
+                                    
+                                    // Make blocks at 26/70/25, 27/70/25, 28/70/25 disappear (no rotation)
+                                    let blocks_to_remove = [
+                                        (26, 70, 25),
+                                        (27, 70, 25),
+                                        (28, 70, 25),
+                                    ];
+                                    
+                                    for (rel_x, rel_y, rel_z) in &blocks_to_remove {
+                                        let block_world_pos = crate::server::block::block_position::BlockPos {
+                                            x: corner.x + *rel_x,
+                                            y: *rel_y,
+                                            z: corner.z + *rel_z,
+                                        };
+                                        
+                                        // Remove the block
+                                        world.set_block_at(
+                                            crate::server::block::blocks::Blocks::Air,
+                                            block_world_pos.x,
+                                            block_world_pos.y,
+                                            block_world_pos.z
+                                        );
+                                    }
+                                    
+                                    // Spawn two secret chests: 13/63/25 and 12/63/23, both facing east (no rotation)
+                                    let chests_to_spawn = [
+                                        (13, 63, 25),
+                                        (12, 63, 23),
+                                    ];
+                                    
+                                    for (rel_x, rel_y, rel_z) in &chests_to_spawn {
+                                        let chest_world_pos = crate::server::block::block_position::BlockPos {
+                                            x: corner.x + *rel_x,
+                                            y: *rel_y,
+                                            z: corner.z + *rel_z,
+                                        };
+                                        
+                                        world.set_block_at(
+                                            crate::server::block::blocks::Blocks::Chest { 
+                                                direction: crate::server::utils::direction::Direction::East
+                                            },
+                                            chest_world_pos.x,
+                                            chest_world_pos.y,
+                                            chest_world_pos.z,
+                                        );
+                                        
+                                        // Create a secret for each chest
+                                        use std::rc::Rc;
+                                        use std::cell::RefCell;
+                                        use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
+                                        let secret = Rc::new(RefCell::new(DungeonSecret::new(
+                                            SecretType::SecretChest { 
+                                                direction: crate::server::utils::direction::Direction::East
+                                            },
+                                            chest_world_pos,
+                                            8.0, // spawn radius
+                                        )));
+                                        secret.borrow_mut().has_spawned = true;
+                                        secret.borrow_mut().obtained = false;
+                                        
+                                        // Register chest as interactable
+                                        world.interactable_blocks.insert(chest_world_pos, crate::server::block::block_interact_action::BlockInteractAction::Chest {
+                                            secret: secret.clone(),
+                                        });
+                                        
+                                        // Count this as a secret for the room
+                                        if let Some(room_index) = dungeon.get_room_at(chest_world_pos.x, chest_world_pos.z) {
+                                            let should_update_map = {
+                                                let room = dungeon.rooms.get(room_index);
+                                                room.map(|r| r.found_secrets < r.room_data.secrets && r.entered).unwrap_or(false)
+                                            };
+                                            
+                                            if let Some(room) = dungeon.rooms.get_mut(room_index) {
+                                                if room.found_secrets < room.room_data.secrets {
+                                                    room.found_secrets += 1;
+                                                }
+                                            }
+                                            
+                                            // Update map if room is entered and secret count changed
+                                            if should_update_map {
+                                                dungeon.update_map_for_room(room_index);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Remove RedstoneKey from player (they used it)
+                                    player.has_redstone_key = false;
+                                    
+                                    // Remove the original redstone key skull interactable block so it can't be picked up again
+                                    let original_skull_rel_pos = crate::server::block::block_position::BlockPos { x: 12, y: 71, z: 8 };
+                                    let original_skull_world_pos = crate::server::block::block_position::BlockPos {
+                                        x: corner.x + original_skull_rel_pos.x,
+                                        y: original_skull_rel_pos.y,
+                                        z: corner.z + original_skull_rel_pos.z,
+                                    };
+                                    world.interactable_blocks.remove(&original_skull_world_pos);
+                                    
+                                    // Send message: &r&7&oYou hear something open...&r
+                                    use crate::server::player::dungeon_stats::legacy_to_chat_component;
+                                    use crate::net::protocol::play::clientbound::Chat;
+                                    player.write_packet(&Chat {
+                                        component: legacy_to_chat_component("&r&7&oYou hear something open...&r"),
+                                        chat_type: 0,
+                                    });
+                                    
+                                    return; // Don't process further
+                                }
+                            }
+                        } else if room_name == "Redstone Crypt" {
+                            // Extract room data we need before we can mutate
+                            let (corner, room_rotation, max_secrets) = {
+                                let room = &dungeon.rooms[room_index];
+                                (room.get_corner_pos(), room.rotation, room.room_data.secrets)
+                            };
+                            
+                            // Redstone block is at 26/72/6 relative to room corner (rotated based on room rotation)
+                            let redstone_rel_pos = crate::server::block::block_position::BlockPos { x: 26, y: 72, z: 6 }.rotate(room_rotation);
+                            let redstone_world_pos = crate::server::block::block_position::BlockPos {
+                                x: corner.x + redstone_rel_pos.x,
+                                y: redstone_rel_pos.y,
+                                z: corner.z + redstone_rel_pos.z,
+                            };
+                            
+                            // Check if the clicked block is the redstone block
+                            if self.position == redstone_world_pos {
+                                // Check if it's actually a redstone block
+                                let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                                if matches!(block, crate::server::block::blocks::Blocks::RedstoneBlock) {
+                                    // Play sound: tile.piston.in, volume 1, pitch 1
+                                    use crate::net::protocol::play::clientbound::SoundEffect;
+                                    use crate::server::utils::sounds::Sounds;
+                                    player.write_packet(&SoundEffect {
+                                        sound: Sounds::PistonIn.id(),
+                                        volume: 1.0,
+                                        pitch: 1.0,
+                                        pos_x: self.position.x as f64 + 0.5,
+                                        pos_y: self.position.y as f64 + 0.5,
+                                        pos_z: self.position.z as f64 + 0.5,
+                                    });
+                                    
+                                    // Place skull on the clicked face
+                                    // placed_direction: 0=bottom, 1=top, 2=north, 3=south, 4=west, 5=east
+                                    let skull_direction = match self.placed_direction {
+                                        0 => crate::server::utils::direction::Direction::Down,
+                                        1 => crate::server::utils::direction::Direction::Up,
+                                        2 => crate::server::utils::direction::Direction::North,
+                                        3 => crate::server::utils::direction::Direction::South,
+                                        4 => crate::server::utils::direction::Direction::West,
+                                        _ => crate::server::utils::direction::Direction::East,
+                                    };
+                                    
+                                    // Calculate position where skull should be placed (adjacent to clicked face)
+                                    let mut skull_pos = self.position.clone();
+                                    match self.placed_direction {
+                                        0 => skull_pos.y -= 1, // bottom
+                                        1 => skull_pos.y += 1, // top
+                                        2 => skull_pos.z -= 1, // north
+                                        3 => skull_pos.z += 1, // south
+                                        4 => skull_pos.x -= 1, // west
+                                        _ => skull_pos.x += 1, // east
+                                    }
+                                    
+                                    // Place the skull block
+                                    world.set_block_at(
+                                        crate::server::block::blocks::Blocks::Skull { 
+                                            direction: skull_direction, 
+                                            no_drop: false 
+                                        },
+                                        skull_pos.x,
+                                        skull_pos.y,
+                                        skull_pos.z
+                                    );
+                                    
+                                    // Send UpdateBlockEntity with skull NBT
+                                    use crate::net::protocol::play::clientbound::UpdateBlockEntity;
+                                    use crate::server::utils::nbt::serialize::serialize_nbt;
+                                    use crate::dungeon::room::secrets::DungeonSecret;
+                                    let skull_owner = DungeonSecret::create_redstone_key_skull_nbt();
+                                    let full_te_nbt = crate::server::utils::nbt::nbt::NBT::with_nodes(vec![
+                                        crate::server::utils::nbt::nbt::NBT::string("id", "Skull"),
+                                        crate::server::utils::nbt::nbt::NBT::int("x", skull_pos.x),
+                                        crate::server::utils::nbt::nbt::NBT::int("y", skull_pos.y),
+                                        crate::server::utils::nbt::nbt::NBT::int("z", skull_pos.z),
+                                        crate::server::utils::nbt::nbt::NBT::byte("SkullType", 3), // 3 = player head
+                                        skull_owner,
+                                    ]);
+                                    let nbt_bytes = serialize_nbt(&full_te_nbt);
+                                    let update_packet = UpdateBlockEntity {
+                                        block_pos: skull_pos,
+                                        action: 4, // 4 = skull update in 1.8
+                                        nbt_data: Some(nbt_bytes.clone()),
+                                    };
+                                    for (_, other_player) in &mut world.players {
+                                        other_player.write_packet(&update_packet);
+                                    }
+                                    let chunk_x = skull_pos.x >> 4;
+                                    let chunk_z = skull_pos.z >> 4;
+                                    if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+                                        chunk.packet_buffer.write_packet(&update_packet);
+                                    }
+                                    
+                                    // Register as interactable block
+                                    world.interactable_blocks.insert(skull_pos, crate::server::block::block_interact_action::BlockInteractAction::RedstoneKeySkull {
+                                        room_index: room_index,
+                                    });
+                                    
+                                    // Make blocks at 12/70/15, 13/70/15, 14/70/15, 15/70/15, 13/69/15, 14/69/15, 15/69/15 disappear (rotated based on room rotation)
+                                    let blocks_to_remove = [
+                                        (12, 70, 15),
+                                        (13, 70, 15),
+                                        (14, 70, 15),
+                                        (15, 70, 15),
+                                        (13, 69, 15),
+                                        (14, 69, 15),
+                                        (15, 69, 15),
+                                    ];
+                                    
+                                    for (rel_x, rel_y, rel_z) in &blocks_to_remove {
+                                        let block_rel_pos = crate::server::block::block_position::BlockPos { x: *rel_x, y: *rel_y, z: *rel_z }.rotate(room_rotation);
+                                        let block_world_pos = crate::server::block::block_position::BlockPos {
+                                            x: corner.x + block_rel_pos.x,
+                                            y: block_rel_pos.y,
+                                            z: corner.z + block_rel_pos.z,
+                                        };
+                                        
+                                        // Remove the block
+                                        world.set_block_at(
+                                            crate::server::block::blocks::Blocks::Air,
+                                            block_world_pos.x,
+                                            block_world_pos.y,
+                                            block_world_pos.z
+                                        );
+                                    }
+                                    
+                                    // Remove RedstoneKey from player (they used it)
+                                    player.has_redstone_key = false;
+                                    
+                                    // Remove the original redstone key skull interactable block so it can't be picked up again
+                                    let original_skull_rel_pos = crate::server::block::block_position::BlockPos { x: 4, y: 71, z: 4 }.rotate(room_rotation);
+                                    let original_skull_world_pos = crate::server::block::block_position::BlockPos {
+                                        x: corner.x + original_skull_rel_pos.x,
+                                        y: original_skull_rel_pos.y,
+                                        z: corner.z + original_skull_rel_pos.z,
+                                    };
+                                    world.interactable_blocks.remove(&original_skull_world_pos);
+                                    
+                                    // Count this as a secret for the room
+                                    let should_update_map = {
+                                        let room = dungeon.rooms.get(room_index);
+                                        room.map(|r| r.found_secrets < max_secrets && r.entered).unwrap_or(false)
+                                    };
+                                    
+                                    if let Some(room) = dungeon.rooms.get_mut(room_index) {
+                                        if room.found_secrets < max_secrets {
+                                            room.found_secrets += 1;
+                                        }
+                                    }
+                                    
+                                    // Update map if room is entered and secret count changed
+                                    if should_update_map {
+                                        dungeon.update_map_for_room(room_index);
+                                    }
+                                    
+                                    // Send message: &r&7&oYou hear something open...&r
+                                    use crate::server::player::dungeon_stats::legacy_to_chat_component;
+                                    use crate::net::protocol::play::clientbound::Chat;
+                                    player.write_packet(&Chat {
+                                        component: legacy_to_chat_component("&r&7&oYou hear something open...&r"),
+                                        chat_type: 0,
+                                    });
+                                    
+                                    return; // Don't process further
+                                }
+                            }
+                        }
+                    }
+                }
+            
             // Use Superboom TNT when right-clicking a block
             if let Some(ItemSlot::Filled(item, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
                 if let Item::SuperboomTNT = item {
@@ -385,5 +971,47 @@ impl ProcessPacket for ClientStatus {
             }
             _ => {}
         }
+    }
+}
+
+impl ProcessPacket for CustomPayload {
+    fn process_with_player(&self, _player: &mut Player) {
+        // Log the received plugin message but don't process it
+        // Never disconnect on plugin messages - vanilla, Forge, Essential, Skytils, etc. all send them
+        
+        match self.channel.as_str() {
+            // Client brand handshake - safe to ignore
+            "MC|Brand" => {
+                // Payload is a MC string containing the client brand, we can ignore it
+            }
+            // Client registers channels it wants to receive - safe to ignore
+            "REGISTER" => {
+                // Payload is a list of channel names separated by \0, safe to ignore
+            }
+            // Forge/FML channels - safe to ignore
+            "FML|HS" | "FML" | "FML|MP" => {
+                // Forge mod loader handshake - safe to ignore
+            }
+            // Everything else - just ignore
+            _ => {
+                // Unknown channels are fine - just ignore them
+            }
+        }
+        
+        let hex_dump: String = self.payload.iter()
+            .take(32) // Show first 32 bytes
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let hex_suffix = if self.payload.len() > 32 { "..." } else { "" };
+        
+        println!(
+            "[RC DEBUG] received plugin message from client: channel='{}', len={}, hex={}{}",
+            self.channel,
+            self.payload.len(),
+            hex_dump,
+            hex_suffix
+        );
+        // IMPORTANT: Return Ok (implicit) - never disconnect on plugin messages
     }
 }

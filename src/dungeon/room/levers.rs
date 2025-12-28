@@ -135,29 +135,19 @@ impl LeverSystem {
 
     /// Find lever data by lever position
     pub fn find_lever_by_position(&self, lever_pos: &BlockPos) -> Option<&LeverData> {
-        println!("Searching for lever at {:?}", lever_pos);
-        if let Some(lever_data) = self.world_levers.get(lever_pos) {
-            println!("  Found matching lever!");
-            return Some(lever_data);
-        }
-        println!("  No matching lever found");
-        None
+        self.world_levers.get(lever_pos)
     }
 
     /// Activate a lever and trigger falling blocks
     pub fn activate_lever(&mut self, world: &mut World, lever_pos: &BlockPos) -> bool {
-        println!("Lever system: Attempting to activate lever at {:?}", lever_pos);
-        
         // Check if lever has already been activated
         if self.activated_levers.contains(lever_pos) {
-            println!("Lever already activated");
             return false;
         }
         
         // Find lever data first and clone it to avoid borrowing issues
         let lever_data = self.find_lever_by_position(lever_pos).cloned();
         if let Some(lever_data) = lever_data {
-            println!("Found lever data with {} blocks", lever_data.blocks.len());
             // Mark lever as activated
             self.activated_levers.insert(*lever_pos);
             
@@ -165,7 +155,6 @@ impl LeverSystem {
             self.trigger_falling_blocks(world, &lever_data);
             true
         } else {
-            println!("No lever data found for position {:?}", lever_pos);
             false
         }
     }

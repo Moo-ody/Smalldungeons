@@ -215,21 +215,26 @@ impl FollowingNametagImpl {
 
 impl EntityImpl for FollowingNametagImpl {
     fn spawn(&mut self, entity: &mut Entity, packet_buffer: &mut PacketBuffer) {
-        // Re-attach the nametag to its host entity when respawning (e.g., on chunk refresh)
-        packet_buffer.write_packet(&EntityAttach {
-            entity_id: entity.id,
-            vehicle_id: self.host_entity_id,
-            leash: false,
-        });
+        // Don't use EntityAttach - it positions too high
+        // We'll position manually via tick() for precise control
     }
 
     fn tick(&mut self, entity: &mut Entity, packet_buffer: &mut PacketBuffer) {
         // Get the host entity position and update our position accordingly
         let world = entity.world_mut();
         if let Some((host_entity, _)) = world.entities.get(&self.host_entity_id) {
+            // For zombies: position armor stand base low so nametag appears above zombie head
+            // Zombie head is at zombie_pos.y + 1.95
+            // Armor stand is ~1.975 tall, nametag appears above armor stand
+            // Position armor stand base so nametag is just above zombie head
+            let height_offset = if matches!(host_entity.metadata.variant, EntityVariant::Zombie { .. }) {
+                0.0 // Position at zombie feet, offset will adjust from there
+            } else {
+                0.0
+            };
             let target_pos = DVec3::new(
                 host_entity.position.x,
-                host_entity.position.y + self.y_offset,
+                host_entity.position.y + height_offset + self.y_offset,
                 host_entity.position.z
             );
 
@@ -261,15 +266,25 @@ pub fn spawn_following_nametag(
     y_offset: f64,
 ) -> anyhow::Result<EntityId> {
     // Get host entity position
-    let host_pos = if let Some((host_entity, _)) = world.entities.get(&host_entity_id) {
-        host_entity.position
+    let (host_pos, is_zombie) = if let Some((host_entity, _)) = world.entities.get(&host_entity_id) {
+        let is_zombie = matches!(host_entity.metadata.variant, EntityVariant::Zombie { .. });
+        (host_entity.position, is_zombie)
     } else {
         return Err(anyhow::anyhow!("Host entity not found"));
     };
 
+    // For zombies: position armor stand base low so nametag appears above zombie head
+    // Zombie head is at zombie_pos.y + 1.95
+    // Armor stand is ~1.975 tall, nametag appears above armor stand
+    // Position armor stand base so nametag is just above zombie head
+    let height_offset = if is_zombie { 
+        0.0 // Position at zombie feet, offset will adjust from there
+    } else { 
+        0.0 
+    };
     let nametag_pos = DVec3::new(
         host_pos.x,
-        host_pos.y + y_offset,
+        host_pos.y + height_offset + y_offset,
         host_pos.z
     );
 
