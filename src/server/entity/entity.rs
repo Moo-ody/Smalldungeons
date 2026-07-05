@@ -41,9 +41,16 @@ pub struct Entity {
     pub last_pitch: f32,
     
     pub ticks_existed: u32,
-    
+
     pub metadata: EntityMetadata,
     pub uuid: Option<Uuid>, // For Player entities
+
+    /// Which chunk's `entities` list this entity is actually registered in - kept in sync
+    /// with `position` by `World::tick()`'s chunk-migration pass. Without this, an entity
+    /// that walks to a different chunk than the one it spawned in would still be listed in
+    /// the *old* chunk forever (nothing else updates that list), leaving a stale ID that
+    /// panics whenever something assumes chunk membership means the entity still exists.
+    pub current_chunk: (i32, i32),
 }
 
 impl Entity {
@@ -54,6 +61,7 @@ impl Entity {
         position: DVec3,
         metadata: EntityMetadata,
     ) -> Self {
+        let current_chunk = ((position.x.floor() as i32) >> 4, (position.z.floor() as i32) >> 4);
         Self {
             world,
             id,
@@ -68,6 +76,7 @@ impl Entity {
             ticks_existed: 0,
             metadata,
             uuid: None,
+            current_chunk,
         }
     }
 
@@ -105,7 +114,7 @@ impl Entity {
                 z: self.position.z,
                 yaw: self.yaw,
                 pitch: self.pitch,
-                data: 0, // data field doesn't matter for dropped items - item comes from metadata
+                data: variant.object_data(),
                 velocity_x: self.velocity.x,
                 velocity_y: self.velocity.y,
                 velocity_z: self.velocity.z,

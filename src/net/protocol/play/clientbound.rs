@@ -214,10 +214,10 @@ packet_serializable! {
 
 packet_serializable! {
     pub struct EntityVelocity {
-        pub entity_id: VarInt,
-        pub velocity_x: i16,
-        pub velocity_y: i16,
-        pub velocity_z: i16,
+        pub entity_id: i32 => &VarInt(self.entity_id),
+        pub velocity_x: f64 => &((self.velocity_x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
+        pub velocity_y: f64 => &((self.velocity_y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
+        pub velocity_z: f64 => &((self.velocity_z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
     }
 }
 
@@ -286,7 +286,14 @@ packet_serializable! {
 
 packet_serializable! {
     pub struct EntityStatus {
-        pub entity_id: VarInt,
+        // Unlike most other entity-targeted packets in this codebase, vanilla 1.8's
+        // S19PacketEntityStatus reads a plain 4-byte int for the entity ID (readInt()), not
+        // a VarInt - same kind of exception as JoinGame/EntityAttach above. This was unused
+        // (and this bug therefore latent) until `ai/combat.rs::kill_mob` started sending it;
+        // a client reading 4 bytes where the server only wrote a 1-2 byte VarInt desyncs its
+        // packet framing for everything that follows, which is what caused the "Connection
+        // Lost" IndexOutOfBoundsException.
+        pub entity_id: i32,
         pub logic_op_code: i8, // better name?
     }
 }

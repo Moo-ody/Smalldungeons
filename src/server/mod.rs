@@ -1,6 +1,7 @@
 pub mod chunk;
 pub mod utils;
 pub mod block;
+pub mod hypixel_mod_api;
 pub mod items;
 pub mod world;
 pub mod server;

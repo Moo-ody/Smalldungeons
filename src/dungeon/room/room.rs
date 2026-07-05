@@ -55,6 +55,12 @@ pub struct Room {
     pub found_secrets: u8, // Number of secrets found in this room (runtime tracking)
     pub json_secrets: Vec<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>>, // Secrets from secrets.json
     pub room_entry_secrets_spawned: bool, // Track if schest/sess have been spawned on room entry
+
+    /// Number of starred dungeon mobs spawned into this room that haven't died yet - the map
+    /// only shows a checkmark once this hits 0 (rooms with no starred mobs start at 0, i.e.
+    /// count as cleared immediately). See `spawner.rs` (incremented on spawn) and
+    /// `ai/combat.rs::kill_mob` (decremented on death, triggers a map redraw at 0).
+    pub starred_mobs_remaining: u32,
 }
 
 impl Room {
@@ -254,6 +260,7 @@ impl Room {
             found_secrets: 0,
             json_secrets: Vec::new(),
             room_entry_secrets_spawned: false,
+            starred_mobs_remaining: 0,
         }
     }
 

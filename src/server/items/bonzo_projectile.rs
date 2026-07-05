@@ -55,14 +55,14 @@ entity.pitch = 0.0; // Projectiles typically have 0 pitch
 entity.yaw = self.current_yaw; // Set initial yaw
 
 // Set initial velocity for smooth projectile animation
-for _player in entity.world_mut().players.values() {
-let _ = packet_buffer.write_packet(&EntityVelocity {
-entity_id: VarInt(entity.id),
-velocity_x: (self.velocity_per_tick.x * 8000.0) as i16,
-velocity_y: (self.velocity_per_tick.y * 8000.0) as i16,
-velocity_z: (self.velocity_per_tick.z * 8000.0) as i16,
-});
-}
+        for _player in entity.world_mut().players.values() {
+            let _ = packet_buffer.write_packet(&EntityVelocity {
+                entity_id: entity.id,
+                velocity_x: self.velocity_per_tick.x,
+                velocity_y: self.velocity_per_tick.y,
+                velocity_z: self.velocity_per_tick.z,
+            });
+        }
 entity.velocity = self.velocity_per_tick;
 }
 
@@ -215,21 +215,15 @@ let knockback_z = -knockback_dir.z * BONZO_HORIZONTAL_MULT;
 // Schedule knockback with 60ms delay (1.2 ticks ≈ 1 tick at 20 TPS)
 let server = world.server_mut();
 server.schedule(1, move |server| {
-if let Some(shooter) = server.world.players.get_mut(&thrower_id) {
-// Convert to velocity packet format (multiply by 8000)
-let velocity_x = (knockback_x * 8000.0) as i16;
-let velocity_y = (knockback_y * 8000.0) as i16;
-let velocity_z = (knockback_z * 8000.0) as i16;
-
-// Send velocity packet to player (like Java's velocityChanged = true)
-shooter.write_packet(&EntityVelocity {
-entity_id: VarInt(shooter.entity_id),
-velocity_x,
-velocity_y,
-velocity_z,
-});
-
-}
+    if let Some(shooter) = server.world.players.get_mut(&thrower_id) {
+        // Send velocity packet to player (EntityVelocity handles clamping/scaling)
+        shooter.write_packet(&EntityVelocity {
+            entity_id: shooter.entity_id,
+            velocity_x: knockback_x,
+            velocity_y: knockback_y,
+            velocity_z: knockback_z,
+        });
+    }
 });
 }
 }

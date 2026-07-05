@@ -1,10 +1,12 @@
 use anyhow;
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound::{EntityAttach, EntityEquipment, EntityTeleport};
+use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::entity::equipment::Equipment;
+use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 
@@ -242,7 +244,7 @@ impl EntityImpl for FollowingNametagImpl {
             let distance = entity.position.distance_to(&target_pos);
             if distance > 0.01 {
                 entity.position = target_pos;
-                
+
                 // Send teleport packet to update position
                 packet_buffer.write_packet(&EntityTeleport {
                     entity_id: entity.id,
@@ -254,6 +256,17 @@ impl EntityImpl for FollowingNametagImpl {
                     on_ground: false,
                 });
             }
+        }
+    }
+
+    /// This armor stand floats right where players naturally aim (chest/head height) and is
+    /// a real, clickable entity even though it's invisible - without forwarding, a click that
+    /// lands on the nametag instead of the host mob's own hitbox would silently do nothing
+    /// (no aggro, no lethal-weapon kill), since the default `EntityImpl::interact` is a no-op.
+    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) {
+        let world = entity.world_mut();
+        if let Some((host_entity, host_impl)) = world.entities.get_mut(&self.host_entity_id) {
+            host_impl.interact(host_entity, player, action);
         }
     }
 }
@@ -315,6 +328,9 @@ pub fn spawn_following_nametag(
 
     // Register the entity in the world
     world.entities.insert(nametag_id, (nametag_entity, nametag_impl));
+
+    // So when the host (zombie etc.) is despawned, we despawn this nametag too
+    world.entity_following_nametag.insert(host_entity_id, nametag_id);
 
     Ok(nametag_id)
 }

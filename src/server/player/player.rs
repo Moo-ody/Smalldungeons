@@ -289,6 +289,25 @@ impl Player {
             item.on_right_click(self).unwrap()
         }
     }
+
+    /// Returns the world-space position of the player's eyes.
+    pub fn player_eye_position(&self) -> DVec3 {
+        let mut position = self.position;
+        position.y += 1.62;
+        position
+    }
+
+    /// Returns the forward look direction vector from the player's yaw/pitch.
+    pub fn rotation_vec(&self) -> DVec3 {
+        let yaw_rad = (self.yaw as f64).to_radians();
+        let pitch_rad = (self.pitch as f64).to_radians();
+        let (yaw_sin, yaw_cos) = (yaw_rad.sin(), yaw_rad.cos());
+        DVec3::new(
+            -pitch_rad.cos() * yaw_sin,
+            -pitch_rad.sin(),
+            pitch_rad.cos() * yaw_cos,
+        )
+    }
     
     /// Shoot Bonzo projectile with cooldown and delay like the Java version
     pub fn shoot_bonzo_projectile(&mut self) -> anyhow::Result<()> {

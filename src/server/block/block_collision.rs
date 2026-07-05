@@ -4,97 +4,33 @@ use crate::server::utils::aabb::AABB;
 use crate::server::utils::dvec3::DVec3;
 
 /// Get the collision AABB for a block at the given position
-/// Returns None if the block is passable (air, water, etc.)
+/// Returns None if the block is passable (air, liquids, etc.)
 pub fn get_block_aabb(block: Blocks, x: i32, y: i32, z: i32) -> Option<AABB> {
     let base_min = DVec3::new(x as f64, y as f64, z as f64);
     let base_max = DVec3::new((x + 1) as f64, (y + 1) as f64, (z + 1) as f64);
 
     match block {
-        Blocks::Air
-        | Blocks::FlowingWater { .. }
+        Blocks::Air => None,
+
+        // Liquids never block movement - mobs (and anything else) can swim into/through
+        // them instead of treating them as a solid wall. Buoyancy/swimming physics is
+        // handled separately in `dungeon_mobs::ai::physics` via `is_liquid`.
+        Blocks::FlowingWater { .. }
         | Blocks::StillWater { .. }
         | Blocks::FlowingLava { .. }
-        | Blocks::Lava { .. }
-        | Blocks::Tallgrass { .. }
-        | Blocks::Deadbush
-        | Blocks::Torch { .. }
-        | Blocks::UnlitRedstoneTorch { .. }
-        | Blocks::RedstoneTorch { .. }
-        | Blocks::Redstone { .. }
-        | Blocks::YellowFlower
-        | Blocks::RedFlower { .. }
-        | Blocks::Vine { .. }
-        | Blocks::Fire
-        | Blocks::Lilypad
-        | Blocks::SnowLayer { .. }
-        | Blocks::Skull { .. }
-        | Blocks::FlowerPot { .. }
-        | Blocks::RedstoneComparator { .. }
-        | Blocks::PoweredRedstoneComparator { .. }
-        | Blocks::RedstoneRepeater { .. }
-        | Blocks::PoweredRedstoneRepeater { .. }
-        | Blocks::Rail { .. }
-        | Blocks::PoweredRail { .. }
-        | Blocks::DetectorRail { .. }
-        | Blocks::ActivatorRail { .. }
-        | Blocks::DaylightSensor { .. }
-        | Blocks::InvertedDaylightSensor { .. }
-        | Blocks::Ladder { .. } => None,
+        | Blocks::Lava { .. } => None,
 
-        // Cobblestone walls - 0.125 to 0.875 (75% width, full height)
-        Blocks::CobblestoneWalls { .. } => Some(AABB::new(
-            DVec3::new(base_min.x + 0.125, base_min.y, base_min.z + 0.125),
-            DVec3::new(base_max.x - 0.125, base_max.y, base_max.z - 0.125),
-        )),
-
-        // Fences - similar to walls
-        Blocks::Fence
-        | Blocks::NetherbrickFence
-        | Blocks::SpruceFence
-        | Blocks::BirchFence
-        | Blocks::JungleFence
-        | Blocks::DarkOakFence
-        | Blocks::AcaicaFence => Some(AABB::new(
-            DVec3::new(base_min.x + 0.125, base_min.y, base_min.z + 0.125),
-            DVec3::new(base_max.x - 0.125, base_max.y, base_max.z - 0.125),
-        )),
-
-        // Iron bars - thin like glass panes
-        Blocks::IronBars => Some(AABB::new(
-            DVec3::new(base_min.x + 0.4375, base_min.y, base_min.z + 0.4375),
-            DVec3::new(base_max.x - 0.4375, base_max.y, base_max.z - 0.4375),
-        )),
-
-        // Glass panes - extremely thin
-        Blocks::GlassPane
-        | Blocks::StainedGlassPane { .. } => Some(AABB::new(
-            DVec3::new(base_min.x + 0.4375, base_min.y, base_min.z + 0.4375),
-            DVec3::new(base_max.x - 0.4375, base_max.y, base_max.z - 0.4375),
-        )),
-
-        // Stone slabs - half height
+        // Single slabs are half-height "climbable" obstructions, not a full 1x1 block -
+        // combined with `physics::move_horizontal`'s step-up, this lets mobs walk onto them
+        // instead of being stopped cold. Double slabs stay full-height (handled by the `_`
+        // catch-all below).
         Blocks::StoneSlab { top_half, .. }
-        | Blocks::NewStoneSlab { top_half, .. }
-        | Blocks::WoodenSlab { top_half, .. } => {
-            if top_half {
-                Some(AABB::new(
-                    DVec3::new(base_min.x, base_min.y + 0.5, base_min.z),
-                    base_max,
-                ))
-            } else {
-                Some(AABB::new(
-                    base_min,
-                    DVec3::new(base_max.x, base_min.y + 0.5, base_max.z),
-                ))
-            }
-        }
+        | Blocks::WoodenSlab { top_half, .. }
+        | Blocks::NewStoneSlab { top_half, .. } => Some(half_height_aabb(top_half, base_min, base_max)),
 
-        // Double slabs - full block
-        Blocks::DoubleStoneSlab { .. }
-        | Blocks::NewDoubleStoneSlab { .. }
-        | Blocks::DoubleWoodenSlab { .. } => Some(AABB::new(base_min, base_max)),
-
-        // Stairs - complex shape based on direction
+        // Stairs: same reasoning as slabs. `get_stair_aabb` already simplifies the shape to a
+        // half-block (direction doesn't change the returned box) - it just wasn't wired into
+        // this match before, so stairs fell through to the full-cube default.
         Blocks::OakStairs { direction, top_half }
         | Blocks::StoneStairs { direction, top_half }
         | Blocks::BrickStairs { direction, top_half }
@@ -107,93 +43,23 @@ pub fn get_block_aabb(block: Blocks, x: i32, y: i32, z: i32) -> Option<AABB> {
         | Blocks::QuartzStairs { direction, top_half }
         | Blocks::AcaciaStairs { direction, top_half }
         | Blocks::DarkOakStairs { direction, top_half }
-        | Blocks::RedSandstoneStairs { direction, top_half } => {
-            get_stair_aabb(direction, top_half, base_min, base_max)
-        }
+        | Blocks::RedSandstoneStairs { direction, top_half } => get_stair_aabb(direction, top_half, base_min, base_max),
 
-        // Trapdoors - vary by open/closed state
-        Blocks::Trapdoor { open, top_half, .. }
-        | Blocks::IronTrapdoor { open, top_half, .. } => {
-            if open {
-                None // Open trapdoor is passable
-            } else if top_half {
-                Some(AABB::new(
-                    DVec3::new(base_min.x, base_min.y + 0.8125, base_min.z),
-                    base_max,
-                ))
-            } else {
-                Some(AABB::new(
-                    base_min,
-                    DVec3::new(base_max.x, base_min.y + 0.1875, base_max.z),
-                ))
-            }
-        }
-
-        // Doors - vary by open state
-        Blocks::WoodenDoor { open, .. }
-        | Blocks::IronDoor { open, .. }
-        | Blocks::SpruceDoor { open, .. }
-        | Blocks::BirchDoor { open, .. }
-        | Blocks::JungleDoor { open, .. }
-        | Blocks::AcaicaDoor { open, .. }
-        | Blocks::DarkOakDoor { open, .. } => {
-            if open {
-                None // Open door is passable
-            } else {
-                Some(AABB::new(base_min, base_max))
-            }
-        }
-
-        // Fence gates - passable when open
-        Blocks::FenceGate { open, .. }
-        | Blocks::SpruceFenceGate { open, .. }
-        | Blocks::BirchFenceGate { open, .. }
-        | Blocks::JungleFenceGate { open, .. }
-        | Blocks::DarkOakFenceGate { open, .. }
-        | Blocks::AcaciaFenceGate { open, .. } => {
-            if open {
-                None
-            } else {
-                Some(AABB::new(
-                    DVec3::new(base_min.x, base_min.y, base_min.z),
-                    DVec3::new(base_max.x, base_min.y + 0.1875, base_max.z),
-                ))
-            }
-        }
-
-        // Soul sand - 0.875 height
-        Blocks::SoulSand => Some(AABB::new(
-            base_min,
-            DVec3::new(base_max.x, base_min.y + 0.875, base_max.z),
-        )),
-
-        // Carpets - 0.0625 height
-        Blocks::Carpet { .. } => Some(AABB::new(
-            base_min,
-            DVec3::new(base_max.x, base_min.y + 0.0625, base_max.z),
-        )),
-
-        // Snow layers - variable height
-        Blocks::SnowLayer { layer_amount } => {
-            let height = (layer_amount as f64 + 1.0) / 8.0;
-            Some(AABB::new(
-                base_min,
-                DVec3::new(base_max.x, base_min.y + height, base_max.z),
-            ))
-        }
-
-        // Pressure plates - 0.0625 height
-        Blocks::StonePressurePlate { .. }
-        | Blocks::WoodenPressurePlate { .. }
-        | Blocks::GoldPressurePlate { .. }
-        | Blocks::IronPressurePlate { .. } => Some(AABB::new(
-            base_min,
-            DVec3::new(base_max.x, base_min.y + 0.0625, base_max.z),
-        )),
-
-        // Default: full block
+        // Simplified collision: every other non-air block is a full 1x1x1 solid cube.
         _ => Some(AABB::new(base_min, base_max)),
     }
+}
+
+fn half_height_aabb(top_half: bool, base_min: DVec3, base_max: DVec3) -> AABB {
+    let (min_y, max_y) = if top_half {
+        (base_min.y + 0.5, base_max.y)
+    } else {
+        (base_min.y, base_min.y + 0.5)
+    };
+    AABB::new(
+        DVec3::new(base_min.x, min_y, base_min.z),
+        DVec3::new(base_max.x, max_y, base_max.z),
+    )
 }
 
 /// Get AABB for stairs based on direction and top_half
@@ -212,10 +78,21 @@ fn get_stair_aabb(
     // Stairs have a complex shape - simplified to half-block for collision
     // The actual shape varies by direction, but for pearl collision we can approximate
     // as a half-block on the appropriate side
+    let _ = direction; // direction intentionally unused - see comment above
     Some(AABB::new(
         DVec3::new(base_min.x, half_y.0, base_min.z),
         DVec3::new(base_max.x, half_y.1, base_max.z),
     ))
+}
+
+/// Whether a block is a liquid (water or lava, flowing or still) - used to trigger
+/// buoyancy/swimming physics, distinct from `is_block_passable` (which is also true for
+/// liquids, since they don't block movement, but true for plain air too).
+pub fn is_liquid(block: Blocks) -> bool {
+    matches!(
+        block,
+        Blocks::FlowingWater { .. } | Blocks::StillWater { .. } | Blocks::FlowingLava { .. } | Blocks::Lava { .. }
+    )
 }
 
 /// Check if a block is passable for projectiles
@@ -223,3 +100,48 @@ pub fn is_block_passable(block: Blocks) -> bool {
     get_block_aabb(block, 0, 0, 0).is_none()
 }
 
+/// Checks if an AABB collides with any solid block in the world.
+/// Iterates all blocks overlapped by the AABB and tests per-block collision.
+pub fn check_block_collisions(
+    world: &crate::server::world::World,
+    aabb: &AABB,
+) -> bool {
+    let min_x = aabb.min.x.floor() as i32;
+    let min_y = aabb.min.y.floor() as i32;
+    let min_z = aabb.min.z.floor() as i32;
+    let max_x = aabb.max.x.ceil() as i32;
+    let max_y = aabb.max.y.ceil() as i32;
+    let max_z = aabb.max.z.ceil() as i32;
+
+    for x in min_x..max_x {
+        for y in min_y..max_y {
+            for z in min_z..max_z {
+                let block = world.get_block_at(x, y, z);
+                if let Some(block_aabb) = get_block_aabb(block, x, y, z) {
+                    if aabb.intersects(&block_aabb) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Simple block-collision helper returning up to one AABB for a given block.
+/// Length is 0 for non-colliding blocks (air, fluids, etc.).
+pub fn block_collision(block: Blocks) -> ([AABB; 1], usize) {
+    if let Some(aabb) = get_block_aabb(block, 0, 0, 0) {
+        ([aabb], 1)
+    } else {
+        // Value is unused when len == 0, but keep a valid AABB for safety.
+        (
+            [AABB::new(
+                DVec3::new(0.0, 0.0, 0.0),
+                DVec3::new(1.0, 1.0, 1.0),
+            )],
+            0,
+        )
+    }
+}

@@ -30,10 +30,10 @@ impl EntityImpl for PearlEntityImpl {
         // Inform clients of initial motion so the projectile animates
         for _player in entity.world_mut().players.values() {
             let _ = packet_buffer.write_packet(&EntityVelocity {
-                entity_id: VarInt(entity.id),
-                velocity_x: (self.velocity.x * 8000.0) as i16,
-                velocity_y: (self.velocity.y * 8000.0) as i16,
-                velocity_z: (self.velocity.z * 8000.0) as i16,
+                entity_id: entity.id,
+                velocity_x: self.velocity.x,
+                velocity_y: self.velocity.y,
+                velocity_z: self.velocity.z,
             });
         }
         entity.velocity = self.velocity;
@@ -45,9 +45,9 @@ impl EntityImpl for PearlEntityImpl {
         // 2. Raytrace from old → new position
         // 3. If hit: teleport owner & remove pearl
         // 4. Else: commit position, apply drag & gravity
-        
+
         let old_pos = entity.position;
-        
+
         // 1) Calculate new position after full motion
         let new_pos = DVec3::new(
             entity.position.x + self.velocity.x,
@@ -57,10 +57,10 @@ impl EntityImpl for PearlEntityImpl {
 
         // 2) Raytrace from oldPos to newPos
         let raytrace_result = raytrace_to_block(entity.world_mut(), old_pos, new_pos);
-        
+
         // 3) AABB collision check
         let collision_result = check_aabb_collision(entity.world_mut(), old_pos, new_pos);
-        
+
         // Use the earliest collision point between raytrace and AABB
         let collision = match (raytrace_result, collision_result) {
             (Some(rt), Some(cc)) => {
@@ -87,16 +87,16 @@ impl EntityImpl for PearlEntityImpl {
 
         // 4) No hit: commit position, apply drag & gravity
         entity.position = new_pos;
-        
+
         // Apply drag & gravity (vanilla throwable constants)
         const DRAG: f64 = 0.99;
         const GRAVITY: f64 = 0.03;
-        
+
         self.velocity.x *= DRAG;
         self.velocity.y *= DRAG;
         self.velocity.z *= DRAG;
         self.velocity.y -= GRAVITY;
-        
+
         entity.velocity = self.velocity;
 
         // Despawn after max ticks (no teleport)
@@ -127,11 +127,11 @@ fn raytrace_to_block(world: &mut crate::server::world::World, start: DVec3, end:
     let dx = end.x - start.x;
     let dy = end.y - start.y;
     let dz = end.z - start.z;
-    
+
     let step_x = if dx > 0.0 { 1 } else { -1 };
     let step_y = if dy > 0.0 { 1 } else { -1 };
     let step_z = if dz > 0.0 { 1 } else { -1 };
-    
+
     let mut t_max_x = if dx != 0.0 {
         ((if step_x > 0 { start.x.floor() as i32 + 1 } else { start.x.floor() as i32 }) as f64 - start.x) / dx
     } else {
@@ -147,27 +147,27 @@ fn raytrace_to_block(world: &mut crate::server::world::World, start: DVec3, end:
     } else {
         f64::MAX
     };
-    
+
     let t_delta_x = if dx != 0.0 { (step_x as f64) / dx } else { f64::MAX };
     let t_delta_y = if dy != 0.0 { (step_y as f64) / dy } else { f64::MAX };
     let t_delta_z = if dz != 0.0 { (step_z as f64) / dz } else { f64::MAX };
-    
+
     let mut x = start.x.floor() as i32;
     let mut y = start.y.floor() as i32;
     let mut z = start.z.floor() as i32;
-    
+
     let end_x = end.x.floor() as i32;
     let end_y = end.y.floor() as i32;
     let end_z = end.z.floor() as i32;
-    
+
     let mut last_t = 0.0;
-    
+
     loop {
         // Check if we've passed the end
         if (x - end_x).abs() > 1 || (y - end_y).abs() > 1 || (z - end_z).abs() > 1 {
             break;
         }
-        
+
         let block = world.get_block_at(x, y, z);
         if let Some(block_aabb) = get_block_aabb(block, x, y, z) {
             // Check if ray intersects this block's AABB
@@ -179,7 +179,7 @@ fn raytrace_to_block(world: &mut crate::server::world::World, start: DVec3, end:
                 });
             }
         }
-        
+
         // Step to next voxel
         if t_max_x < t_max_y {
             if t_max_x < t_max_z {
@@ -202,12 +202,12 @@ fn raytrace_to_block(world: &mut crate::server::world::World, start: DVec3, end:
                 z += step_z;
             }
         }
-        
+
         if last_t > 1.0 {
             break;
         }
     }
-    
+
     None
 }
 
@@ -219,7 +219,7 @@ fn check_aabb_collision(world: &mut crate::server::world::World, start: DVec3, e
         DVec3::new(start.x - PEARL_SIZE, start.y - PEARL_SIZE, start.z - PEARL_SIZE),
         DVec3::new(start.x + PEARL_SIZE, start.y + PEARL_SIZE, start.z + PEARL_SIZE),
     );
-    
+
     // Sweep AABB along the movement
     let min_x = start.x.min(end.x) - PEARL_SIZE;
     let max_x = start.x.max(end.x) + PEARL_SIZE;
@@ -227,16 +227,16 @@ fn check_aabb_collision(world: &mut crate::server::world::World, start: DVec3, e
     let max_y = start.y.max(end.y) + PEARL_SIZE;
     let min_z = start.z.min(end.z) - PEARL_SIZE;
     let max_z = start.z.max(end.z) + PEARL_SIZE;
-    
+
     let min_bx = min_x.floor() as i32;
     let max_bx = max_x.ceil() as i32;
     let min_by = min_y.floor() as i32;
     let max_by = max_y.ceil() as i32;
     let min_bz = min_z.floor() as i32;
     let max_bz = max_z.ceil() as i32;
-    
+
     let mut earliest_collision: Option<(f64, CollisionResult)> = None;
-    
+
     for bx in min_bx..=max_bx {
         for by in min_by..=max_by {
             for bz in min_bz..=max_bz {
@@ -266,7 +266,7 @@ fn check_aabb_collision(world: &mut crate::server::world::World, start: DVec3, e
             }
         }
     }
-    
+
     earliest_collision.map(|(_, result)| result)
 }
 
@@ -281,14 +281,14 @@ fn teleport_owner_from_hit(
     // Teleport based on pearl position, not block coords
     // pearl position = approximate body/eye area
     let mut feet = hit.hit_pos;
-    
+
     // Shift to feet (eye height)
     const EYE_HEIGHT: f64 = 1.62;
     feet.y -= EYE_HEIGHT;
-    
+
     // Small safety: push up if we're inside a block (capped at 2 steps)
     feet = resolve_upward(feet, world);
-    
+
     // Teleport player
     if let Some(player) = world.players.get_mut(owner_id) {
         player.write_packet(&PositionLook {
@@ -308,18 +308,18 @@ fn teleport_owner_from_hit(
 /// Capped at 2 iterations to prevent +4-6 block rockets
 fn resolve_upward(mut feet: DVec3, world: &mut crate::server::world::World) -> DVec3 {
     const MAX_RESOLVE_ATTEMPTS: usize = 2;
-    
+
     for _ in 0..MAX_RESOLVE_ATTEMPTS {
         let aabb = player_aabb_at(feet);
-        
+
         if !collides_with_any_solid(world, &aabb) {
             break; // No collision, we're done
         }
-        
+
         // Nudge upward
         feet.y += 1.0;
     }
-    
+
     feet
 }
 
@@ -328,7 +328,7 @@ fn resolve_upward(mut feet: DVec3, world: &mut crate::server::world::World) -> D
 fn player_aabb_at(feet: DVec3) -> AABB {
     const PLAYER_WIDTH: f64 = 0.3; // half-width (total width = 0.6)
     const PLAYER_HEIGHT: f64 = 1.8;
-    
+
     AABB::new(
         DVec3::new(feet.x - PLAYER_WIDTH, feet.y, feet.z - PLAYER_WIDTH),
         DVec3::new(feet.x + PLAYER_WIDTH, feet.y + PLAYER_HEIGHT, feet.z + PLAYER_WIDTH),
@@ -344,7 +344,7 @@ fn collides_with_any_solid(world: &mut crate::server::world::World, aabb: &AABB)
     let max_by = aabb.max.y.ceil() as i32;
     let min_bz = aabb.min.z.floor() as i32;
     let max_bz = aabb.max.z.ceil() as i32;
-    
+
     for bx in min_bx..=max_bx {
         for by in min_by..=max_by {
             for bz in min_bz..=max_bz {
@@ -357,7 +357,7 @@ fn collides_with_any_solid(world: &mut crate::server::world::World, aabb: &AABB)
             }
         }
     }
-    
+
     false
 }
 
@@ -387,28 +387,28 @@ fn ray_aabb_intersect(start: DVec3, end: DVec3, aabb: &AABB) -> Option<(DVec3, H
         if dir.y != 0.0 { 1.0 / dir.y } else { f64::MAX },
         if dir.z != 0.0 { 1.0 / dir.z } else { f64::MAX },
     );
-    
+
     let t1 = (aabb.min.x - start.x) * inv_dir.x;
     let t2 = (aabb.max.x - start.x) * inv_dir.x;
     let t3 = (aabb.min.y - start.y) * inv_dir.y;
     let t4 = (aabb.max.y - start.y) * inv_dir.y;
     let t5 = (aabb.min.z - start.z) * inv_dir.z;
     let t6 = (aabb.max.z - start.z) * inv_dir.z;
-    
+
     let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
     let tmax = t1.max(t2).min(t3.max(t4)).min(t5.max(t6));
-    
+
     if tmax < 0.0 || tmin > tmax || tmin > 1.0 {
         return None;
     }
-    
+
     let t = if tmin < 0.0 { tmax } else { tmin };
     let hit_pos = DVec3::new(
         start.x + dir.x * t,
         start.y + dir.y * t,
         start.z + dir.z * t,
     );
-    
+
     // Determine hit face by checking which plane was hit
     let epsilon = 1e-6;
     let hit_face = if (hit_pos.y - aabb.max.y).abs() < epsilon {
@@ -443,7 +443,7 @@ fn ray_aabb_intersect(start: DVec3, end: DVec3, aabb: &AABB) -> Option<(DVec3, H
         };
         HitFace::Side(normal)
     };
-    
+
     Some((hit_pos, hit_face))
 }
 
@@ -481,16 +481,16 @@ fn swept_aabb_collision(
             normal = normal.normalize();
             HitFace::Side(normal)
         };
-        
+
         return Some((0.0, moving_center, hit_face));
     }
-    
+
     // Check end position
     let end_aabb = AABB::new(
         moving_aabb.min + movement,
         moving_aabb.max + movement,
     );
-    
+
     if end_aabb.intersects(static_aabb) {
         let center = DVec3::new(
             (static_aabb.min.x + static_aabb.max.x) * 0.5,
@@ -516,10 +516,10 @@ fn swept_aabb_collision(
             normal = normal.normalize();
             HitFace::Side(normal)
         };
-        
+
         return Some((1.0, end_center, hit_face));
     }
-    
+
     None
 }
 
@@ -530,7 +530,7 @@ pub fn on_right_click(player: &mut Player) -> Result<()> {
         player.position.y + eye_height,
         player.position.z,
     );
-    
+
     // Convert yaw/pitch (degrees) to a forward direction vector
     let yaw_rad = (player.yaw as f64).to_radians();
     let pitch_rad = (player.pitch as f64).to_radians();
@@ -555,4 +555,10 @@ pub fn on_right_click(player: &mut Player) -> Result<()> {
     )?;
 
     Ok(())
+}
+
+/// Convenience wrapper for dungeon item handlers and other call sites.
+/// This matches the `throw_pearl(player)` signature used elsewhere.
+pub fn throw_pearl(player: &mut Player) -> Result<()> {
+    on_right_click(player)
 }

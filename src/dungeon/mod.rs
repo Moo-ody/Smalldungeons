@@ -5,3 +5,4 @@ pub mod dungeon_state;
 pub mod dungeon;
 pub mod map;
 pub mod p3;
+pub mod score;

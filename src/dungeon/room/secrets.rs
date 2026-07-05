@@ -360,10 +360,10 @@ impl EntityImpl for SecretItemEntityImpl {
     fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
         // Set initial velocity to zero to prevent item from moving
         let velocity_packet = EntityVelocity {
-            entity_id: VarInt(entity.id),
-            velocity_x: 0,
-            velocity_y: 0,
-            velocity_z: 0,
+            entity_id: entity.id,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
         };
         buffer.write_packet(&velocity_packet);
     }
@@ -377,10 +377,10 @@ impl EntityImpl for SecretItemEntityImpl {
             entity.last_position = DVec3::ZERO;
             
             let velocity_packet = EntityVelocity {
-                entity_id: VarInt(entity.id),
-                velocity_x: 0,
-                velocity_y: 0,
-                velocity_z: 0,
+                entity_id: entity.id,
+                velocity_x: 0.0,
+                velocity_y: 0.0,
+                velocity_z: 0.0,
             };
             buffer.write_packet(&velocity_packet);
         }

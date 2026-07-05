@@ -2,8 +2,9 @@ use crate::net::packets::packet_deserialize::PacketDeserializable;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::nbt::deserialize::deserialize_nbt;
 use crate::server::utils::nbt::nbt::{NBT, NBTNode};
-use crate::server::utils::nbt::serialize::serialize_nbt;
+use crate::server::utils::nbt::serialize::{serialize_nbt, TAG_COMPOUND_ID};
 use bytes::{Buf, BytesMut};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemStack {
@@ -67,6 +68,59 @@ impl ItemStack {
                 tag.nodes.insert("Unbreakable".into(), NBTNode::Byte(1));
                 tag.nodes.insert("HideFlags".into(), NBTNode::Int(127));
             }
+        }
+    }
+
+    /// Returns the `display` compound, creating both it and the root tag compound if absent.
+    fn display_compound_mut(&mut self) -> &mut HashMap<String, NBTNode> {
+        if self.tag_compound.is_none() {
+            self.tag_compound = Some(NBT::with_nodes(vec![]));
+        }
+        let tag = self.tag_compound.as_mut().unwrap();
+        if !matches!(tag.nodes.get("display"), Some(NBTNode::Compound(_))) {
+            tag.nodes.insert("display".into(), NBTNode::Compound(HashMap::new()));
+        }
+        match tag.nodes.get_mut("display").unwrap() {
+            NBTNode::Compound(map) => map,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Sets the item's custom display name (already legacy-formatted, e.g. `"\u{a7}5Earthen Blade"`).
+    /// Merges into any existing `display` compound instead of overwriting it (e.g. dye color).
+    pub fn set_display_name(&mut self, formatted_name: &str) {
+        self.display_compound_mut().insert("Name".into(), NBTNode::String(formatted_name.to_string()));
+    }
+
+    /// Sets an armor piece's dyed leather color from a packed RGB int. Merges into any
+    /// existing `display` compound instead of overwriting it (e.g. custom name).
+    pub fn set_dyed_color(&mut self, rgb: i32) {
+        self.display_compound_mut().insert("color".into(), NBTNode::Int(rgb));
+    }
+
+    /// Sets a `minecraft:player_head` item's skin via a Mojang profile "textures" property
+    /// value (the same base64 blob used for player skins/skulls elsewhere in this codebase).
+    pub fn set_skull_owner(&mut self, texture_value: &str) {
+        if self.tag_compound.is_none() {
+            self.tag_compound = Some(NBT::with_nodes(vec![]));
+        }
+        let texture_compound = NBTNode::Compound({
+            let mut map = HashMap::new();
+            map.insert("Value".into(), NBTNode::String(texture_value.to_string()));
+            map
+        });
+        let owner = NBTNode::Compound({
+            let mut map = HashMap::new();
+            map.insert("Id".into(), NBTNode::String(uuid::Uuid::new_v4().to_string()));
+            map.insert("Properties".into(), NBTNode::Compound({
+                let mut props = HashMap::new();
+                props.insert("textures".into(), NBTNode::List { type_id: TAG_COMPOUND_ID, children: vec![texture_compound] });
+                props
+            }));
+            map
+        });
+        if let Some(ref mut tag) = self.tag_compound {
+            tag.nodes.insert("SkullOwner".into(), owner);
         }
     }
 }

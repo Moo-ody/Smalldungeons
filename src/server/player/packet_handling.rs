@@ -214,6 +214,42 @@ impl ProcessPacket for PlayerBlockPlacement {
                 if let Err(e) = player.shoot_jerry_projectile() {
                 }
                 return;
+            } else if let Item::SpiritSceptre = item {
+                // Spirit Sceptre should fire even when right-clicking the ground / non-interactable blocks.
+                // If the clicked block is interactable, allow normal interaction instead.
+                if !self.position.is_invalid() {
+                    let world = player.world_mut();
+                    if world.interactable_blocks.contains_key(&self.position) {
+                        if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
+                            interact_block.interact(player, &self.position);
+                        }
+                        return;
+                    }
+                }
+
+                // Client may "predict" a placement; send rollback so it doesn't leave a ghost item/block.
+                if !self.position.is_invalid() {
+                    let mut pos = self.position.clone();
+                    match self.placed_direction {
+                        0 => pos.y -= 1,
+                        1 => pos.y += 1,
+                        2 => pos.z -= 1,
+                        3 => pos.z += 1,
+                        4 => pos.x -= 1,
+                        _ => pos.x += 1,
+                    }
+
+                    let world = player.world_mut();
+                    let block = world.get_block_at(pos.x, pos.y, pos.z);
+                    player.write_packet(&BlockChange {
+                        block_pos: pos,
+                        block_state: block.get_block_state_id(),
+                    });
+                }
+
+                // Fire bat (air click OR non-interactable block)
+                player.handle_right_click();
+                return;
             }
         }
         

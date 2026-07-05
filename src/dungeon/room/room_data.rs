@@ -126,14 +126,14 @@ impl RoomData {
     pub fn from_raw_json(raw_data: &str) -> RoomData {
         let json_data: Value = serde_json::from_str(raw_data).unwrap(); // surely we just parse into a struct instead of doing this indexing?
 
-        let name = json_data["name"].as_str().unwrap().to_string();
-        let id = json_data["id"].as_str().unwrap().to_string();
-        let shape = RoomShape::from_str(json_data["shape"].as_str().unwrap());
-        let room_type = RoomType::from_str(json_data["type"].as_str().unwrap());
-        let bottom = json_data["bottom"].as_number().unwrap().as_u64().unwrap() as i32;
-        let width = json_data["width"].as_number().unwrap().as_u64().unwrap() as i32;
-        let length = json_data["length"].as_number().unwrap().as_u64().unwrap() as i32;
-        let height = json_data["height"].as_number().unwrap().as_u64().unwrap() as i32;
+        let name = json_data["name"].as_str().unwrap_or("").to_string();
+        let id = json_data["id"].as_str().unwrap_or("").to_string();
+        let shape = RoomShape::from_str(json_data["shape"].as_str().unwrap_or("1x1"));
+        let room_type = RoomType::from_str(json_data["type"].as_str().unwrap_or("normal"));
+        let bottom = json_data["bottom"].as_number().and_then(|n| n.as_u64()).unwrap_or(0) as i32;
+        let width = json_data["width"].as_number().and_then(|n| n.as_u64()).unwrap_or(1) as i32;
+        let length = json_data["length"].as_number().and_then(|n| n.as_u64()).unwrap_or(1) as i32;
+        let height = json_data["height"].as_number().and_then(|n| n.as_u64()).unwrap_or(1) as i32;
 
         let secrets = json_data["secrets"]
             .as_number()
@@ -143,7 +143,7 @@ impl RoomData {
 
         let crusher_data: Vec<Value> = json_data["crushers"].as_array().unwrap_or(&Vec::new()).to_vec();
 
-        let hex_data = json_data["block_data"].as_str().unwrap();
+        let hex_data = json_data["block_data"].as_str().unwrap_or("");
 
         let mut block_data: Vec<Blocks> = Vec::new();
 

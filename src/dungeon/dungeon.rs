@@ -3,10 +3,12 @@ use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::map::DungeonMap;
 use crate::dungeon::room::room::{Room, RoomNeighbour, RoomSegment};
 use crate::dungeon::room::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
+use crate::dungeon::score::DungeonScoreState;
 use crate::net::protocol::play::clientbound::Maps;
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
+use crate::server::entity::dungeon_mobs::spawn_room_mobs;
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
@@ -43,6 +45,10 @@ pub struct Dungeon {
     pub room_grid: [Option<usize>; 36],
     pub state: DungeonState,
     pub map: DungeonMap,
+
+    /// F7 score tracking (skill/exploration/speed/bonus) + S/S+ announcement state. Reset
+    /// whenever a run starts (see the `Started` transition below).
+    pub score: DungeonScoreState,
 
     // Temporary per-player mapping of mushroom set index -> up destination (world BlockPos)
     pub temp_player_mushroom_up: HashMap<u32, Vec<BlockPos>>,
@@ -139,6 +145,7 @@ impl Dungeon {
             room_grid: room_grid,
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
+            score: DungeonScoreState::default(),
             temp_player_mushroom_up: HashMap::new(),
             locked_chests: HashMap::new(),
             lever_to_chests: HashMap::new(),
@@ -576,6 +583,11 @@ impl Dungeon {
         // Draw the entrance room on the map if it was just marked as entered
         if let Some(room_index) = entrance_room_index {
             self.map.draw_room(&self.rooms, &self.doors, room_index);
+            // Spawn this room's mobs now that the entrance room has been entered (dungeon started)
+            if let Some(room) = self.rooms.get(room_index) {
+                let world = &mut self.server_mut().world;
+                spawn_room_mobs(world, room_index, room);
+            }
         }
     }
 
@@ -626,6 +638,7 @@ impl Dungeon {
                         player.send_message("§e[NPC] §bMort§f: Here, I found this map when I first entered the dungeon.");
                     }
                     
+                    self.score.reset();
                     self.state = DungeonState::Started { current_ticks: 0 };
                     self.start_dungeon();
                 } else if *tick % 20 == 0 {
@@ -651,7 +664,16 @@ impl Dungeon {
 
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
-                
+
+                // Score is re-derived from live room state every tick (covers room clears and
+                // secrets found - both already tracked authoritatively on `Room` - without a
+                // second, independently-incremented copy that could drift out of sync) and
+                // checked against the S/S+ thresholds; `check_score_announcements` itself is a
+                // one-shot latch so this is safe to call unconditionally every tick.
+                self.score.elapsed_ticks = *current_ticks;
+                self.score.sync_exploration(&self.rooms);
+                self.score.check_score_announcements(&mut server.world);
+
                 // Play additional villager haggle sounds after the first one
                 // 2000ms = 40 ticks after dungeon start (first additional sound)
                 if *current_ticks == 40 {
@@ -786,6 +808,13 @@ impl Dungeon {
                         secret,
                         &mut server.world
                     );
+                }
+                
+                // Spawn each newly-entered room's mobs now, rather than for the whole dungeon up front
+                for room_index in &rooms_just_entered {
+                    if let Some(room) = self.rooms.get(*room_index) {
+                        spawn_room_mobs(&mut server.world, *room_index, room);
+                    }
                 }
                 
                 // Collect player data (without ticking crushers)
@@ -1152,9 +1181,48 @@ impl Dungeon {
                         pos_z: pos.z as f64 + 0.5,
                     });
                 }
-                
+
+            }
+
+            // Each blown crypt is +1 bonus score (capped at +5 - see `bonus_score`) - check
+            // immediately rather than waiting for the next tick so the announcement lands
+            // right as the crypt blows.
+            if crypts_exploded > 0 {
+                self.score.crypts += crypts_exploded as u32;
+                self.score.check_score_announcements(world);
             }
         }
         Ok(())
     }
+
+    // The four events below have no real trigger anywhere in this codebase yet - there's no
+    // player damage/death system and no puzzle minigame implementation, so nothing calls
+    // these automatically. They're exposed for whenever those systems exist (and for the
+    // `/dscore` debug command, so the score/announcement logic itself can be exercised without
+    // them).
+
+    pub fn record_death(&mut self) {
+        self.score.deaths += 1;
+        let world = &mut self.server_mut().world;
+        self.score.check_score_announcements(world);
+    }
+
+    pub fn record_puzzle_failed(&mut self) {
+        self.score.failed_puzzles += 1;
+        let world = &mut self.server_mut().world;
+        self.score.check_score_announcements(world);
+    }
+
+    pub fn record_mimic_killed(&mut self) {
+        self.score.mimic_killed = true;
+        let world = &mut self.server_mut().world;
+        self.score.check_score_announcements(world);
+    }
+
+    pub fn set_paul_ezpz(&mut self, enabled: bool) {
+        self.score.paul_ezpz = enabled;
+        let world = &mut self.server_mut().world;
+        self.score.check_score_announcements(world);
+    }
 }
+

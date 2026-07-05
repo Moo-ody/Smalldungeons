@@ -16,8 +16,20 @@ pub enum EntityVariant {
         is_converting: bool,
         is_attacking: bool,
     },
+    Skeleton {
+        /// Vanilla's "skeleton type" flag - true renders as a Wither Skeleton, false as a
+        /// normal Skeleton. Same entity id/model either way; this is purely metadata.
+        is_wither: bool,
+    },
+    Enderman {
+        is_aggressive: bool,
+    },
     Bat {
         hanging: bool
+    },
+    /// Spirit Sceptre bat projectile. Intentionally separate from secret bats.
+    SpiritSceptreBat {
+        hanging: bool,
     },
     FallingBlock,
     // NEW: a thrown ender pearl (spawned with Spawn Object)
@@ -28,6 +40,9 @@ pub enum EntityVariant {
     BonzoProjectile,
     // NEW: projectile for Jerry-Chine Gun
     JerryProjectile,
+    /// Crypt Souleater's ranged attack - visually a Wither Skull, flies in a straight line
+    /// (no gravity/drag), unlike `Arrow`.
+    WitherSkullProjectile,
 }
 
 impl EntityVariant {
@@ -40,7 +55,10 @@ impl EntityVariant {
             EntityVariant::DroppedItem { .. } => 2,
             EntityVariant::ArmorStand => 30,
             EntityVariant::Zombie { .. } => 54,
+            EntityVariant::Skeleton { .. } => 51,
+            EntityVariant::Enderman { .. } => 58,
             EntityVariant::Bat { .. } => 65, // mob id (Spawn Mob space)
+            EntityVariant::SpiritSceptreBat { .. } => 65, // same mob id, separate variant
             EntityVariant::FallingBlock => 70,
             // NEW: object type id for ender pearl (Spawn Object space, 1.8)
             // It's OK that this is also 65 - Spawn Object and Spawn Mob use different id spaces.
@@ -51,13 +69,30 @@ impl EntityVariant {
             EntityVariant::BonzoProjectile => 65,
             // NEW: jerry projectile object type id (Spawn Object space, 1.8)
             EntityVariant::JerryProjectile => 65,
+            // Wither Skull object type id (Spawn Object space, 1.8). NOTE: 65 (used above by
+            // EnderPearl/BonzoProjectile/JerryProjectile) is actually Thrown Ender Pearl in
+            // vanilla 1.8's object type table, not Wither Skull - confirmed by this exact bug
+            // (a wither skull rendering as a thrown pearl). The real Wither Skull id is 66.
+            EntityVariant::WitherSkullProjectile => 66,
         }
     }
 
     pub const fn is_player(&self) -> bool {
-        match self { 
+        match self {
             EntityVariant::Player => true,
             _ => false,
+        }
+    }
+
+    /// The `SpawnObject` packet's "Object Data" field. For 1.8, a value of `0` tells the
+    /// client this object has no initial velocity at all - the packet's velocity fields
+    /// aren't even written on the wire in that case (see `SpawnObject`'s `PacketSerializable`
+    /// impl: `if self.data > 0 { write velocity }`). Arrows need their initial velocity for
+    /// correct client-side motion/rotation, so they must use a nonzero value here.
+    pub const fn object_data(&self) -> i32 {
+        match self {
+            EntityVariant::Arrow | EntityVariant::WitherSkullProjectile => 1,
+            _ => 0,
         }
     }
     
@@ -73,6 +108,7 @@ impl EntityVariant {
             EntityVariant::Arrow => true,
             // NEW: bonzo projectiles are objects
             EntityVariant::BonzoProjectile => true,
+            EntityVariant::WitherSkullProjectile => true,
             _ => false,
         }
     }
@@ -157,7 +193,24 @@ impl PacketSerializable for EntityMetadata {
                 // Index 15: Try zombie aggressive flag - this controls arm pose in 1.8
                 write_data(buf, BYTE, 15, *is_attacking as u8);
             }
+            EntityVariant::Skeleton { is_wither } => {
+                // Vanilla EntitySkeleton only registers index 13 (Byte): 0 = normal skeleton,
+                // 1 = wither skeleton. There is no separate "aggressive"/"has bow" field.
+                write_data(buf, BYTE, 13, *is_wither as u8);
+            }
+            EntityVariant::Enderman { is_aggressive } => {
+                // Vanilla EntityEnderman's DataWatcher registers these exact indices/types:
+                // 16 = carried block id (Short), 17 = carried block metadata (Byte),
+                // 18 = isScreaming/aggressive (Byte). Any mismatch throws a client-side
+                // ClassCastException the moment the entity ticks.
+                write_data(buf, SHORT, 16, 0i16); // no carried block
+                write_data(buf, BYTE, 17, 0u8);
+                write_data(buf, BYTE, 18, *is_aggressive as u8);
+            }
             EntityVariant::Bat { hanging } => {
+                write_data(buf, BYTE, 16, *hanging);
+            }
+            EntityVariant::SpiritSceptreBat { hanging } => {
                 write_data(buf, BYTE, 16, *hanging);
             }
             // NEW: Ender pearls don't carry extra metadata

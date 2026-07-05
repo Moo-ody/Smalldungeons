@@ -65,10 +65,10 @@ impl Server {
                     use crate::net::var_int::VarInt;
                     
                     let _ = player.write_packet(&EntityVelocity {
-                        entity_id: VarInt(projectile_id),
-                        velocity_x: (direction.x * 20.0 / 20.0 * 8000.0) as i16, // Convert to velocity packet format
-                        velocity_y: (direction.y * 20.0 / 20.0 * 8000.0) as i16,
-                        velocity_z: (direction.z * 20.0 / 20.0 * 8000.0) as i16,
+                        entity_id: projectile_id,
+                        velocity_x: direction.x * 20.0 / 20.0,
+                        velocity_y: direction.y * 20.0 / 20.0,
+                        velocity_z: direction.z * 20.0 / 20.0,
                     });
                 }
             }
@@ -80,14 +80,14 @@ impl Server {
     pub fn spawn_ender_pearl(&mut self, player: &mut Player, velocity: crate::server::utils::dvec3::DVec3) -> anyhow::Result<()> {
         use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
         use crate::server::items::ender_pearl::PearlEntityImpl;
-        
+
         let eye_height = 1.62; // player eye height in blocks
         let eye_pos = crate::server::utils::dvec3::DVec3::new(
             player.position.x,
             player.position.y + eye_height,
             player.position.z,
         );
-        
+
         // Convert yaw/pitch (degrees) to a forward direction vector
         let yaw_rad = (player.yaw as f64).to_radians();
         let pitch_rad = (player.pitch as f64).to_radians();
@@ -161,17 +161,19 @@ impl Server {
                         player.write_packet(&chunk.get_chunk_data(x, z, true));
     
                         for entity_id in chunk.entities.iter_mut() {
-                            let (entity, entity_impl) = &mut self.world.entities.get_mut(&entity_id).unwrap();
+                            // A stale ID here (chunk-membership desync) should never crash a
+                            // player join - skip it rather than unwrap.
+                            let Some((entity, entity_impl)) = self.world.entities.get_mut(&entity_id) else { continue };
                             // Send spawn packets directly to player instead of using chunk buffer
                             entity.write_spawn_packet(&mut player.packet_buffer);
                             entity_impl.spawn(entity, &mut player.packet_buffer);
-                            
+
                             // Resync equipment if this entity has equipment
                             if let Some(equipment) = self.world.entity_equipment.get(&*entity_id) {
                                 use crate::server::entity::spawn_equipped::send_equipment_packets;
                                 send_equipment_packets(&mut player.packet_buffer, *entity_id, equipment);
                             }
-                        } 
+                        }
                     }
                 );
 
@@ -290,6 +292,26 @@ impl Server {
                  player.write_packet(&CustomPayload {
                      channel: "MC|Brand".into(),
                      data: &data,
+                 });
+
+                 // Hypixel Mod API: send Hello first so client sets onHypixel = true
+                 let hello_data = crate::server::hypixel_mod_api::build_hello_payload();
+                 player.write_packet(&CustomPayload {
+                     channel: crate::server::hypixel_mod_api::HYPIXEL_HELLO_CHANNEL.into(),
+                     data: &hello_data,
+                 });
+                 // Then location so Skytils (SBInfo, LocationChangeEvent), SBA, etc. see server/lobby/mode.
+                 // Skytils uses mode for SkyblockIsland.byMode (e.g. "dungeon", "hub", "dynamic").
+                 let location_data = crate::server::hypixel_mod_api::build_location_payload(
+                     "mini1D",           // serverName (SBInfo.server)
+                     Some("SKYBLOCK"),   // serverType (SBInfo.serverType, sets Utils.inSkyblock)
+                     Some("lobby"),      // lobbyName
+                     Some("dungeon"),    // mode -> Skytils SkyblockIsland.current (Dungeon)
+                     None,               // map
+                 );
+                 player.write_packet(&CustomPayload {
+                     channel: crate::server::hypixel_mod_api::HYPIXEL_LOCATION_CHANNEL.into(),
+                     data: &location_data,
                  });
                 
                 player.flush_packets();

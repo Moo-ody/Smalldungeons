@@ -9,6 +9,7 @@ use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::entity::equipment::Equipment;
 use crate::server::entity::spawn_equipped::{CombatState, AISuspended, AttackCooldown, CurrentTarget};
+use crate::server::entity::dungeon_mobs::ai::state::MobAiState;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
@@ -57,6 +58,19 @@ pub struct World {
     
     /// Current target storage for entities
     pub entity_current_target: HashMap<EntityId, CurrentTarget>,
+
+    /// Following nametag armor stand: host entity id -> nametag entity id (so when host despawns we despawn nametag too)
+    pub entity_following_nametag: HashMap<EntityId, EntityId>,
+
+    /// Dungeon mob AI state (activation, target, leash, cooldowns, ...) - one bundled map
+    /// rather than one per "reusable component", see `dungeon_mobs::ai::state` module docs.
+    pub entity_mob_ai: HashMap<EntityId, MobAiState>,
+
+    /// Which room a *starred* dungeon mob belongs to - only starred mobs are tracked here
+    /// (non-starred mobs don't gate the room's map checkmark, see `Room::starred_mobs_remaining`).
+    /// Consulted by `ai/combat.rs::kill_mob` to decrement the room's count and redraw the map
+    /// once it hits 0.
+    pub entity_starred_mob_room: HashMap<EntityId, usize>,
 
     pub entities_for_removal: Vec<EntityId>,
 
@@ -108,6 +122,9 @@ impl World {
             entity_ai_suspended: HashMap::new(),
             entity_attack_cooldown: HashMap::new(),
             entity_current_target: HashMap::new(),
+            entity_following_nametag: HashMap::new(),
+            entity_mob_ai: HashMap::new(),
+            entity_starred_mob_room: HashMap::new(),
             entities_for_removal: Vec::new(),
 
             spawn_point: DVec3::ZERO,
@@ -167,9 +184,44 @@ impl World {
         Ok(id)
     }
 
-    /// adds the entity id to 
+    /// Like `spawn_entity`, but sets the entity's initial `velocity` *before* the spawn
+    /// packet is written. Needed for objects (e.g. arrows) whose `SpawnObject` packet must
+    /// carry their initial velocity for correct client-side motion/rotation - setting
+    /// `entity.velocity` from an `EntityImpl::spawn` hook is too late, since
+    /// `write_spawn_packet` already ran by then.
+    pub fn spawn_entity_with_velocity<E : EntityImpl + 'static>(&mut self, position: DVec3, velocity: DVec3, metadata: EntityMetadata, mut entity_impl: E) -> anyhow::Result<EntityId> {
+        let world_ptr: *mut World = self;
+        let mut entity = Entity::new(
+            world_ptr,
+            self.new_entity_id(),
+            position,
+            metadata.clone(),
+        );
+        entity.velocity = velocity;
+
+        let chunk_x = (entity.position.x.floor() as i32) >> 4;
+        let chunk_z = (entity.position.z.floor() as i32) >> 4;
+
+        if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+            chunk.insert_entity(entity.id);
+            entity.write_spawn_packet(&mut chunk.packet_buffer);
+            entity_impl.spawn(&mut entity, &mut chunk.packet_buffer);
+        }
+
+        let id = entity.id;
+        self.entities.insert(id, (entity, Box::new(entity_impl)));
+        Ok(id)
+    }
+
+    /// Queues the entity for removal. If this entity has a following nametag (armor stand), that is despawned too.
     pub fn despawn_entity(&mut self, entity_id: EntityId) {
-        self.entities_for_removal.push(entity_id)
+        // If this entity is a host for a following nametag, despawn the nametag first
+        if let Some(nametag_id) = self.entity_following_nametag.remove(&entity_id) {
+            self.despawn_entity(nametag_id);
+        }
+        // Clean up reverse mapping if something despawns the nametag directly
+        self.entity_following_nametag.retain(|_, v| *v != entity_id);
+        self.entities_for_removal.push(entity_id);
     }
 
     pub fn tick(&mut self) -> anyhow::Result<()> {
@@ -178,13 +230,17 @@ impl World {
         
         if !self.entities_for_removal.is_empty() {
             for entity_id in take(&mut self.entities_for_removal) {
-                // Clean up equipment and combat state when entity is removed
+                // Clean up equipment, combat state, and following nametag mapping when entity is removed
                 self.entity_equipment.remove(&entity_id);
                 self.entity_combat_state.remove(&entity_id);
                 self.entity_ai_suspended.remove(&entity_id);
                 self.entity_attack_cooldown.remove(&entity_id);
                 self.entity_current_target.remove(&entity_id);
-                
+                self.entity_following_nametag.remove(&entity_id);
+                self.entity_following_nametag.retain(|_, v| *v != entity_id);
+                self.entity_mob_ai.remove(&entity_id);
+                self.entity_starred_mob_room.remove(&entity_id);
+
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
                     if let Some(chunk) = entity.chunk_mut() {
                         chunk.packet_buffer.write_packet(&DestroyEntites {
@@ -208,13 +264,30 @@ impl World {
                 &mut chunk.packet_buffer
             } else {
                 // throwaway packet buffer, doesn't feel like a good idea
-                // however there is a chance that an entity might end up outside chunk grid 
+                // however there is a chance that an entity might end up outside chunk grid
                 // and end up stuck if we tick only inside a valid chunk
                 &mut PacketBuffer::new()
             };
             entity.tick(entity_impl, packet_buffer);
         }
-        
+
+        // Migrate any entity that moved to a different chunk this tick (e.g. a dungeon mob
+        // walking around) from its old chunk's `entities` list to the new one's - otherwise
+        // that list only ever reflects each entity's spawn chunk, never where it actually is.
+        for (entity, _) in self.entities.values_mut() {
+            let new_chunk = entity.chunk_position();
+            if new_chunk == entity.current_chunk {
+                continue;
+            }
+            if let Some(old_chunk) = self.chunk_grid.get_chunk_mut(entity.current_chunk.0, entity.current_chunk.1) {
+                old_chunk.remove_entity(&entity.id);
+            }
+            if let Some(new_chunk_ref) = self.chunk_grid.get_chunk_mut(new_chunk.0, new_chunk.1) {
+                new_chunk_ref.insert_entity(entity.id);
+            }
+            entity.current_chunk = new_chunk;
+        }
+
                 // Process scheduled tactical insertions
         tactical_insertion::process(self)?;
         

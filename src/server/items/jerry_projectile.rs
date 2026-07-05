@@ -86,10 +86,10 @@ impl JerryProjectileImpl {
                     let knockback_z = -knockback_dir.z * horizontal;
                     
                     player.write_packet(&EntityVelocity {
-                        entity_id: VarInt(player.entity_id),
-                        velocity_x: (knockback_x * 8000.0) as i16,
-                        velocity_y: (knockback_y * 8000.0) as i16,
-                        velocity_z: (knockback_z * 8000.0) as i16,
+                        entity_id: player.entity_id,
+                        velocity_x: knockback_x,
+                        velocity_y: knockback_y,
+                        velocity_z: knockback_z,
                     });
                 }
             });
@@ -106,10 +106,10 @@ impl EntityImpl for JerryProjectileImpl {
         // Set initial velocity for smooth projectile animation
         for _player in entity.world_mut().players.values() {
             let _ = packet_buffer.write_packet(&EntityVelocity {
-                entity_id: VarInt(entity.id),
-                velocity_x: (self.velocity_per_tick.x * 8000.0) as i16,
-                velocity_y: (self.velocity_per_tick.y * 8000.0) as i16,
-                velocity_z: (self.velocity_per_tick.z * 8000.0) as i16,
+                entity_id: entity.id,
+                velocity_x: self.velocity_per_tick.x,
+                velocity_y: self.velocity_per_tick.y,
+                velocity_z: self.velocity_per_tick.z,
             });
         }
         entity.velocity = self.velocity_per_tick;

@@ -32,7 +32,7 @@ pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosion_pos: DVec3) {
+pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosion_pos: DVec3) {
     const EXPLOSION_RADIUS: f64 = 7.0; // 7 block radius = 13x13x13 area
     
     // Create explosion AABB (13x13x13 centered at explosion_pos)
@@ -75,20 +75,41 @@ fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosi
         });
     }
     
-    // Check for bats in explosion range
+    // Check for secret bats and dungeon mobs (zombies with combat state) in explosion range.
+    // Spirit Sceptre bats are a separate entity variant and should not be affected.
     let mut bats_to_kill = Vec::new();
+    let mut dungeon_mobs_to_kill = Vec::new();
+
+    let secret_bat_ids: std::collections::HashSet<i32> = server
+        .dungeon
+        .rooms
+        .iter()
+        .flat_map(|room| room.json_secrets.iter())
+        .filter_map(|secret_rc| secret_rc.borrow().bat_entity_id)
+        .collect();
     for (entity_id, (entity, _)) in &server.world.entities {
-        // Check if entity is a bat
+        // Falling block entities should be completely invincible / not affected by Wither Impact.
+        if matches!(entity.metadata.variant, EntityVariant::FallingBlock) {
+            continue;
+        }
+        let entity_aabb = AABB {
+            min: DVec3::new(entity.position.x - 0.3, entity.position.y, entity.position.z - 0.3),
+            max: DVec3::new(entity.position.x + 0.3, entity.position.y + 0.9, entity.position.z + 0.3),
+        };
+        if !explosion_aabb.intersects(&entity_aabb) {
+            continue;
+        }
+        // Only secret bats die to hyp (secrets)
         if let EntityVariant::Bat { .. } = &entity.metadata.variant {
-            // Check if bat is within explosion range
-            let bat_aabb = AABB {
-                min: DVec3::new(entity.position.x - 0.3, entity.position.y, entity.position.z - 0.3),
-                max: DVec3::new(entity.position.x + 0.3, entity.position.y + 0.9, entity.position.z + 0.3),
-            };
-            
-            if explosion_aabb.intersects(&bat_aabb) {
+            if secret_bat_ids.contains(entity_id) {
                 bats_to_kill.push(*entity_id);
             }
+        }
+        // Any dungeon mob dies to hyp, same way as bats - `entity_mob_ai` is present on
+        // every dungeon mob regardless of model (zombie/skeleton/enderman/player-NPC), unlike
+        // `entity_combat_state` which only melee archetypes register.
+        else if server.world.entity_mob_ai.contains_key(entity_id) {
+            dungeon_mobs_to_kill.push(*entity_id);
         }
     }
     
@@ -140,6 +161,13 @@ fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosi
         
         // Despawn the bat
         server.world.despawn_entity(bat_id);
+    }
+    
+    // Kill dungeon mobs (zombie commanders etc.) in explosion range - death animation +
+    // species-appropriate sound (not always zombie) + despawn, shared with the direct
+    // lethal-weapon hit path.
+    for mob_id in dungeon_mobs_to_kill {
+        crate::server::entity::dungeon_mobs::ai::combat::kill_mob(&mut server.world, mob_id);
     }
     
     // Update map for rooms that had secrets found

@@ -77,6 +77,25 @@ impl Inventory {
                     let slot = packet.slot_id as usize;
                     if is_valid_range(slot) {
                         let item = self.get_slot_cloned(slot);
+
+                        // Prevent moving locked items (e.g., Skyblock menu / magical map)
+                        let clicked_locked = matches!(&item, ItemSlot::Filled(it, _) if !it.can_move_in_inventory());
+                        let dragged_locked = matches!(&self.dragged_item, ItemSlot::Filled(it, _) if !it.can_move_in_inventory());
+                        if clicked_locked || dragged_locked {
+                            // Resync both cursor + slot back to client
+                            packet_buffer.write_packet(&SetSlot {
+                                window_id: -1,
+                                slot: 0,
+                                item_stack: self.dragged_item.get_item_stack(),
+                            });
+                            packet_buffer.write_packet(&SetSlot {
+                                window_id: 0,
+                                slot: packet.slot_id,
+                                item_stack: item.get_item_stack(),
+                            });
+                            return false;
+                        }
+
                         self.set_slot(self.dragged_item.clone(), slot);
                         self.dragged_item = item;
                     }
@@ -86,6 +105,15 @@ impl Inventory {
                 let slot = packet.slot_id as usize;
                 if is_valid_range(slot) {
                     let clicked_stack = self.get_slot_cloned(slot);
+                    // Don't allow shift-moving locked items
+                    if matches!(&clicked_stack, ItemSlot::Filled(it, _) if !it.can_move_in_inventory()) {
+                        packet_buffer.write_packet(&SetSlot {
+                            window_id: 0,
+                            slot: packet.slot_id,
+                            item_stack: clicked_stack.get_item_stack(),
+                        });
+                        return false;
+                    }
                     let range = if slot >= 36 { 9..36 } else { 36..45 };
     
                     for index in range {
@@ -107,6 +135,25 @@ impl Inventory {
                     // this is what hypixel does, that allows ghost pickaxes
                     let to_slot = 36 + button;
                     let item = self.get_slot_cloned(slot);
+
+                    // Prevent swapping locked items via hotkey
+                    let from_locked = matches!(&item, ItemSlot::Filled(it, _) if !it.can_move_in_inventory());
+                    let to_item = self.get_slot_cloned(to_slot);
+                    let to_locked = matches!(&to_item, ItemSlot::Filled(it, _) if !it.can_move_in_inventory());
+                    if from_locked || to_locked {
+                        // Resync both involved slots
+                        packet_buffer.write_packet(&SetSlot {
+                            window_id: 0,
+                            slot: slot as i16,
+                            item_stack: item.get_item_stack(),
+                        });
+                        packet_buffer.write_packet(&SetSlot {
+                            window_id: 0,
+                            slot: to_slot as i16,
+                            item_stack: to_item.get_item_stack(),
+                        });
+                        return false;
+                    }
     
                     if to_slot == slot {
                         packet_buffer.write_packet(&SetSlot {
@@ -115,9 +162,8 @@ impl Inventory {
                             item_stack: item.get_item_stack(),
                         })
                     } else {
-                        let item_to = self.get_slot_cloned(to_slot);
                         self.set_slot(item, to_slot);
-                        self.set_slot(item_to, slot);
+                        self.set_slot(to_item, slot);
                     }
                 }
             }
@@ -127,10 +173,20 @@ impl Inventory {
             ClickMode::Drop => {
                 let slot = packet.slot_id as usize;
                 if is_valid_range(slot) {
+                    // Prevent dropping locked items
+                    let existing = self.get_slot_cloned(slot);
+                    if matches!(&existing, ItemSlot::Filled(it, _) if !it.can_move_in_inventory()) {
+                        packet_buffer.write_packet(&SetSlot {
+                            window_id: 0,
+                            slot: packet.slot_id,
+                            item_stack: existing.get_item_stack(),
+                        });
+                        return false;
+                    }
                     packet_buffer.write_packet(&SetSlot {
                         window_id: 0,
                         slot: packet.slot_id,
-                        item_stack: self.get_slot_cloned(slot).get_item_stack(),
+                        item_stack: existing.get_item_stack(),
                     })
                 }
             }

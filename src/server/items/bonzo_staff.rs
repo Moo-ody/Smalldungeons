@@ -38,10 +38,10 @@ impl EntityImpl for BonzoStaffProjectile {
         // Set initial velocity for smooth projectile animation
         for player in entity.world_mut().players.values() {
             let _ = packet_buffer.write_packet(&EntityVelocity {
-                entity_id: VarInt(entity.id),
-                velocity_x: (self.velocity.x * 8000.0) as i16,
-                velocity_y: (self.velocity.y * 8000.0) as i16,
-                velocity_z: (self.velocity.z * 8000.0) as i16,
+                entity_id: entity.id,
+                velocity_x: self.velocity.x,
+                velocity_y: self.velocity.y,
+                velocity_z: self.velocity.z,
             });
         }
     }

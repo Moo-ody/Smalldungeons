@@ -1,6 +1,8 @@
 use crate::server::commands::argument::Argument;
 use crate::server::commands::command::CommandMetadata;
 use crate::server::commands::outcome::Outcome;
+use crate::server::commands::r#impl::depth_strider::DepthStrider;
+use crate::server::commands::r#impl::dscore::DScore;
 use crate::server::commands::r#impl::locraw::Locraw;
 use crate::server::commands::r#impl::mort::Mort;
 // use crate::server::commands::r#impl::p3::P3;
@@ -23,7 +25,9 @@ crate::command_registry! {
     Locraw,
     ZombieSpawn,
     SpawnZombie,
-    Term
+    Term,
+    DepthStrider,
+    DScore
 }
 
 impl Command {

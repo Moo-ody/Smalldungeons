@@ -222,12 +222,17 @@ impl DungeonMap {
         {
             // Skip checkmark for entrance room (green room) and fairy room (pink room)
             // They stay their color with no checkmark
-            if room.room_data.room_type != Entrance && room.room_data.room_type != Fairy {
+            //
+            // Otherwise, no checkmark at all (room just stays its base color, e.g. brown) until
+            // every starred mob spawned into it has died - a room with no starred mobs starts
+            // at 0 remaining, so it counts as cleared immediately. Once cleared, green if all
+            // secrets are found (or the room has none), white if secrets are still missing.
+            if room.room_data.room_type != Entrance && room.room_data.room_type != Fairy
+                && room.starred_mobs_remaining == 0 {
                 let x = room.segments[0].x * 20 + 4;
                 let y = room.segments[0].z * 20 + 4;
 
-                // Checkmark color: white if secrets not all found, green if all secrets found
-                let checkmark_color = if room.found_secrets >= room.room_data.secrets && room.room_data.secrets > 0 {
+                let checkmark_color = if room.room_data.secrets == 0 || room.found_secrets >= room.room_data.secrets {
                     GREEN
                 } else {
                     WHITE

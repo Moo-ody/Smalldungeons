@@ -273,6 +273,8 @@ async fn main() -> Result<()> {
     for room in &mut dungeon.rooms {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
         room.load_into_world(&mut server.world);
+        // Mobs are spawned when a player actually enters the room (see Dungeon::tick /
+        // Dungeon::start_dungeon), not eagerly here for the whole dungeon at once.
 
         // Immediately scan crypts on world load for debug visibility
         if room.crypt_patterns.len() > 0 && !room.crypts_checked {

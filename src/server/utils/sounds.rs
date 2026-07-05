@@ -32,6 +32,7 @@ id_enum! {
         Portal("mob.portal"),  
         FireIgnite("fire.ignite"),
         ZombieRemedy("mob.zombie.remedy"),
+        ZombieDeath("mob.zombie.death"),
         RandomClick("random.click"),
         EnderDragonGrowl("mob.enderdragon.growl"),
         VillagerHaggle("mob.villager.haggle"),
@@ -50,6 +51,7 @@ id_enum! {
         BatDeath("mob.bat.death"),
         BatHurt("mob.bat.hurt"),
         PistonIn("tile.piston.in"),
-        
+        SkeletonDeath("mob.skeleton.death"),
+        EndermenDeath("mob.endermen.death"),
     }
 }

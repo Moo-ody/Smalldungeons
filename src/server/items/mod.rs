@@ -12,6 +12,7 @@ mod ether_transmission;
 mod etherwarp;
 pub mod ender_pearl;
 mod hyperion;
+mod spirit_sceptre;
 pub mod bonzo_projectile;
 pub mod jerry_projectile;
 
@@ -35,6 +36,9 @@ pub enum Item {
     JerryChineGun,
     VanillaChest,
     RedstoneKey,
+    /// Diamond boots enchanted with Depth Strider III - a testing convenience for swimming,
+    /// not a real Hypixel item.
+    DepthStriderBoots,
 }
 
 impl Item {
@@ -63,9 +67,7 @@ impl Item {
                 hyperion::on_right_click(player)?;
             }
             Item::SpiritSceptre => {
-                // spawn bats, they copy yaw and pitch of player, idk the speed or whatever but
-                // when they hit a solid block they blow up in like 10 block radius (or square) or something
-                
+                spirit_sceptre::on_right_click(player)?;
                 // Always restore stack size to prevent consumption
                 let hotbar_slot = player.held_slot as usize + 36;
                 player.inventory.set_slot(ItemSlot::Filled(Item::SpiritSceptre, 1), hotbar_slot);
@@ -199,6 +201,10 @@ impl Item {
             _ => {}
         }
         Ok(())
+    }
+
+    pub fn can_move_in_inventory(&self) -> bool {
+        !matches!(self, Item::SkyblockMenu | Item::MagicalMap)
     }
     
     /// creates a vanilla item stack, including all nbt data.
@@ -616,6 +622,27 @@ impl Item {
                     ]),
                     NBT::compound("ExtraAttributes", vec![
                         NBT::string("id", "REDSTONE_KEY"),
+                    ]),
+                ])),
+            },
+            Item::DepthStriderBoots => ItemStack {
+                item: 313, // diamond boots
+                stack_size: 1,
+                metadata: 0,
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound({
+                            let mut map = HashMap::new();
+                            map.insert("id".into(), NBTNode::Short(8)); // Depth Strider
+                            map.insert("lvl".into(), NBTNode::Short(3));
+                            map
+                        })
+                    ]),
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§bDiamond Boots"),
+                        NBT::list_from_string("Lore", indoc! {r#"
+                            §7Depth Strider III
+                        "#}),
                     ]),
                 ])),
             },
