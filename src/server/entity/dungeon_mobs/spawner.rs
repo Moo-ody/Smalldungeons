@@ -177,14 +177,14 @@ fn spawn_active_mob(
     let spawn_result = if spawn_as_npc {
         let uuid = Uuid::new_v4();
         let username: String = full_name.chars().take(16).collect();
-        // No per-archetype skin has been chosen yet (see `DungeonMobType::skin_override`) -
-        // fall back to the same known-good placeholder skin the tab-list system already uses,
-        // so these NPCs are guaranteed to render as a normal humanoid instead of risking an
-        // invisible/broken model until real skins are filled in.
+        // Use this archetype's real skin if one has been set (see `DungeonMobType::skin_override`),
+        // otherwise fall back to the same known-good placeholder skin the tab-list system
+        // already uses, so these NPCs are guaranteed to render as a normal humanoid instead of
+        // risking an invisible/broken model.
         let (texture_value, texture_signature) = archetype
             .and_then(|archetype| archetype.skin_override())
-            .map(|(value, signature)| (value.to_string(), signature.to_string()))
-            .unwrap_or_else(|| (GRAY.to_string(), GRAY_SIG.to_string()));
+            .map(|(value, signature)| (value.to_string(), signature.map(str::to_string)))
+            .unwrap_or_else(|| (GRAY.to_string(), Some(GRAY_SIG.to_string())));
 
         // Register the tab-list profile/skin BEFORE the entity is spawned. Vanilla clients
         // resolve a `SpawnPlayer` packet's skin purely by looking up the UUID in their own
@@ -192,13 +192,13 @@ fn spawn_active_mob(
         // would otherwise do, writing it before `DungeonPlayerMobImpl::spawn`'s
         // `PlayerListItem` in the very same buffer), the client falls back to a blank/unknown
         // profile and the NPC renders invisible instead of with the intended skin.
-        register_npc_tab_list_entry(world, uuid, &username, &texture_value, &texture_signature);
+        register_npc_tab_list_entry(world, uuid, &username, &texture_value, texture_signature.as_deref());
 
         let entity_impl = DungeonPlayerMobImpl {
             uuid,
             username,
             texture_value,
-            texture_signature: Some(texture_signature),
+            texture_signature,
         };
         world.spawn_entity_with_uuid(world_pos, metadata, entity_impl, Some(uuid))
     } else if archetype.is_some() {
@@ -257,11 +257,11 @@ fn spawn_active_mob(
 /// `SpawnPlayer` packet is sent (see call site for why the order matters). Players who join
 /// later still get it fresh via `DungeonPlayerMobImpl::spawn`'s own registration when they
 /// first view the mob's chunk.
-fn register_npc_tab_list_entry(world: &mut World, uuid: Uuid, username: &str, texture_value: &str, texture_signature: &str) {
+fn register_npc_tab_list_entry(world: &mut World, uuid: Uuid, username: &str, texture_value: &str, texture_signature: Option<&str>) {
     let mut properties = HashMap::new();
     properties.insert("textures".to_string(), GameProfileProperty {
         value: texture_value.to_string(),
-        signature: Some(texture_signature.to_string()),
+        signature: texture_signature.map(str::to_string),
     });
 
     let player_data = PlayerData {
