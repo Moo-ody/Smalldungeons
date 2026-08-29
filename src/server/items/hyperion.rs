@@ -8,7 +8,18 @@ use crate::net::internal_packets::NetworkThreadMessage;
 use tokio::sync::mpsc::UnboundedSender;
 use std::f64::consts::PI;
 
+/// Minimum time between Hyperion right-click uses.
+const HYPERION_COOLDOWN_SECS: f64 = 0.05;
+
 pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
+    let now = std::time::Instant::now();
+    if let Some(last_used) = player.hyperion_last_used {
+        if now.duration_since(last_used).as_secs_f64() < HYPERION_COOLDOWN_SECS {
+            return Ok(());
+        }
+    }
+    player.hyperion_last_used = Some(now);
+
     // Use the exact same teleport logic as ether transmission, but with 10 blocks
     let server = &mut player.server_mut();
     let teleport_result = handle_hyperion_teleport(player, &server.network_tx);
@@ -165,9 +176,13 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
     
     // Kill dungeon mobs (zombie commanders etc.) in explosion range - death animation +
     // species-appropriate sound (not always zombie) + despawn, shared with the direct
-    // lethal-weapon hit path.
+    // lethal-weapon hit path. King Midas is the one exception: this AOE counts as one weapon
+    // hit toward his armor-break/5-hit-kill sequence instead of an instant kill, same as a
+    // direct melee hit would (see `ai/combat.rs::apply_king_midas_weapon_hit`).
     for mob_id in dungeon_mobs_to_kill {
-        crate::server::entity::dungeon_mobs::ai::combat::kill_mob(&mut server.world, mob_id);
+        if !crate::server::entity::dungeon_mobs::ai::combat::apply_king_midas_weapon_hit(&mut server.world, mob_id) {
+            crate::server::entity::dungeon_mobs::ai::combat::kill_mob(&mut server.world, mob_id);
+        }
     }
     
     // Update map for rooms that had secrets found

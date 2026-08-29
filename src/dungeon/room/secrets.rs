@@ -4,7 +4,7 @@ use crate::server::block::blocks::Blocks;
 use crate::server::entity::entity::{Entity, EntityImpl, EntityId, NoEntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::items::item_stack::ItemStack;
-use crate::server::player::player::Player;
+use crate::server::player::player::{ClientId, Player};
 use crate::server::utils::aabb::AABB;
 use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
@@ -614,7 +614,7 @@ impl EntityImpl for EssenceEntityImpl {
                 volume: 1.0,
                 pitch: 1.5,
             };
-            
+
             let world = entity.world_mut();
             for player in world.players.values_mut() {
                 // Send twice (as per Hypixel behavior)
@@ -623,6 +623,224 @@ impl EntityImpl for EssenceEntityImpl {
             }
             world.despawn_entity(entity.id);
         }
+    }
+}
+
+/// What a `PickupEntityImpl` gives the player: a Wither/Blood Door key (a boolean flag, not a
+/// real inventory item) or Superboom TNT (a real stackable inventory item). Wither/Blood also
+/// double as which `DoorType` they gate - TNT isn't tied to any door, it just always spawns
+/// alongside whichever key is being granted (see `Dungeon::maybe_grant_door_key`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickupKind {
+    Wither,
+    Blood,
+    Tnt,
+}
+
+impl PickupKind {
+    /// `None` for `Tnt` - it has no door of its own, see the type-level doc comment.
+    pub fn door_type(self) -> Option<crate::dungeon::door::DoorType> {
+        match self {
+            PickupKind::Wither => Some(crate::dungeon::door::DoorType::WITHER),
+            PickupKind::Blood => Some(crate::dungeon::door::DoorType::BLOOD),
+            PickupKind::Tnt => None,
+        }
+    }
+
+    /// Floating nametag text, and also what's used mid-sentence in the "has obtained" message
+    /// below (both happen to want the same colored name).
+    pub fn colored_name(self) -> &'static str {
+        match self {
+            PickupKind::Wither => "\u{a7}8Wither Key",
+            PickupKind::Blood => "\u{a7}cBlood Key",
+            PickupKind::Tnt => "\u{a7}9Superboom TNT",
+        }
+    }
+
+    /// Personal follow-up lines sent only to the picker, not broadcast - empty for TNT, which
+    /// doesn't need "how to use this" instructions.
+    fn extra_messages(self) -> &'static [&'static str] {
+        match self {
+            PickupKind::Wither => &[
+                "\u{a7}eRIGHT CLICK \u{a7}7on a \u{a7}8Wither Door \u{a7}7to open it. This key can",
+                "\u{a7}7only be used to open \u{a7}a1 door\u{a7}7!",
+            ],
+            PickupKind::Blood => &[
+                "\u{a7}eRIGHT CLICK \u{a7}7on the \u{a7}cBLOOD DOOR \u{a7}7to open it. This key can",
+                "\u{a7}7only be used to open \u{a7}c1 door\u{a7}7!",
+            ],
+            PickupKind::Tnt => &[],
+        }
+    }
+
+    /// Bare base64 `Value` (no `Signature`) for `ItemStack::set_skull_owner` - same unsigned-skull
+    /// convention already used for the Mimic/Sniper/Fels heads in `spawner.rs`. Only meaningful
+    /// for the two key kinds - `equipped_item` below never calls this for `Tnt`.
+    fn skull_texture(self) -> &'static str {
+        match self {
+            PickupKind::Wither => "ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==",
+            PickupKind::Blood => "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNmU1Y2Y3ZjJlMGY2YjE2N2IwYjZmZDBjNGFjMTZjYTcwZTRjNWM4MTFiOGQ1YWQwZWVkMmUzYWE2ZGQyYjcifX19",
+            PickupKind::Tnt => unreachable!("Tnt has no skull texture"),
+        }
+    }
+
+    /// What the floating armor stand wears in its helmet slot.
+    fn equipped_item(self) -> ItemStack {
+        match self {
+            PickupKind::Wither | PickupKind::Blood => {
+                let mut skull = ItemStack {
+                    item: 397, // Player head
+                    stack_size: 1,
+                    metadata: 3,
+                    tag_compound: None,
+                };
+                skull.set_skull_owner(self.skull_texture());
+                skull
+            }
+            PickupKind::Tnt => {
+                use crate::server::items::item_stack::{Enchant, ItemStackExt};
+                // Enchanted purely for the glint - matches `Item::SuperboomTNT`'s real item, but
+                // skips its lore/rarity NBT since nobody opens a tooltip on a floating pickup.
+                ItemStack::new(46).ench(Enchant::Sharpness, 1)
+            }
+        }
+    }
+
+    /// Applies the actual effect to `player` - a boolean flag for either key. TNT is purely
+    /// cosmetic (a floating prop next to the key, nothing more) and gets no effect at all.
+    fn apply(self, player: &mut Player) {
+        match self {
+            PickupKind::Wither => player.has_wither_key = true,
+            PickupKind::Blood => player.has_blood_key = true,
+            PickupKind::Tnt => {}
+        }
+    }
+}
+
+/// Not a `DungeonSecret` (nothing in `secrets.json` describes any of these) - spawned
+/// dynamically by `Dungeon::maybe_grant_door_key` (see `dungeon.rs`) whenever the room leading to
+/// a Wither or Blood Door has no starred mobs left, and picked up by simple proximity like
+/// `SecretItemEntityImpl` rather than following the `DungeonSecret`/obtained-flag flow. Lives
+/// here anyway since it reuses `EssenceEntityImpl`'s equipment approach (an item worn by an
+/// invisible armor stand) and this file already has all the NBT/AABB imports.
+pub struct PickupEntityImpl {
+    pub kind: PickupKind,
+}
+
+impl EntityImpl for PickupEntityImpl {
+    fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        let item = self.kind.equipped_item();
+
+        buffer.write_packet(&EntityEquipment {
+            entity_id: VarInt(entity.id),
+            item_slot: 4, // Helmet slot
+            item_stack: Some(item.clone()),
+        });
+
+        let world = entity.world_mut();
+        for player in world.players.values_mut() {
+            player.write_packet(&EntityEquipment {
+                entity_id: VarInt(entity.id),
+                item_slot: 4,
+                item_stack: Some(item.clone()),
+            });
+        }
+    }
+
+    fn tick(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        // Gentle spin in place (no upward drift, unlike the essence - this has to stay reachable
+        // until someone walks up and grabs it, however long that takes).
+        entity.yaw += 6.0;
+        if entity.ticks_existed % 2 == 0 {
+            let world = entity.world_mut();
+            for player in world.players.values_mut() {
+                player.write_packet(&EntityTeleport {
+                    entity_id: entity.id,
+                    pos_x: entity.position.x,
+                    pos_y: entity.position.y,
+                    pos_z: entity.position.z,
+                    yaw: entity.yaw,
+                    pitch: entity.pitch,
+                    on_ground: false,
+                });
+            }
+        }
+
+        // Matches `SecretItemEntityImpl`'s cooldown - avoids an instant, feedback-less pickup if
+        // a player is already standing right where the last starred mob died.
+        const PICKUP_COOLDOWN_TICKS: u32 = 10;
+        if entity.ticks_existed < PICKUP_COOLDOWN_TICKS {
+            return;
+        }
+
+        const PICKUP_RADIUS: f64 = 2.0;
+        // After 10s (200 ticks) nobody's grabbed it, hand it to whoever's closest instead of
+        // leaving it floating forever behind a range this tight.
+        const AUTO_PICKUP_TICKS: u32 = 200;
+
+        let world = entity.world_mut();
+
+        let picked_up_by: Option<ClientId> = if entity.ticks_existed >= AUTO_PICKUP_TICKS {
+            world.players.iter()
+                .min_by(|(_, a), (_, b)| {
+                    a.position.distance_squared(&entity.position)
+                        .total_cmp(&b.position.distance_squared(&entity.position))
+                })
+                .map(|(id, _)| *id)
+        } else {
+            let key_aabb = AABB::new(
+                DVec3::new(
+                    entity.position.x - PICKUP_RADIUS,
+                    entity.position.y - PICKUP_RADIUS,
+                    entity.position.z - PICKUP_RADIUS,
+                ),
+                DVec3::new(
+                    entity.position.x + PICKUP_RADIUS,
+                    entity.position.y + PICKUP_RADIUS,
+                    entity.position.z + PICKUP_RADIUS,
+                ),
+            );
+            world.players.iter()
+                .find(|(_, player)| player.collision_aabb().intersects(&key_aabb))
+                .map(|(id, _)| *id)
+        };
+
+        let Some(player_id) = picked_up_by else { return; };
+        let Some(player) = world.players.get_mut(&player_id) else { return; };
+
+        self.kind.apply(player);
+
+        player.write_packet(&CollectItem {
+            item_entity_id: VarInt(entity.id),
+            entity_id: VarInt(player.entity_id),
+        });
+        // The standard vanilla item-pickup "plop" - same sound/pitch `SecretItemEntityImpl` uses.
+        // TNT keeps this too even though it's purely cosmetic - some feedback that it "went away"
+        // when touched, without implying anything was actually granted.
+        player.write_packet(&SoundEffect {
+            sound: "random.pop",
+            pos_x: player.position.x,
+            pos_y: player.position.y,
+            pos_z: player.position.z,
+            volume: 0.2,
+            pitch: 1.7619047,
+        });
+
+        let kind = self.kind;
+        if kind != PickupKind::Tnt {
+            let username = player.profile.username.clone();
+            for other_player in world.players.values_mut() {
+                other_player.send_message(&format!("\u{a7}b{} \u{a7}ehas obtained {}\u{a7}e!", username, kind.colored_name()));
+            }
+
+            if let Some(player) = world.players.get_mut(&player_id) {
+                for line in kind.extra_messages() {
+                    player.send_message(line);
+                }
+            }
+        }
+
+        world.despawn_entity(entity.id);
     }
 }
 

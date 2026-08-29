@@ -30,6 +30,11 @@ pub enum BlockInteractAction {
     Chest {
         secret: Rc<RefCell<DungeonSecret>>,
     },
+    /// The dungeon's one designated mimic chest (see `main.rs`'s post-locked-chest-spawn
+    /// selection step, which swaps a random locked chest's block/interactable entry for this)
+    /// - same appearance as a normal chest, block type `TrappedChest` instead of `Chest`. On
+    /// open: the chest block disappears and `spawner::spawn_mimic` spawns the mob in its place.
+    MimicChest,
     WitherEssence {
         secret: Rc<RefCell<DungeonSecret>>,
     },
@@ -50,7 +55,23 @@ pub enum BlockInteractAction {
 impl BlockInteractAction {
     pub fn interact(&self, player: &mut Player, block_pos: &BlockPos) {
         match self {
-            Self::WitherDoor { door_index: id } => { //todo: left click open doors
+            Self::WitherDoor { door_index: id } => {
+                if !player.has_wither_key {
+                    // Reference-server-captured fail behavior (see secrets.rs's "door fail" log):
+                    // mob.endermen.portal at volume 8.0, pitch 0.0, plus a red chat line - only
+                    // to the player who clicked, not a broadcast like the open message below.
+                    let _ = player.write_packet(&SoundEffect {
+                        sound: Sounds::EndermenPortal.id(),
+                        volume: 8.0,
+                        pitch: 0.0,
+                        pos_x: block_pos.x as f64,
+                        pos_y: block_pos.y as f64,
+                        pos_z: block_pos.z as f64,
+                    });
+                    player.send_message("§cYou do not have the key for this door!");
+                    return;
+                }
+
                 // Play wither door opening sound effect
                 let _ = player.write_packet(&SoundEffect {
                     sound: Sounds::NotePling.id(),
@@ -65,10 +86,10 @@ impl BlockInteractAction {
                 let dungeon = &mut player.server_mut().dungeon;
 
                 if let DungeonState::Started { .. } = dungeon.state {
-                    // todo check if player has key
+                    player.has_wither_key = false;
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
-                    
+
                     // Send message to all players when WITHER door is opened
                     let message = format!("§b{} §aopened a §8§lWITHER §adoor!", player.profile.username);
                     for (_, other_player) in &mut player.server_mut().world.players {
@@ -78,6 +99,20 @@ impl BlockInteractAction {
             }
 
             Self::BloodDoor { door_index: id } => {
+                if !player.has_blood_key {
+                    // Same fail behavior as `WitherDoor` above - only to the clicking player.
+                    let _ = player.write_packet(&SoundEffect {
+                        sound: Sounds::EndermenPortal.id(),
+                        volume: 8.0,
+                        pitch: 0.0,
+                        pos_x: block_pos.x as f64,
+                        pos_y: block_pos.y as f64,
+                        pos_z: block_pos.z as f64,
+                    });
+                    player.send_message("§cYou do not have the key for this door!");
+                    return;
+                }
+
                 // Play blood door opening sound effect (ghast scream)
                 let _ = player.write_packet(&SoundEffect {
                     sound: Sounds::GhastScream.id(),
@@ -92,10 +127,10 @@ impl BlockInteractAction {
                 let dungeon = &mut player.server_mut().dungeon;
 
                 if let DungeonState::Started { .. } = dungeon.state {
-                    // todo check if player has key
+                    player.has_blood_key = false;
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
-                    
+
                     // Send message to all players when BLOOD door is opened
                     for (_, other_player) in &mut player.server_mut().world.players {
                         let _ = other_player.send_message("§cThe §c§lBLOOD DOOR §chas been opened!");
@@ -175,7 +210,40 @@ impl BlockInteractAction {
                 */
                 // player.send_msg("hi").unwrap();
             }
-            
+
+            Self::MimicChest => {
+                let world = &mut player.server_mut().world;
+                world.set_block_at(Blocks::Air, block_pos.x, block_pos.y, block_pos.z);
+                world.interactable_blocks.remove(block_pos);
+
+                // Spawn at the chest's own position (feet-level, matching where the block
+                // was) - the AI's gravity/physics settles it onto the floor the same as any
+                // other mob spawn.
+                let spawn_pos = DVec3::new(block_pos.x as f64 + 0.5, block_pos.y as f64, block_pos.z as f64 + 0.5);
+                let _ = crate::server::entity::dungeon_mobs::spawner::spawn_mimic(world, spawn_pos, 0.0);
+
+                // Finding the mimic counts as a secret too (real Hypixel behaviour), same
+                // found_secrets/update_map_for_room mechanism as a normal `Self::Chest` open -
+                // separate from the mimic_killed bonus score, which `combat::kill_mob` awards
+                // when it's actually killed.
+                if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                    let should_update_map = {
+                        let room = player.server_mut().dungeon.rooms.get(room_index);
+                        room.map(|r| r.found_secrets < r.room_data.secrets && r.entered).unwrap_or(false)
+                    };
+
+                    if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+                        if room.found_secrets < room.room_data.secrets {
+                            room.found_secrets += 1;
+                        }
+                    }
+
+                    if should_update_map {
+                        player.server_mut().dungeon.update_map_for_room(room_index);
+                    }
+                }
+            }
+
             Self::MushroomBottom { set_index: _ } => {
                 // Debounce if already active
                 if player.server_mut().world.tactical_insertions.iter().any(|(m, _)| m.client_id == player.client_id) {
@@ -304,7 +372,11 @@ impl BlockInteractAction {
                     ).unwrap();
 
                     secret.obtained = true;
-                    
+
+                    for other_player in server.world.players.values_mut() {
+                        other_player.send_message("\u{a7}7You found a \u{a7}5Wither Essence\u{a7}7! Everyone gains an extra essence!");
+                    }
+
                     // Increment found_secrets for the room containing this secret (only if not already obtained)
                     if let Some(room_index) = server.dungeon.get_room_at(block_pos.x, block_pos.z) {
                         let should_update_map = {

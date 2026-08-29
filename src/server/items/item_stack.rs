@@ -2,7 +2,7 @@ use crate::net::packets::packet_deserialize::PacketDeserializable;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::utils::nbt::deserialize::deserialize_nbt;
 use crate::server::utils::nbt::nbt::{NBT, NBTNode};
-use crate::server::utils::nbt::serialize::{serialize_nbt, TAG_COMPOUND_ID};
+use crate::server::utils::nbt::serialize::{serialize_nbt, TAG_COMPOUND_ID, TAG_STRING_ID};
 use bytes::{Buf, BytesMut};
 use std::collections::HashMap;
 
@@ -90,6 +90,15 @@ impl ItemStack {
     /// Merges into any existing `display` compound instead of overwriting it (e.g. dye color).
     pub fn set_display_name(&mut self, formatted_name: &str) {
         self.display_compound_mut().insert("Name".into(), NBTNode::String(formatted_name.to_string()));
+    }
+
+    /// Sets the item's tooltip lore, one already-legacy-formatted (e.g. `"\u{a7}7some text"`)
+    /// string per line - an empty `&str` entry renders as a blank tooltip line. Each line keeps
+    /// its own formatting codes rather than one color applying to the whole lore, same as
+    /// vanilla. Merges into any existing `display` compound instead of overwriting it.
+    pub fn set_lore(&mut self, lines: &[&str]) {
+        let children = lines.iter().map(|line| NBTNode::String(line.to_string())).collect();
+        self.display_compound_mut().insert("Lore".into(), NBTNode::List { type_id: TAG_STRING_ID, children });
     }
 
     /// Sets an armor piece's dyed leather color from a packed RGB int. Merges into any

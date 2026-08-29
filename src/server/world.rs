@@ -28,6 +28,27 @@ pub use tactical_insertion::{TacticalInsertionMarker, ScheduledSound, ScheduledF
 
 pub const VIEW_DISTANCE: u8 = 6;
 
+/// Writes an entity's spawn packets into `buffer` in the correct order for its variant.
+///
+/// For player-model entities the client resolves the `SpawnPlayer` packet's skin/profile by
+/// looking the entity's UUID up in its own tab list, so the `PlayerListItem` (ADD_PLAYER) that
+/// `EntityImpl::spawn` emits MUST arrive *before* `SpawnPlayer` - otherwise the client has no
+/// profile to bind and the entity renders invisible (this was the Mort NPC bug). Every other
+/// variant's `spawn` hook only adds follow-up packets (metadata, velocity) that must come
+/// *after* the base spawn packet, so their original order is preserved.
+///
+/// Used by every spawn path (`spawn_entity_with_uuid`, `spawn_entity_with_velocity`, and the
+/// per-player view-diff re-spawn in `main.rs`) so the ordering is guaranteed everywhere.
+pub fn write_entity_spawn(entity: &mut Entity, entity_impl: &mut dyn EntityImpl, buffer: &mut PacketBuffer) {
+    if entity.metadata.variant.is_player() {
+        entity_impl.spawn(entity, buffer);
+        entity.write_spawn_packet(buffer);
+    } else {
+        entity.write_spawn_packet(buffer);
+        entity_impl.spawn(entity, buffer);
+    }
+}
+
 pub struct World {
     /// Don't use directly!!, use .server_mut() instead
     /// This is unsafe,
@@ -60,7 +81,10 @@ pub struct World {
     pub entity_current_target: HashMap<EntityId, CurrentTarget>,
 
     /// Following nametag armor stand: host entity id -> nametag entity id (so when host despawns we despawn nametag too)
-    pub entity_following_nametag: HashMap<EntityId, EntityId>,
+    /// One host mob can have more than one following armor stand now (the visible nametag,
+    /// plus an invisible-text "box anchor" for starred mobs - see `spawn_star_box_anchor`), so
+    /// this is a list, not a single id.
+    pub entity_following_nametag: HashMap<EntityId, Vec<EntityId>>,
 
     /// Dungeon mob AI state (activation, target, leash, cooldowns, ...) - one bundled map
     /// rather than one per "reusable component", see `dungeon_mobs::ai::state` module docs.
@@ -71,6 +95,16 @@ pub struct World {
     /// Consulted by `ai/combat.rs::kill_mob` to decrement the room's count and redraw the map
     /// once it hits 0.
     pub entity_starred_mob_room: HashMap<EntityId, usize>,
+
+    /// Which room a Crypt Undead spawned by `superboom_at`/`spawner::spawn_crypt_undead` came
+    /// from - the crypt's bonus score only counts once this specific mob is killed (see
+    /// `ai/combat.rs::kill_mob`), not when the crypt block itself was exploded.
+    pub entity_crypt_room: HashMap<EntityId, usize>,
+
+    /// How many times King Midas has been hit so far - see `ai/combat.rs::apply_king_midas_hit`,
+    /// which strips one piece of armor per hit and kills him outright on the 5th (there's no
+    /// real HP system to hang this off of, unlike the crypt-room tracking above).
+    pub entity_king_midas_hits: HashMap<EntityId, u8>,
 
     pub entities_for_removal: Vec<EntityId>,
 
@@ -125,6 +159,8 @@ impl World {
             entity_following_nametag: HashMap::new(),
             entity_mob_ai: HashMap::new(),
             entity_starred_mob_room: HashMap::new(),
+            entity_crypt_room: HashMap::new(),
+            entity_king_midas_hits: HashMap::new(),
             entities_for_removal: Vec::new(),
 
             spawn_point: DVec3::ZERO,
@@ -175,8 +211,7 @@ impl World {
         
         if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
             chunk.insert_entity(entity.id);
-            entity.write_spawn_packet(&mut chunk.packet_buffer);
-            entity_impl.spawn(&mut entity, &mut chunk.packet_buffer);
+            write_entity_spawn(&mut entity, &mut entity_impl, &mut chunk.packet_buffer);
         }
 
         let id = entity.id;
@@ -204,8 +239,7 @@ impl World {
 
         if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
             chunk.insert_entity(entity.id);
-            entity.write_spawn_packet(&mut chunk.packet_buffer);
-            entity_impl.spawn(&mut entity, &mut chunk.packet_buffer);
+            write_entity_spawn(&mut entity, &mut entity_impl, &mut chunk.packet_buffer);
         }
 
         let id = entity.id;
@@ -215,12 +249,17 @@ impl World {
 
     /// Queues the entity for removal. If this entity has a following nametag (armor stand), that is despawned too.
     pub fn despawn_entity(&mut self, entity_id: EntityId) {
-        // If this entity is a host for a following nametag, despawn the nametag first
-        if let Some(nametag_id) = self.entity_following_nametag.remove(&entity_id) {
-            self.despawn_entity(nametag_id);
+        // If this entity is a host for following nametag(s), despawn those first
+        if let Some(nametag_ids) = self.entity_following_nametag.remove(&entity_id) {
+            for nametag_id in nametag_ids {
+                self.despawn_entity(nametag_id);
+            }
         }
-        // Clean up reverse mapping if something despawns the nametag directly
-        self.entity_following_nametag.retain(|_, v| *v != entity_id);
+        // Clean up reverse mapping if something despawns a nametag/anchor directly
+        for ids in self.entity_following_nametag.values_mut() {
+            ids.retain(|&id| id != entity_id);
+        }
+        self.entity_following_nametag.retain(|_, ids| !ids.is_empty());
         self.entities_for_removal.push(entity_id);
     }
 
@@ -237,9 +276,14 @@ impl World {
                 self.entity_attack_cooldown.remove(&entity_id);
                 self.entity_current_target.remove(&entity_id);
                 self.entity_following_nametag.remove(&entity_id);
-                self.entity_following_nametag.retain(|_, v| *v != entity_id);
+                for ids in self.entity_following_nametag.values_mut() {
+                    ids.retain(|&id| id != entity_id);
+                }
+                self.entity_following_nametag.retain(|_, ids| !ids.is_empty());
                 self.entity_mob_ai.remove(&entity_id);
                 self.entity_starred_mob_room.remove(&entity_id);
+                self.entity_crypt_room.remove(&entity_id);
+                self.entity_king_midas_hits.remove(&entity_id);
 
                 if let Some((mut entity, mut entity_impl)) = self.entities.remove(&entity_id) {
                     if let Some(chunk) = entity.chunk_mut() {

@@ -41,6 +41,11 @@ pub struct Door {
 
     pub direction: Axis,
     pub door_type: DoorType,
+
+    /// Wither-door-only: whether a Wither Key has already been spawned/granted for this door -
+    /// only one key should ever be produced per door (either from the last starred mob dying in
+    /// the room leading to it, or immediately on room entry if that room has none).
+    pub key_granted: bool,
 }
 
 impl Door {
@@ -117,10 +122,23 @@ impl Door {
         let start = BlockPos { x: self.x - 1, y: 69, z: self.z - 1 };
         let end = BlockPos { x: self.x + 1, y: 72, z: self.z + 1 };
 
+        // Doors are registered as clickable across their full 5x5x5 frame (see the
+        // door-registration loop in `Dungeon`), not just this inner 3x3x4 opening - clear
+        // *that* whole area's interactable entries here too, or the outer frame blocks stay
+        // clickable after opening and the door can be re-triggered (spawning duplicate
+        // opening entities/animations) by clicking the frame instead of the panel that
+        // actually turned to barriers.
+        world::iterate_blocks(
+            BlockPos { x: self.x - 2, y: 69, z: self.z - 2 },
+            BlockPos { x: self.x + 2, y: 73, z: self.z + 2 },
+            |x, y, z| {
+                world.interactable_blocks.remove(&BlockPos { x, y, z });
+            },
+        );
+
         let mut entities = Vec::new();
         world::iterate_blocks(start, end, |x,y, z| {
             world.set_block_at(Blocks::Barrier, x, y, z);
-            world.interactable_blocks.remove(&BlockPos { x, y, z });
 
             let id = world.spawn_entity(
                 DVec3::new(x as f64 + 0.5, y as f64 - DOOR_ENTITY_OFFSET, z as f64 + 0.5),

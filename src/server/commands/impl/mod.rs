@@ -1,7 +1,10 @@
+pub mod cnc;
 pub mod depth_strider;
 pub mod dscore;
 pub mod locraw;
 pub mod mort;
 pub mod p3;
 pub mod p3s;
+pub mod practice;
+pub mod restart_room;
 pub(crate) mod term;

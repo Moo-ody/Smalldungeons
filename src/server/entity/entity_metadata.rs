@@ -123,6 +123,15 @@ pub struct EntityMetadata {
     pub custom_name_visible: bool,
     pub ai_disabled: bool,
     pub skin_parts: Option<SkinParts>, // For Player entities
+    /// `EntityVariant::ArmorStand`-only: renders at ~0.5x scale (vanilla "small" status bit).
+    /// Following-nametag armor stands (`spawn_following_nametag`) need this - otherwise the
+    /// stand's own full ~1.975-tall model adds its whole height on top of wherever it's
+    /// positioned before the nametag text floats above *that*, which is what "way higher now"
+    /// meant after the stand got repositioned to sit at head height instead of near the feet
+    /// (needed for the starred-mob highlight box, see `spawn_active_mob`'s comment) - halving
+    /// the model's own height roughly halves that extra float, landing much closer to right
+    /// above the actual head instead of ~2 blocks above it.
+    pub is_small_armor_stand: bool,
 }
 
 impl EntityMetadata {
@@ -140,6 +149,7 @@ impl EntityMetadata {
             custom_name_visible: false,
             ai_disabled: false,
             skin_parts,
+            is_small_armor_stand: false,
         }
     }
 }
@@ -219,6 +229,11 @@ impl PacketSerializable for EntityMetadata {
             EntityVariant::Arrow => { /* no-op */ }
             // NEW: Bonzo projectiles don't carry extra metadata
             EntityVariant::BonzoProjectile => { /* no-op */ }
+            // Index 10: ArmorStand status byte - bit 0x01 = small. Only written when set, so
+            // non-nametag armor stands (e.g. the Fels marker) keep their normal full size.
+            EntityVariant::ArmorStand if self.is_small_armor_stand => {
+                write_data(buf, BYTE, 10, 0x01u8);
+            }
             _ => {}
         }
         buf.push(127); // end-of-metadata

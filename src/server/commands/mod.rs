@@ -1,13 +1,17 @@
 use crate::server::commands::argument::Argument;
 use crate::server::commands::command::CommandMetadata;
 use crate::server::commands::outcome::Outcome;
+use crate::server::commands::r#impl::cnc::Cnc;
 use crate::server::commands::r#impl::depth_strider::DepthStrider;
 use crate::server::commands::r#impl::dscore::DScore;
 use crate::server::commands::r#impl::locraw::Locraw;
 use crate::server::commands::r#impl::mort::Mort;
 // use crate::server::commands::r#impl::p3::P3;
 // use crate::server::commands::r#impl::p3s::P3S;
+use crate::server::commands::r#impl::practice::Practice;
+use crate::server::commands::r#impl::restart_room::RestartRoom;
 use crate::server::commands::r#impl::term::Term;
+use crate::net::protocol::play::clientbound::Chat;
 use crate::server::player::player::Player;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
@@ -23,7 +27,10 @@ crate::command_registry! {
     Locraw,
     Term,
     DepthStrider,
-    DScore
+    DScore,
+    Cnc,
+    Practice,
+    RestartRoom
 }
 
 impl Command {
@@ -39,11 +46,13 @@ impl Command {
             let command_args = command.args(world, player);
             if args.len() > command_args.len() {
                 let component = ChatComponentTextBuilder::new(format!("Too many arguments! expected: {}, received: {}.", command_args.len(), args.len())).color(MCColors::Red).build();
-                // player.send_packet(Chat::new(component, CHAT))?;
+                player.write_packet(&Chat { component, chat_type: 0 });
                 return Ok(());
             }
 
-            let missing_args = &command_args[args.len()..];
+            // Only *required* trailing arguments count as missing - an omitted optional argument
+            // (e.g. `/practice`'s trailing `as` flag) is simply left for `run` to default.
+            let missing_args: Vec<&Argument> = command_args[args.len()..].iter().filter(|arg| arg.required).collect();
 
             if !missing_args.is_empty() {
                 let component =
@@ -54,19 +63,19 @@ impl Command {
                         )
                         .build();
 
-                // player.send_packet(Chat::new(component, CHAT))?;
+                player.write_packet(&Chat { component, chat_type: 0 });
                 return Ok(());
             }
 
             if let Outcome::Failure(component) = command.run(world, player, args)? {
-                // player.send_packet(Chat::new(component, CHAT))?;
+                player.write_packet(&Chat { component, chat_type: 0 });
             }
         } else {
             let unknown_command =
                 ChatComponentTextBuilder::new(format!("Unknown command. Type \"/help\" for help. ('{}')", parts[0]))
                     .color(MCColors::Red)
                     .build();
-            // player.send_packet(Chat::new(unknown_command, CHAT))?;
+            player.write_packet(&Chat { component: unknown_command, chat_type: 0 });
         }
 
         Ok(())

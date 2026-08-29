@@ -40,11 +40,14 @@ impl EntityImpl for DungeonMobAiImpl {
         run_mob_ai(entity, packet_buffer);
     }
 
-    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) {
+    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) -> bool {
         if *action == EntityInteractionType::Attack {
-            combat::apply_lethal_hit(entity, player);
+            if !combat::apply_king_midas_hit(entity, player) {
+                combat::apply_lethal_hit(entity, player);
+            }
             aggro::on_mob_attacked(entity, player.client_id);
         }
+        false
     }
 }
 
@@ -57,6 +60,12 @@ const BASE_WALK_SPEED_BPS: f64 = 3.75;
 const FIRST_SIGHT_SPEED_BPS: f64 = 5.25;
 /// Slower speed used for idle wandering near spawn.
 const IDLE_WALK_SPEED_BPS: f64 = 2.25;
+/// How close a player has to be for an idle (not currently in combat) mob to turn and face them.
+/// Deliberately much tighter than `IDLE_ACTIVATION_RANGE`/any archetype's `vision_range` - those
+/// gate actually noticing/aggroing a player, which already keeps a mob facing its target once
+/// combat starts (see `movement::apply_movement_style`); this is a separate, purely cosmetic
+/// "personal space" reaction for a player standing right next to an otherwise-idle mob.
+const IDLE_FACE_PLAYER_RANGE: f64 = 8.0;
 /// How close idle wandering needs to get to its target before picking a new one.
 const IDLE_WANDER_ARRIVAL_DISTANCE: f64 = 0.3;
 
@@ -146,17 +155,29 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
         state.attack_cooldowns.secondary.tick();
         attack::try_attack(world, entity, &mut state, profile.attack, target_pos);
     } else if state.activation == ActivationState::Idle {
-        state.idle_wander_cooldown.tick();
-        if state.idle_wander_target.is_none() && state.idle_wander_cooldown.is_ready() {
-            state.idle_wander_target = Some(movement::pick_idle_wander_target(state.spawn_origin));
-            state.idle_wander_cooldown.trigger(movement::random_idle_wander_interval());
-        }
+        let nearest_player_pos = world.players.values()
+            .map(|player| (player.position, player.position.distance_to(&mob_pos)))
+            .filter(|(_, dist)| *dist <= IDLE_FACE_PLAYER_RANGE)
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(pos, _)| pos);
 
-        if let Some(wander_target) = state.idle_wander_target {
-            if mob_pos.distance_to(&wander_target) < IDLE_WANDER_ARRIVAL_DISTANCE {
-                state.idle_wander_target = None;
-            } else {
-                movement::steer_toward(entity, world, width, height, wander_target, IDLE_WALK_SPEED_BPS);
+        if let Some(player_pos) = nearest_player_pos {
+            // A player standing right next to an idle mob takes priority over wandering - stop
+            // and look at them instead of continuing to wander while also fighting over yaw.
+            movement::face_toward(entity, player_pos);
+        } else {
+            state.idle_wander_cooldown.tick();
+            if state.idle_wander_target.is_none() && state.idle_wander_cooldown.is_ready() {
+                state.idle_wander_target = Some(movement::pick_idle_wander_target(state.spawn_origin));
+                state.idle_wander_cooldown.trigger(movement::random_idle_wander_interval());
+            }
+
+            if let Some(wander_target) = state.idle_wander_target {
+                if mob_pos.distance_to(&wander_target) < IDLE_WANDER_ARRIVAL_DISTANCE {
+                    state.idle_wander_target = None;
+                } else {
+                    movement::steer_toward(entity, world, width, height, wander_target, IDLE_WALK_SPEED_BPS);
+                }
             }
         }
     }

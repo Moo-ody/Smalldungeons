@@ -58,6 +58,18 @@ impl Inventory {
         }
         None
     }
+
+    /// Places `item` in the first empty main-inventory/hotbar slot (9..45, skipping crafting and
+    /// armor slots 0..9). Returns `false` if the inventory is completely full. Caller is
+    /// responsible for syncing to the client afterward (`Player::sync_inventory`).
+    pub fn add_item(&mut self, item: Item, count: u8) -> bool {
+        if let Some(slot) = self.items[9..45].iter().position(|s| matches!(s, ItemSlot::Empty)) {
+            self.items[9 + slot] = ItemSlot::Filled(item, count);
+            true
+        } else {
+            false
+        }
+    }
     
     pub fn click_slot(
         &mut self,

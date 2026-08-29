@@ -198,6 +198,10 @@ impl Item {
                 // The ghast sound and projectile spawning happens in shoot_bonzo_projectile()
                 // No need to do anything here since it's handled by the packet system
             }
+            Item::MagicalMap => {
+                use crate::server::player::container_ui::UI;
+                player.open_ui(UI::MapSettingsMenu);
+            }
             _ => {}
         }
         Ok(())
@@ -233,7 +237,15 @@ impl Item {
                 item: 358,
                 stack_size: 1,
                 metadata: 1,
-                tag_compound: None,
+                // Skytils' Catlas only recognizes this item as the dungeon map if its display
+                // name contains "Magical Map" (`MapUtils.getMapData()` checks
+                // `displayName.contains("Magical Map")`) - with no NBT at all it rendered as
+                // the vanilla default "Map", so Catlas never found it.
+                tag_compound: Some(NBT::with_nodes(vec![
+                    NBT::compound("display", vec![
+                        NBT::string("Name", "§bMagical Map"),
+                    ]),
+                ])),
             },
             Item::AspectOfTheVoid => ItemStack {
                 item: 277,
@@ -459,6 +471,16 @@ impl Item {
                 stack_size: 64,
                 metadata: 0,
                 tag_compound: Some(NBT::with_nodes(vec![
+                    // Purely cosmetic glint - Superboom TNT has no real enchantment on Hypixel,
+                    // this NBT list just being non-empty is what triggers the client's shimmer.
+                    NBT::list("ench", TAG_COMPOUND_ID, vec![
+                        NBTNode::Compound({
+                            let mut map = HashMap::new();
+                            map.insert("lvl".into(), NBTNode::Short(1));
+                            map.insert("id".into(), NBTNode::Short(16)); // Sharpness - value unused, any id works
+                            map
+                        })
+                    ]),
                     NBT::compound("display", vec![
                         NBT::string("Name", "§9Superboom TNT"),
                         NBT::list_from_string("Lore", indoc! {r#"

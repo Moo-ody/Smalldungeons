@@ -2,7 +2,7 @@ use crate::dungeon::crushers::Crusher;
 use crate::dungeon::door::Door;
 use crate::dungeon::dungeon::DUNGEON_ORIGIN;
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
-use crate::dungeon::room::crypts::{get_room_crypts, rotate_block_pos};
+use crate::dungeon::room::crypts::{get_room_crypts, get_room_kingmidas, rotate_block_pos};
 use crate::dungeon::room::mushroom::{get_room_mushrooms, MushroomSets};
 use crate::dungeon::room::superboomwalls::{get_room_superboomwalls, SuperboomWallPattern, rotate_superboomwall_pos};
 use crate::dungeon::room::fallingblocks::{get_room_fallingblocks, FallingBlockPattern, rotate_fallingblock_pos};
@@ -41,6 +41,10 @@ pub struct Room {
     pub crypt_patterns: Vec<Vec<(BlockPos, Option<u16>)>>, // world positions with expected block ids
     pub crypts_checked: bool,
     pub crypts_detected_count: usize,
+    /// King Midas's golden "crypt" - same explode-on-superboom shape as a real crypt, kept in
+    /// its own list so it's never touched by `explode_crypt_near`/counted by `detect_crypts`.
+    /// See `crypts::get_room_kingmidas` and `explode_kingmidas_near`.
+    pub kingmidas_patterns: Vec<Vec<(BlockPos, Option<u16>)>>,
     pub superboomwall_patterns: Vec<SuperboomWallPattern>, // superboomwall patterns for this room
     pub superboomwalls_checked: bool,
     pub superboomwalls_detected_count: usize,
@@ -128,6 +132,22 @@ impl Room {
                     world_blocks.push((world_pos, blk.block_id));
                 }
                 crypt_patterns.push(world_blocks);
+            }
+        }
+
+        // Build King Midas's golden "crypt" pattern from its own relative-coords json - same
+        // shape/rotation handling as a real crypt above, but tracked separately so it's never
+        // credited as one (see `crypts::get_room_kingmidas`).
+        let mut kingmidas_patterns: Vec<Vec<(BlockPos, Option<u16>)>> = Vec::new();
+        if let Some(rc) = get_room_kingmidas(&room_data.name) {
+            for pattern in rc.patterns {
+                let mut world_blocks: Vec<(BlockPos, Option<u16>)> = Vec::new();
+                for blk in pattern.blocks {
+                    let rotated = rotate_block_pos(&blk, rotation);
+                    let world_pos = BlockPos { x: corner_pos.x + rotated.x, y: blk.y, z: corner_pos.z + rotated.z };
+                    world_blocks.push((world_pos, blk.block_id));
+                }
+                kingmidas_patterns.push(world_blocks);
             }
         }
 
@@ -247,6 +267,7 @@ impl Room {
             crypt_patterns,
             crypts_checked: false,
             crypts_detected_count: 0,
+            kingmidas_patterns,
             superboomwall_patterns,
             superboomwalls_checked: false,
             superboomwalls_detected_count: 0,
@@ -340,9 +361,11 @@ impl Room {
     }
 
     /// Explodes (removes) all crypt patterns that have any block within `radius`
-    /// of `center`. Returns the number of crypts exploded.
-    pub fn explode_crypt_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> usize {
-        if self.crypt_patterns.is_empty() { return 0; }
+    /// of `center`. Returns one spawn position (the pattern's block centroid) per crypt
+    /// exploded - used by `Dungeon::superboom_at` to spawn a Crypt Undead standing where each
+    /// one was, instead of granting the crypt's bonus score immediately on explosion.
+    pub fn explode_crypt_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> Vec<BlockPos> {
+        if self.crypt_patterns.is_empty() { return Vec::new(); }
 
         // Collect indices to remove to avoid borrow issues while mutating
         let mut indices: Vec<usize> = Vec::new();
@@ -356,23 +379,66 @@ impl Room {
             if in_range { indices.push(i); }
         }
 
-        if indices.is_empty() { return 0; }
+        if indices.is_empty() { return Vec::new(); }
 
         // Remove from highest to lowest index to keep indices valid
         indices.sort_unstable_by(|a, b| b.cmp(a));
-        let mut exploded = 0usize;
+        let mut spawn_positions = Vec::new();
         for idx in indices {
             if let Some(pattern) = self.crypt_patterns.get(idx).cloned() {
+                let count = pattern.len() as i32;
+                let (sum_x, sum_y, sum_z) = pattern.iter()
+                    .fold((0, 0, 0), |(sx, sy, sz), (pos, _)| (sx + pos.x, sy + pos.y, sz + pos.z));
+                spawn_positions.push(BlockPos { x: sum_x / count, y: sum_y / count, z: sum_z / count });
+
                 for (pos, _) in pattern.into_iter() {
                     world.set_block_at(Blocks::Air, pos.x, pos.y, pos.z);
                 }
                 // Actually remove the pattern after applying blocks
                 let _ = self.crypt_patterns.remove(idx);
-                exploded += 1;
             }
         }
 
-        exploded
+        spawn_positions
+    }
+
+    /// Explodes King Midas's golden "crypt" the same way `explode_crypt_near` does for a real
+    /// one, but this is never wired to `entity_crypt_room`/`record_crypt_killed` - see
+    /// `Dungeon::superboom_at`, which spawns the King Midas NPC from these positions instead of
+    /// a Crypt Undead and never credits the crypt bonus score for it.
+    pub fn explode_kingmidas_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> Vec<BlockPos> {
+        if self.kingmidas_patterns.is_empty() { return Vec::new(); }
+
+        let mut indices: Vec<usize> = Vec::new();
+        for (i, pattern) in self.kingmidas_patterns.iter().enumerate() {
+            let in_range = pattern.iter().any(|(pos, _)| {
+                let dx = (pos.x - center.x).abs();
+                let dy = (pos.y - center.y).abs();
+                let dz = (pos.z - center.z).abs();
+                dx.max(dy).max(dz) <= radius
+            });
+            if in_range { indices.push(i); }
+        }
+
+        if indices.is_empty() { return Vec::new(); }
+
+        indices.sort_unstable_by(|a, b| b.cmp(a));
+        let mut spawn_positions = Vec::new();
+        for idx in indices {
+            if let Some(pattern) = self.kingmidas_patterns.get(idx).cloned() {
+                let count = pattern.len() as i32;
+                let (sum_x, sum_y, sum_z) = pattern.iter()
+                    .fold((0, 0, 0), |(sx, sy, sz), (pos, _)| (sx + pos.x, sy + pos.y, sz + pos.z));
+                spawn_positions.push(BlockPos { x: sum_x / count, y: sum_y / count, z: sum_z / count });
+
+                for (pos, _) in pattern.into_iter() {
+                    world.set_block_at(Blocks::Air, pos.x, pos.y, pos.z);
+                }
+                let _ = self.kingmidas_patterns.remove(idx);
+            }
+        }
+
+        spawn_positions
     }
 
     /// Detect superboomwalls in the room (similar to crypts)

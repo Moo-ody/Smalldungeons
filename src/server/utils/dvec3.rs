@@ -1,6 +1,6 @@
 use crate::server::block::block_position::BlockPos;
 use crate::server::utils::direction::Direction;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub};
 
 /// Double (f64) Vec3
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -145,6 +145,22 @@ impl Mul for DVec3 {
             y: self.y * rhs.y,
             z: self.z * rhs.z,
         }
+    }
+}
+
+impl AddAssign for DVec3 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+    }
+}
+
+impl MulAssign<f64> for DVec3 {
+    fn mul_assign(&mut self, rhs: f64) {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
     }
 }
 

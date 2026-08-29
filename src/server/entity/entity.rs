@@ -1,5 +1,5 @@
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{EntityTeleport, SpawnMob, SpawnObject, SpawnPlayer};
+use crate::net::protocol::play::clientbound::{EntityTeleport, EntityYawRotate, SpawnMob, SpawnObject, SpawnPlayer};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::chunk::chunk::Chunk;
@@ -22,7 +22,11 @@ pub trait EntityImpl {
     /// used to add custom functionality to an entity
     fn tick(&mut self, entity: &mut Entity, packet_buffer: &mut PacketBuffer);
     
-    fn interact(&mut self, _: &mut Entity, _: &mut Player, _: &EntityInteractionType) {}
+    /// Returns `true` if this entity fully handled the interaction (e.g. Mort's dialogue, an
+    /// armor stand terminal) - the caller uses this to decide whether the player's held item
+    /// should also fire its right-click ability, so a plain mob with no special interaction
+    /// still lets pearls/etherwarp/hyperion/etc. fire when clicked.
+    fn interact(&mut self, _: &mut Entity, _: &mut Player, _: &EntityInteractionType) -> bool { false }
 }
 
 /// represents an entity, its position, rotation, and its variant
@@ -70,7 +74,7 @@ impl Entity {
             yaw: 0.0,
             pitch: 0.0,
             on_ground: false,
-            last_position: DVec3::ZERO,
+            last_position: position,
             last_yaw: 0.0,
             last_pitch: 0.0,
             ticks_existed: 0,
@@ -161,6 +165,18 @@ impl Entity {
                 yaw: self.yaw,
                 pitch: self.pitch,
                 on_ground: self.on_ground,
+            });
+            // `EntityTeleport`'s yaw is the BODY orientation only - 1.8's mob models render the
+            // head as a separate part driven by its own "head yaw", which vanilla keeps in sync
+            // by also sending a dedicated Entity Head Look packet (`EntityYawRotate` here, same
+            // 0x19 id) alongside any move/look update. Without this, a mob's body direction can
+            // change but its head stays frozen at whatever it was on spawn - this was silently
+            // never sent anywhere in this codebase until now (confirmed - the struct existed but
+            // had zero call sites), which is exactly why turning to face a player never visibly
+            // turned any mob's head.
+            packet_buffer.write_packet(&EntityYawRotate {
+                entity_id: VarInt(self.id),
+                yaw: (self.yaw * 256.0 / 360.0) as i32 as i8,
             });
             self.last_position = self.position;
         }

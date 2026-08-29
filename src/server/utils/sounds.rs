@@ -53,5 +53,12 @@ id_enum! {
         PistonIn("tile.piston.in"),
         SkeletonDeath("mob.skeleton.death"),
         EndermenDeath("mob.endermen.death"),
+        CatMeow("mob.cat.meow"),
+        CatPurr("mob.cat.purr"),
+        CatPurreow("mob.cat.purreow"),
+        AnvilBreak("random.anvil_break"),
     }
 }
+
+/// A few distinct cat vocalizations to pick from at random - see `Sounds::CatMeow` and friends.
+pub const MEOW_SOUNDS: [Sounds; 3] = [Sounds::CatMeow, Sounds::CatPurr, Sounds::CatPurreow];

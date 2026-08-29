@@ -26,6 +26,10 @@ pub async fn run_network_thread(
     loop {
         tokio::select! {
             Ok((socket, _)) = listener.accept() => {
+                // Nagle's algorithm + delayed ACKs otherwise adds ~40ms to lone small
+                // packets (e.g. teleport PositionLook), even on loopback.
+                let _ = socket.set_nodelay(true);
+
                 let client_id: ClientId = client_id_counter;
                 client_id_counter += 1;
 

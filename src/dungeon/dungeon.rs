@@ -9,6 +9,8 @@ use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
 use crate::server::entity::dungeon_mobs::spawn_room_mobs;
+use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
+use crate::dungeon::room::secrets::{PickupEntityImpl, PickupKind};
 use crate::server::player::player::Player;
 use crate::server::server::Server;
 use crate::server::utils::dvec3::DVec3;
@@ -19,6 +21,30 @@ use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::bail;
 use std::collections::HashMap;
 // use crate::server::block::block_interact_action::BlockInteractAction::*;
+
+/// Spawns one `PickupEntityImpl` (Wither Key, Blood Key, or Superboom TNT) at `pos` plus its
+/// following nametag. Shared by `Dungeon::maybe_grant_door_key`'s method and its inlined copy in
+/// `tick()`'s room-discovery loop (both need identical spawn+nametag boilerplate for the key
+/// itself and its TNT companion).
+pub(crate) fn spawn_pickup(world: &mut world::World, pos: DVec3, kind: PickupKind) {
+    if let Ok(entity_id) = world.spawn_entity(
+        pos,
+        {
+            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+            metadata.is_invisible = true;
+            metadata
+        },
+        PickupEntityImpl { kind },
+    ) {
+        let _ = crate::server::entity::spawn_equipped::spawn_following_nametag(
+            world,
+            entity_id,
+            kind.colored_name(),
+            1.5,
+            EntityVariant::ArmorStand,
+        );
+    }
+}
 
 // The top leftmost corner of the dungeon
 pub const DUNGEON_ORIGIN: (i32, i32) = (-200, -200);
@@ -46,6 +72,45 @@ pub struct Dungeon {
     pub state: DungeonState,
     pub map: DungeonMap,
 
+    /// Set on dungeons built by `dungeon::practice` (see `practice::apply_practice_dungeon`).
+    /// Suppresses mob spawning and Mort's dungeon-start flavor text/sounds, neither of which
+    /// make sense for an isolated single-room practice arena.
+    pub practice_room: bool,
+
+    /// How many secrets `/practice <room> <door> <secrets>` was asked to route for - the route
+    /// timer (see `tick`, below) finishes once `rooms[0].found_secrets` reaches this. Carried
+    /// forward across `/rs` (only the timer/finished-latch reset, not the target) so a player
+    /// can retry the same route target repeatedly. `None` means no practice room is loaded yet.
+    pub practice_target_secrets: Option<u8>,
+    /// Whether `/practice ... as` asked every secret in the room to be force-spawned immediately
+    /// (see `practice::spawn_all_secrets`), instead of the normal proximity/room-entry gating.
+    /// Carried across `/rs` like `practice_target_secrets`, so a restart repeats the same choice.
+    pub practice_instant_secrets: bool,
+    /// Tick the route timer started on - set the first time any player's position moves away
+    /// from where they spawned into the room (see `tick`), i.e. "first input", not room-load
+    /// time. `None` before that first movement.
+    pub practice_route_start_tick: Option<u64>,
+    /// Latches once the finish time has been announced, so it isn't re-sent every tick
+    /// afterward (e.g. if more secrets keep getting found past the target).
+    pub practice_route_finished: bool,
+    /// Elapsed seconds at the moment the route finished - the action bar freezes on this
+    /// instead of continuing to count once `practice_route_finished` is set.
+    pub practice_route_finish_seconds: Option<f64>,
+    /// Precomputed compact label for the finish chat message, e.g. "Catwalk E5/6" (room name,
+    /// door letter + target secrets, room's total secrets). Carried across `/rs` like the
+    /// target itself.
+    pub practice_route_prefix: Option<String>,
+    /// `rooms[0].found_secrets` as of the previous tick, so an increase (a secret just found)
+    /// can be detected to trigger the action bar's green flash.
+    pub practice_last_found_secrets: u8,
+    /// Ticks remaining to render the live action bar timer in the "flash" color after a secret
+    /// was just found.
+    pub practice_route_flash_ticks: u32,
+    /// Legacy (`&`-coded) text for the live route timer, e.g. `"&612.45s"` - folded into the
+    /// existing HP/Defense/Mana/Secrets action bar by `main.rs` rather than sent as its own
+    /// packet (see `tick`). `None` when no practice route is armed.
+    pub practice_timer_text: Option<String>,
+
     /// F7 score tracking (skill/exploration/speed/bonus) + S/S+ announcement state. Reset
     /// whenever a run starts (see the `Started` transition below).
     pub score: DungeonScoreState,
@@ -58,6 +123,12 @@ pub struct Dungeon {
     pub locked_chests: HashMap<BlockPos, LockedChestState>,
     // Maps lever world position to all chests it unlocks
     pub lever_to_chests: HashMap<BlockPos, Vec<BlockPos>>,
+
+    /// Toggled from the magical map's right-click GUI (see `UI::MapSettingsMenu`). When true,
+    /// every secret in a room spawns the instant the room is entered, instead of the normal
+    /// per-secret bounding-box proximity gating in `tick` below. Off by default so ordinary runs
+    /// keep vanilla secret-spawn behavior.
+    pub secrets_always_spawn: bool,
     
     // Boss room data
     // pub boss_room_corner: BlockPos,
@@ -125,11 +196,19 @@ impl Dungeon {
                         door.x == door_x && door.z == door_z
                     });
                     
+                    // In a normal generated layout a door always has a real room on both
+                    // sides, so `room_grid` is always populated here. Practice mode
+                    // (`dungeon::practice`) is the one case that isn't true: a practice room's
+                    // doors intentionally face outward into an otherwise-empty grid cell (there
+                    // is no dungeon on the other side to walk into), so skip wiring a neighbour
+                    // rather than assuming one exists.
                     if let Some((door_index, _)) = door {
-                        segment.neighbours[index] = Some(RoomNeighbour {
-                            door_index: door_index,
-                            room_index: room_grid[(nx + nz * 6) as usize].expect("Neighbor should be Some")
-                        });
+                        if let Some(room_index) = room_grid[(nx + nz * 6) as usize] {
+                            segment.neighbours[index] = Some(RoomNeighbour {
+                                door_index,
+                                room_index,
+                            });
+                        }
                     }
                 }
             }
@@ -145,10 +224,21 @@ impl Dungeon {
             room_grid: room_grid,
             state: DungeonState::NotReady,
             map: DungeonMap::new(map_offset_x, map_offset_y),
+            practice_room: false,
+            practice_target_secrets: None,
+            practice_instant_secrets: false,
+            practice_route_start_tick: None,
+            practice_route_finished: false,
+            practice_route_finish_seconds: None,
+            practice_route_prefix: None,
+            practice_last_found_secrets: 0,
+            practice_route_flash_ticks: 0,
+            practice_timer_text: None,
             score: DungeonScoreState::default(),
             temp_player_mushroom_up: HashMap::new(),
             locked_chests: HashMap::new(),
             lever_to_chests: HashMap::new(),
+            secrets_always_spawn: false,
             // boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
             // boss_room_width: 0, // Will be set when boss room is loaded
             // boss_room_length: 0, // Will be set when boss room is loaded
@@ -185,7 +275,8 @@ impl Dungeon {
                     x,
                     z,
                     direction,
-                    door_type
+                    door_type,
+                    key_granted: false,
                 };
 
                 doors.push(door);
@@ -481,6 +572,35 @@ impl Dungeon {
         unsafe { self.server.as_mut().expect("server is null") }
     }
 
+    /// Force-spawns every not-yet-spawned secret in every already-entered room, bypassing the
+    /// normal bounding-box/room-entry gating. Used when `secrets_always_spawn` is toggled on
+    /// (see `UI::MapSettingsMenu`) so rooms the players are already standing in catch up
+    /// immediately instead of waiting for the next room entry.
+    pub fn spawn_all_secrets_in_entered_rooms(&mut self, world: &mut world::World) {
+        let mut secrets_to_spawn = Vec::new();
+        for room in &self.rooms {
+            if !room.entered {
+                continue;
+            }
+            secrets_to_spawn.extend(room.json_secrets.iter().cloned());
+        }
+
+        for secret_rc in secrets_to_spawn {
+            let mut secret = secret_rc.borrow_mut();
+            if secret.has_spawned {
+                continue;
+            }
+            secret.has_spawned = true;
+            crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(&secret_rc, secret, world);
+        }
+
+        for room in &mut self.rooms {
+            if room.entered {
+                room.room_entry_secrets_spawned = true;
+            }
+        }
+    }
+
     pub fn get_room_at(&self, x: i32, z: i32) -> Option<usize> {
         if x < DUNGEON_ORIGIN.0 || z < DUNGEON_ORIGIN.1 {
             return None;
@@ -499,7 +619,7 @@ impl Dungeon {
             player.position.z as i32
         )
     }
-    
+
     /// Update the map for a specific room and send the update to all players
     pub fn update_map_for_room(&mut self, room_index: usize) {
         let server = self.server_mut();
@@ -526,6 +646,59 @@ impl Dungeon {
         }
     }
 
+    /// Checks whether `room_index`'s starred mobs are all dead and, if the room leads to a
+    /// not-yet-granted door of `kind`'s type (Wither or Blood - never call this with `Tnt`, it
+    /// has no door of its own and is spawned as a companion below instead), spawns that key plus
+    /// a Superboom TNT right next to it. Called both from `combat.rs::kill_mob` right after a
+    /// room's last starred mob dies - passing `death_pos` so the key spawns where that mob
+    /// actually died, not at the door - and from the room-discovery loop below for rooms that
+    /// start at 0 starred mobs (nothing died, so `death_pos` is `None` and the key spawns in the
+    /// room instead, the only position that makes sense when there was nothing to kill).
+    pub fn maybe_grant_door_key(&mut self, room_index: usize, death_pos: Option<DVec3>, kind: PickupKind) {
+        let Some(room) = self.rooms.get(room_index) else { return; };
+        if room.starred_mobs_remaining != 0 {
+            return;
+        }
+        let Some(wanted_door_type) = kind.door_type() else { return; };
+
+        // Also remembers which segment matched, not just the door - a spawn position built from
+        // the door's own coordinates lands literally inside the door frame (confirmed by
+        // testing), so the no-starred-mobs fallback below uses the segment's world position
+        // instead, landing somewhere inside the actual room rather than in the doorway.
+        let mut matched_door: Option<(usize, usize, usize)> = None; // (door_index, segment_x, segment_z)
+        'find_door: for segment in &room.segments {
+            for neighbour in segment.neighbours.iter().flatten() {
+                if let Some(door) = self.doors.get(neighbour.door_index) {
+                    if door.door_type == wanted_door_type && !door.key_granted {
+                        matched_door = Some((neighbour.door_index, segment.x, segment.z));
+                        break 'find_door;
+                    }
+                }
+            }
+        }
+
+        let Some((door_index, segment_x, segment_z)) = matched_door else { return; };
+        self.doors[door_index].key_granted = true;
+        let mut spawn_pos = death_pos.unwrap_or_else(|| {
+            // Center of the matched 32x32 room segment - same grid math `main.rs`/`dungeon.rs`
+            // use elsewhere to turn a world position into a segment index, just inverted.
+            DVec3::new(
+                DUNGEON_ORIGIN.0 as f64 + segment_x as f64 * 32.0 + 16.0,
+                71.0,
+                DUNGEON_ORIGIN.1 as f64 + segment_z as f64 * 32.0 + 16.0,
+            )
+        });
+        spawn_pos.y -= 1.0;
+
+        let server = self.server_mut();
+        spawn_pickup(&mut server.world, spawn_pos, kind);
+        // TNT always accompanies whichever key was just granted - "right on the block next to
+        // it" per spec, so a flat 1-block nudge on X is enough distinction without needing any
+        // room-shape awareness.
+        let tnt_pos = DVec3::new(spawn_pos.x + 1.0, spawn_pos.y, spawn_pos.z);
+        spawn_pickup(&mut server.world, tnt_pos, PickupKind::Tnt);
+    }
+
     // /// Check if a player is inside the boss room
     // pub fn is_player_in_boss_room(&self, player: &Player) -> bool {
     //     let player_x = player.position.x as i32;
@@ -542,10 +715,59 @@ impl Dungeon {
     //         && player_y <= self.boss_room_height  // Up to the height of the room (254)
     // }
 
+    /// Finds the door index of whichever door sits on the shortest room-graph path from the
+    /// entrance to the Fairy room - i.e. the door you'd naturally walk through to *reach*
+    /// Fairy, as opposed to any other door touching it that leads further/deeper into the
+    /// dungeon. Fairy is the only special room that can have more than one door (see
+    /// `from_str`), so unlike every other special room this can't just be "the one door".
+    ///
+    /// Plain BFS over the room graph (`RoomSegment::neighbours`) from the entrance - since
+    /// dungeon layouts are effectively tree-shaped, the first time Fairy is reached is via its
+    /// shortest (and in practice only sensible) path in from the explored side.
+    fn find_fairy_entry_door(&self) -> Option<usize> {
+        let entrance_index = self.rooms.iter().position(|r| r.room_data.room_type == RoomType::Entrance)?;
+        let fairy_index = self.rooms.iter().position(|r| r.room_data.room_type == RoomType::Fairy)?;
+
+        let mut visited = vec![false; self.rooms.len()];
+        let mut entry_door: Vec<Option<usize>> = vec![None; self.rooms.len()];
+        let mut queue = std::collections::VecDeque::new();
+        visited[entrance_index] = true;
+        queue.push_back(entrance_index);
+
+        while let Some(current) = queue.pop_front() {
+            if current == fairy_index {
+                return entry_door[current];
+            }
+            for segment in &self.rooms[current].segments {
+                for neighbour in segment.neighbours.iter().flatten() {
+                    if !visited[neighbour.room_index] {
+                        visited[neighbour.room_index] = true;
+                        entry_door[neighbour.room_index] = Some(neighbour.door_index);
+                        queue.push_back(neighbour.room_index);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     pub fn start_dungeon(&mut self) {
+        // Computed before any door gets touched below, so the loop can special-case exactly
+        // this one door - see `find_fairy_entry_door`.
+        let fairy_entry_door = self.find_fairy_entry_door();
+
         let world = &mut self.server_mut().world;
         for (index, door) in self.doors.iter().enumerate() {
             if door.door_type == DoorType::ENTRANCE {
+                door.open_door(world);
+                continue;
+            }
+
+            // The wither door leading INTO the Fairy room (shortest path from the entrance)
+            // starts open just like the entrance door - any other door touching Fairy (the way
+            // further out/deeper into the dungeon) stays a normal locked wither door.
+            if door.door_type == DoorType::WITHER && fairy_entry_door == Some(index) {
                 door.open_door(world);
                 continue;
             }
@@ -554,9 +776,13 @@ impl Dungeon {
                 continue;
             }
 
+            // Covers the door's full 5x5x5 frame (see `Door::load_into_world`'s block-placement
+            // loop, which places `chosen`'s 125 blocks across x/z -2..=2 and y 69..=73 around
+            // the door center) - not just the inner opening - so clicking anywhere on the
+            // visible door, frame included, opens it.
             world::iterate_blocks(
-                BlockPos { x: door.x - 1, y: 69, z: door.z - 1 },
-                BlockPos { x: door.x + 1, y: 72, z: door.z + 1 },
+                BlockPos { x: door.x - 2, y: 69, z: door.z - 2 },
+                BlockPos { x: door.x + 2, y: 73, z: door.z + 2 },
                 |x, y, z| {
                     let action = match door.door_type {
                         DoorType::WITHER => BlockInteractAction::WitherDoor { door_index: index },
@@ -584,9 +810,11 @@ impl Dungeon {
         if let Some(room_index) = entrance_room_index {
             self.map.draw_room(&self.rooms, &self.doors, room_index);
             // Spawn this room's mobs now that the entrance room has been entered (dungeon started)
-            if let Some(room) = self.rooms.get(room_index) {
-                let world = &mut self.server_mut().world;
-                spawn_room_mobs(world, room_index, room);
+            if !self.practice_room {
+                if let Some(room) = self.rooms.get(room_index) {
+                    let world = &mut self.server_mut().world;
+                    spawn_room_mobs(world, room_index, room);
+                }
             }
         }
     }
@@ -674,9 +902,78 @@ impl Dungeon {
                 self.score.sync_exploration(&self.rooms);
                 self.score.check_score_announcements(&mut server.world);
 
+                // Practice-mode secret route timer: starts on the first tick any player's
+                // position has moved away from where they spawned into the room ("first
+                // input"), finishes once the room's found secrets reach the requested target.
+                // While active, every connected player gets a live action-bar timer that
+                // flashes green for a moment whenever a secret is found, then freezes on the
+                // final time once the route finishes.
+                if self.practice_room {
+                    if let Some(target) = self.practice_target_secrets {
+                        if self.practice_route_start_tick.is_none() {
+                            let moved = server.world.players.values().any(|player| {
+                                let Some((spawn_pos, _, _)) = player.practice_last_spawn else { return false };
+                                let dx = player.position.x - spawn_pos.x;
+                                let dy = player.position.y - spawn_pos.y;
+                                let dz = player.position.z - spawn_pos.z;
+                                dx * dx + dy * dy + dz * dz > 0.0004 // moved more than ~2cm
+                            });
+                            if moved {
+                                self.practice_route_start_tick = Some(*current_ticks);
+                            }
+                        }
+
+                        let found = self.rooms.get(0).map(|room| room.found_secrets).unwrap_or(0);
+                        if found > self.practice_last_found_secrets {
+                            const FLASH_TICKS: u32 = 10; // ~0.5s
+                            self.practice_route_flash_ticks = FLASH_TICKS;
+                        }
+                        self.practice_last_found_secrets = found;
+                        self.practice_route_flash_ticks = self.practice_route_flash_ticks.saturating_sub(1);
+
+                        if !self.practice_route_finished {
+                            if let Some(start_tick) = self.practice_route_start_tick {
+                                if found as u16 >= target as u16 {
+                                    self.practice_route_finished = true;
+                                    let seconds = current_ticks.saturating_sub(start_tick) as f64 * 0.05;
+                                    self.practice_route_finish_seconds = Some(seconds);
+                                    let prefix = self.practice_route_prefix.as_deref().unwrap_or("Practice");
+                                    let message = format!("\u{a7}f{}  \u{a7}fTime: \u{a7}a{:.2}s", prefix, seconds);
+                                    for (_, player) in &mut server.world.players {
+                                        player.send_message(&message);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Live timer text, folded into the existing HP/Defense/Mana/Secrets
+                        // action bar (see `main.rs`'s per-player tick loop) instead of being
+                        // sent as its own competing action-bar packet - only one action-bar
+                        // message can be shown at a time, so a separate packet here would just
+                        // flicker/overwrite the normal HUD instead of sitting alongside it.
+                        // Frozen on the final time once finished, otherwise a live count-up
+                        // from the start tick (or 0.00s if not started yet). Gold (`&6`, "MC
+                        // color 6") normally, green while flashing after a secret or once done.
+                        let seconds = if self.practice_route_finished {
+                            self.practice_route_finish_seconds.unwrap_or(0.0)
+                        } else if let Some(start_tick) = self.practice_route_start_tick {
+                            current_ticks.saturating_sub(start_tick) as f64 * 0.05
+                        } else {
+                            0.0
+                        };
+                        let color = if self.practice_route_finished || self.practice_route_flash_ticks > 0 {
+                            "&a" // green: done, or briefly after a secret is found
+                        } else {
+                            "&6" // gold
+                        };
+                        self.practice_timer_text = Some(format!("{}{:.2}s", color, seconds));
+                    }
+                }
+
                 // Play additional villager haggle sounds after the first one
                 // 2000ms = 40 ticks after dungeon start (first additional sound)
-                if *current_ticks == 40 {
+                // No Mort in a practice room, so skip his flavor text/sounds entirely.
+                if *current_ticks == 40 && !self.practice_room {
                     for (_, player) in &mut server.world.players {
                         let _ = player.write_packet(&SoundEffect {
                             sound: Sounds::VillagerHaggle.id(),
@@ -694,7 +991,7 @@ impl Dungeon {
                 }
                 
                 // 1500ms = 30 ticks after the second sound (70 ticks total)
-                if *current_ticks == 70 {
+                if *current_ticks == 70 && !self.practice_room {
                     for (_, player) in &mut server.world.players {
                         let _ = player.write_packet(&SoundEffect {
                             sound: Sounds::VillagerHaggle.id(),
@@ -776,7 +1073,9 @@ impl Dungeon {
                             room.entered = true;
                             rooms_just_entered.insert(*room_index);
                             
-                            // Collect entry secrets (schest, sess) to spawn immediately when room is entered
+                            // Collect entry secrets (schest, sess) to spawn immediately when room is entered.
+                            // With `secrets_always_spawn` on, every secret in the room spawns on entry
+                            // instead of just schest/sess, bypassing the proximity gating below entirely.
                             if !room.room_entry_secrets_spawned {
                                 room.room_entry_secrets_spawned = true;
                                 for secret_rc in &room.json_secrets {
@@ -784,7 +1083,12 @@ impl Dungeon {
                                     if secret.has_spawned {
                                         continue;
                                     }
-                                    
+
+                                    if self.secrets_always_spawn {
+                                        entry_secrets_to_spawn.push((secret_rc.clone(), *room_index));
+                                        continue;
+                                    }
+
                                     match &secret.secret_type {
                                         crate::dungeon::room::secrets::SecretType::SecretChest { .. }
                                         | crate::dungeon::room::secrets::SecretType::SecretEssence => {
@@ -811,9 +1115,99 @@ impl Dungeon {
                 }
                 
                 // Spawn each newly-entered room's mobs now, rather than for the whole dungeon up front
-                for room_index in &rooms_just_entered {
-                    if let Some(room) = self.rooms.get(*room_index) {
-                        spawn_room_mobs(&mut server.world, *room_index, room);
+                if !self.practice_room {
+                    for room_index in &rooms_just_entered {
+                        if let Some(room) = self.rooms.get(*room_index) {
+                            spawn_room_mobs(&mut server.world, *room_index, room);
+                        }
+                    }
+                }
+
+                // Rooms with no starred mobs at all (so `spawn_room_mobs` above never gave them
+                // any to kill) leading to a Wither or Blood Door get their key granted immediately
+                // instead of waiting on a kill event that will never happen - rooms that DO have
+                // starred mobs are handled instead in `combat.rs::kill_mob` once the last one dies.
+                // Inlined rather than calling `maybe_grant_door_key` (same logic, extracted for
+                // the `combat.rs` call site) - `match &mut self.state` above is already holding
+                // `self` mutably borrowed here, and a method call on `self` would conflict with
+                // that, the same borrow-conflict class as the chest-particle code just below.
+                for &room_index in &rooms_just_entered {
+                    for kind in [PickupKind::Wither, PickupKind::Blood] {
+                        if let Some(room) = self.rooms.get(room_index) {
+                            if room.starred_mobs_remaining == 0 {
+                                let wanted_door_type = kind.door_type().expect("Wither/Blood always have a door_type");
+                                let mut matched_door: Option<(usize, usize, usize)> = None; // (door_index, segment_x, segment_z)
+                                'find_door: for segment in &room.segments {
+                                    for neighbour in segment.neighbours.iter().flatten() {
+                                        if let Some(door) = self.doors.get(neighbour.door_index) {
+                                            if door.door_type == wanted_door_type && !door.key_granted {
+                                                matched_door = Some((neighbour.door_index, segment.x, segment.z));
+                                                break 'find_door;
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some((door_index, segment_x, segment_z)) = matched_door {
+                                    self.doors[door_index].key_granted = true;
+                                    // Center of the matched 32x32 room segment, not the door's own
+                                    // coordinates - spawning at the door's position lands the key
+                                    // literally inside the door frame (confirmed by testing).
+                                    let spawn_pos = DVec3::new(
+                                        DUNGEON_ORIGIN.0 as f64 + segment_x as f64 * 32.0 + 16.0,
+                                        70.0,
+                                        DUNGEON_ORIGIN.1 as f64 + segment_z as f64 * 32.0 + 16.0,
+                                    );
+                                    spawn_pickup(&mut server.world, spawn_pos, kind);
+                                    let tnt_pos = DVec3::new(spawn_pos.x + 1.0, spawn_pos.y, spawn_pos.z);
+                                    spawn_pickup(&mut server.world, tnt_pos, PickupKind::Tnt);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // A single flame particle at each of this room's locked chests, right at their
+                // front face - locked chests are all placed once at world population, before
+                // any player has connected, so a particle fired at placement time would never
+                // have an observer. Firing it here instead, on room discovery, is the actual
+                // moment a player could plausibly be watching.
+                for &room_index in &rooms_just_entered {
+                    // Inlined `get_room_at` - can't call it as a method here, `current_ticks`
+                    // above already holds `self.state` mutably borrowed for this whole match
+                    // arm, and a method call borrows all of `self`, not just `self.room_grid`.
+                    let room_grid = &self.room_grid;
+                    let chest_positions: Vec<BlockPos> = self.locked_chests.keys()
+                        .filter(|&&pos| {
+                            if pos.x < DUNGEON_ORIGIN.0 || pos.z < DUNGEON_ORIGIN.1 {
+                                return false;
+                            }
+                            let grid_x = ((pos.x - DUNGEON_ORIGIN.0) / 32) as usize;
+                            let grid_z = ((pos.z - DUNGEON_ORIGIN.1) / 32) as usize;
+                            room_grid.get(grid_x + (grid_z * 6)).and_then(|e| *e) == Some(room_index)
+                        })
+                        .copied()
+                        .collect();
+                    for pos in chest_positions {
+                        let direction = match server.world.get_block_at(pos.x, pos.y, pos.z) {
+                            crate::server::block::blocks::Blocks::Chest { direction } => direction,
+                            _ => continue,
+                        };
+                        let (fx, _, fz) = direction.get_offset();
+                        let particle = crate::net::protocol::play::clientbound::Particles {
+                            particle_id: crate::server::utils::particles::ParticleTypes::Flame.get_id(),
+                            long_distance: false,
+                            x: pos.x as f32 + 0.5 + fx as f32 * 0.6,
+                            y: pos.y as f32 + 0.5,
+                            z: pos.z as f32 + 0.5 + fz as f32 * 0.6,
+                            offset_x: 0.0,
+                            offset_y: 0.0,
+                            offset_z: 0.0,
+                            speed: 0.0,
+                            count: 1,
+                        };
+                        for player in server.world.players.values_mut() {
+                            player.write_packet(&particle);
+                        }
                     }
                 }
                 
@@ -1163,13 +1557,21 @@ impl Dungeon {
             let world = &mut server.world;
             let room = self.rooms.get_mut(room_index).unwrap();
             
-            // Explode crypts (all patterns within radius)
-            let crypts_exploded = room.explode_crypt_near(world, &pos, radius);
-            
+            // Explode crypts (all patterns within radius) - a Crypt Undead spawns at each one's
+            // position instead of the bonus score being granted immediately; the score is only
+            // credited once that specific mob is killed (see `ai/combat.rs::kill_mob`), not just
+            // for blowing the crypt block itself.
+            let crypt_spawn_positions = room.explode_crypt_near(world, &pos, radius);
+
+            // Explode King Midas's golden "crypt" the same way, but never inserted into
+            // `entity_crypt_room` below - his kill is never credited as a real crypt (see
+            // `Room::explode_kingmidas_near`).
+            let kingmidas_spawn_positions = room.explode_kingmidas_near(world, &pos, radius);
+
             // Explode superboomwalls (only first pattern within radius)
             let walls_exploded = room.explode_superboomwall_near(world, &pos, radius);
-            
-            if crypts_exploded > 0 || walls_exploded > 0 {
+
+            if !crypt_spawn_positions.is_empty() || !kingmidas_spawn_positions.is_empty() || walls_exploded > 0 {
                 // Play explosion sound for all players
                 for (_, player) in &mut world.players {
                     let _ = player.write_packet(&SoundEffect {
@@ -1184,12 +1586,18 @@ impl Dungeon {
 
             }
 
-            // Each blown crypt is +1 bonus score (capped at +5 - see `bonus_score`) - check
-            // immediately rather than waiting for the next tick so the announcement lands
-            // right as the crypt blows.
-            if crypts_exploded > 0 {
-                self.score.crypts += crypts_exploded as u32;
-                self.score.check_score_announcements(world);
+            for crypt_pos in crypt_spawn_positions {
+                let spawn_pos = DVec3::from(&crypt_pos).add_x(0.5).add_z(0.5);
+                if let Some(entity_id) = crate::server::entity::dungeon_mobs::spawner::spawn_crypt_undead(world, room_index, spawn_pos, 0.0) {
+                    world.entity_crypt_room.insert(entity_id, room_index);
+                }
+            }
+
+            // King Midas spawns the same way, but deliberately isn't registered in
+            // `entity_crypt_room` - see the doc comment above.
+            for kingmidas_pos in kingmidas_spawn_positions {
+                let spawn_pos = DVec3::from(&kingmidas_pos).add_x(0.5).add_z(0.5);
+                crate::server::entity::dungeon_mobs::spawner::spawn_king_midas(world, room_index, spawn_pos, 0.0);
             }
         }
         Ok(())
@@ -1215,6 +1623,16 @@ impl Dungeon {
 
     pub fn record_mimic_killed(&mut self) {
         self.score.mimic_killed = true;
+        let world = &mut self.server_mut().world;
+        self.score.check_score_announcements(world);
+    }
+
+    /// Credits a crypt's bonus score (+1, capped at +5 - see `bonus_score`) once its Crypt
+    /// Undead is actually killed, not when the crypt block itself was exploded - see
+    /// `superboom_at` (which spawns the mob instead of crediting immediately) and
+    /// `ai/combat.rs::kill_mob` (which calls this on that mob's death).
+    pub fn record_crypt_killed(&mut self) {
+        self.score.crypts += 1;
         let world = &mut self.server_mut().world;
         self.score.check_score_announcements(world);
     }

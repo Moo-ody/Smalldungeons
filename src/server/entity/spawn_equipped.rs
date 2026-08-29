@@ -1,6 +1,6 @@
 use anyhow;
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{EntityAttach, EntityEquipment, EntityTeleport};
+use crate::net::protocol::play::clientbound::{EntityAttach, EntityEquipment, EntityTeleport, PacketEntityMetadata};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
@@ -225,20 +225,35 @@ impl EntityImpl for FollowingNametagImpl {
         // Get the host entity position and update our position accordingly
         let world = entity.world_mut();
         if let Some((host_entity, _)) = world.entities.get(&self.host_entity_id) {
-            // For zombies: position armor stand base low so nametag appears above zombie head
-            // Zombie head is at zombie_pos.y + 1.95
-            // Armor stand is ~1.975 tall, nametag appears above armor stand
-            // Position armor stand base so nametag is just above zombie head
-            let height_offset = if matches!(host_entity.metadata.variant, EntityVariant::Zombie { .. }) {
-                0.0 // Position at zombie feet, offset will adjust from there
-            } else {
-                0.0
-            };
+            // `self.y_offset` is the caller-computed absolute head-height for this specific
+            // mob (see `spawn_active_mob`/`spawn_mimic`'s own comments) - no per-variant
+            // adjustment here anymore. This used to also subtract a hardcoded -0.9 for
+            // `is_child` hosts on top of a small flat offset, tuned for keeping the stand near
+            // the mob's *feet* and letting its own ~1.975-tall model push the nametag text up
+            // above the head; that convention was backwards from what OdinClient's/Skytils'
+            // starred-mob box code expects (it treats this entity's own Y as head height
+            // directly, see `spawn_active_mob`), so callers now pass the real head-height
+            // value outright instead of this function guessing a correction per mob type.
             let target_pos = DVec3::new(
                 host_entity.position.x,
-                host_entity.position.y + height_offset + self.y_offset,
+                host_entity.position.y + self.y_offset,
                 host_entity.position.z
             );
+
+            // Periodically resend the full metadata packet (custom name + visibility), not
+            // just once at spawn - the one-shot resend added earlier for the "shows briefly
+            // then hides" symptom didn't fully fix it (still seen a few ticks after spawn, per
+            // report), and nothing server-side ever clears `custom_name` on this entity (
+            // checked), so whatever's dropping it client-side isn't something a single extra
+            // packet at spawn reliably outruns. Cheap defensive resync every second rather than
+            // continuing to guess at the exact client-side cause without being able to observe
+            // it directly.
+            if entity.ticks_existed % 20 == 0 {
+                packet_buffer.write_packet(&crate::net::protocol::play::clientbound::PacketEntityMetadata {
+                    entity_id: crate::net::var_int::VarInt(entity.id),
+                    metadata: entity.metadata.clone(),
+                });
+            }
 
             // Only teleport if position changed significantly (to avoid spam)
             let distance = entity.position.distance_to(&target_pos);
@@ -263,50 +278,51 @@ impl EntityImpl for FollowingNametagImpl {
     /// a real, clickable entity even though it's invisible - without forwarding, a click that
     /// lands on the nametag instead of the host mob's own hitbox would silently do nothing
     /// (no aggro, no lethal-weapon kill), since the default `EntityImpl::interact` is a no-op.
-    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) {
+    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) -> bool {
         let world = entity.world_mut();
         if let Some((host_entity, host_impl)) = world.entities.get_mut(&self.host_entity_id) {
-            host_impl.interact(host_entity, player, action);
+            host_impl.interact(host_entity, player, action)
+        } else {
+            false
         }
     }
 }
 
-/// Spawns an invisible armor stand nametag that follows the given entity
+/// Spawns an invisible nametag entity that follows the given entity, displaying `nametag_text`
+/// at `y_offset` above the host. `variant` is always `EntityVariant::ArmorStand` in practice -
+/// non-ArmorStand species (Bat, baby Zombie) were tried to dodge Skytils' box code, which only
+/// targets ArmorStands, but both got their *text* silently suppressed client-side (hitbox still
+/// visible via F3+B, so the entity itself was fine) - something declutters invisible/AI-disabled/
+/// unequipped non-ArmorStand mobs regardless of species, while exempting ArmorStand since that's
+/// the standard vanilla/SkyBlock convention for floating text. The parameter is kept generic in
+/// case a future caller has a use for it, but `spawn_active_mob` always passes ArmorStand now.
 pub fn spawn_following_nametag(
     world: &mut World,
     host_entity_id: EntityId,
     nametag_text: &str,
     y_offset: f64,
+    variant: EntityVariant,
 ) -> anyhow::Result<EntityId> {
-    // Get host entity position
-    let (host_pos, is_zombie) = if let Some((host_entity, _)) = world.entities.get(&host_entity_id) {
-        let is_zombie = matches!(host_entity.metadata.variant, EntityVariant::Zombie { .. });
-        (host_entity.position, is_zombie)
+    // `y_offset` is the caller-computed absolute head-height for this mob - see the matching
+    // comment in `FollowingNametagImpl::tick` for why there's no per-variant adjustment here.
+    let host_pos = if let Some((host_entity, _)) = world.entities.get(&host_entity_id) {
+        host_entity.position
     } else {
         return Err(anyhow::anyhow!("Host entity not found"));
     };
-
-    // For zombies: position armor stand base low so nametag appears above zombie head
-    // Zombie head is at zombie_pos.y + 1.95
-    // Armor stand is ~1.975 tall, nametag appears above armor stand
-    // Position armor stand base so nametag is just above zombie head
-    let height_offset = if is_zombie { 
-        0.0 // Position at zombie feet, offset will adjust from there
-    } else { 
-        0.0 
-    };
     let nametag_pos = DVec3::new(
         host_pos.x,
-        host_pos.y + height_offset + y_offset,
+        host_pos.y + y_offset,
         host_pos.z
     );
 
-    // Create invisible armor stand metadata with custom name
-    let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+    // Create invisible nametag entity metadata with custom name
+    let mut metadata = EntityMetadata::new(variant);
     metadata.is_invisible = true;
     metadata.custom_name = Some(nametag_text.to_string());
     metadata.custom_name_visible = true;
     metadata.ai_disabled = true;
+    metadata.is_small_armor_stand = true;
 
     // Spawn the armor stand
     let nametag_id = world.new_entity_id();
@@ -323,6 +339,16 @@ pub fn spawn_following_nametag(
     if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
         chunk.insert_entity(nametag_entity.id);
         nametag_entity.write_spawn_packet(&mut chunk.packet_buffer);
+        // The custom name/visibility flags ride along in `SpawnMob`'s inline metadata, but a
+        // dedicated follow-up metadata packet is also sent here - same reasoning as the
+        // DroppedItem case in `Entity::tick` (see its comment): relying on a single packet to
+        // carry both the spawn and the metadata has been unreliable for this client in this
+        // codebase, so redundancy on spawn is cheap insurance against the nametag rendering
+        // briefly and then reverting to hidden/default state.
+        chunk.packet_buffer.write_packet(&PacketEntityMetadata {
+            entity_id: VarInt(nametag_entity.id),
+            metadata: nametag_entity.metadata.clone(),
+        });
         nametag_impl.spawn(&mut nametag_entity, &mut chunk.packet_buffer);
     }
 
@@ -330,7 +356,7 @@ pub fn spawn_following_nametag(
     world.entities.insert(nametag_id, (nametag_entity, nametag_impl));
 
     // So when the host (zombie etc.) is despawned, we despawn this nametag too
-    world.entity_following_nametag.insert(host_entity_id, nametag_id);
+    world.entity_following_nametag.entry(host_entity_id).or_default().push(nametag_id);
 
     Ok(nametag_id)
 }

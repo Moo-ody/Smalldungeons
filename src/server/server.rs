@@ -1,9 +1,12 @@
+use crate::dungeon::door::DoorType;
 use crate::dungeon::dungeon::Dungeon;
+use crate::dungeon::room::room_data::RoomData;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet::ProcessPacket;
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::net::protocol::play::clientbound::{AddEffect, CustomPayload, EntityProperties, JoinGame, PlayerAbilities, PlayerListHeaderFooter, PositionLook};
 use crate::net::var_int::VarInt;
+use crate::server::block::blocks::Blocks;
 use crate::server::items::Item;
 use crate::server::player::attribute::{Attribute, AttributeMap, AttributeModifier};
 use crate::server::player::inventory::ItemSlot;
@@ -15,7 +18,9 @@ use crate::server::world;
 use crate::server::world::World;
 use crate::server::entity::entity::EntityId;
 use crate::server::utils::dvec3::DVec3;
+use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
@@ -29,17 +34,35 @@ pub struct Server {
 
     pub tasks: Vec<Task>,
     // im not sure about having players in server directly.
+
+    /// Static room/door template data, parsed once at boot from the bundled JSON/txt data
+    /// files and reused for every dungeon built afterward (including on-demand rebuilds via
+    /// `dungeon_switch::switch_dungeon`) - re-parsing hundreds of room files on every switch
+    /// would undercut the "fast/seamless" requirement for no benefit, since none of this data
+    /// is ever mutated per-run.
+    pub room_data_storage: DeterministicHashMap<usize, RoomData>,
+    pub door_type_blocks: HashMap<DoorType, Vec<Vec<Blocks>>>,
+
+    /// Set once at startup from the `practice` CLI launch arg (see `main.rs`). Gates whether
+    /// `/practice` and `/rs` (`dungeon::practice`) are allowed to run at all - practice mode is
+    /// a distinct server launch mode, not an in-game toggle available on a normal dungeon run.
+    pub practice_mode: bool,
 }
 impl Server {
     pub fn initialize_with_dungeon(
         network_tx: UnboundedSender<NetworkThreadMessage>,
         dungeon: Dungeon,
+        room_data_storage: DeterministicHashMap<usize, RoomData>,
+        door_type_blocks: HashMap<DoorType, Vec<Vec<Blocks>>>,
     ) -> Server {
         Server {
             network_tx,
             world: World::new(),
             dungeon,
             tasks: Vec::new(),
+            room_data_storage,
+            door_type_blocks,
+            practice_mode: false,
         }
     }
 
@@ -148,40 +171,25 @@ impl Server {
                     flags: 0,
                 });
 
-                let chunk_x = (player.position.x.floor() as i32) >> 4;
-                let chunk_z = (player.position.z.floor() as i32) >> 4;
-                
-                let view_distance = world::VIEW_DISTANCE as i32 + 1;
-                
-                self.world.chunk_grid.for_each_in_view(
-                    chunk_x, 
-                    chunk_z,
-                    view_distance,
-                    |chunk, x, z| {
-                        player.write_packet(&chunk.get_chunk_data(x, z, true));
-    
-                        for entity_id in chunk.entities.iter_mut() {
-                            // A stale ID here (chunk-membership desync) should never crash a
-                            // player join - skip it rather than unwrap.
-                            let Some((entity, entity_impl)) = self.world.entities.get_mut(&entity_id) else { continue };
-                            // Send spawn packets directly to player instead of using chunk buffer
-                            entity.write_spawn_packet(&mut player.packet_buffer);
-                            entity_impl.spawn(entity, &mut player.packet_buffer);
-
-                            // Resync equipment if this entity has equipment
-                            if let Some(equipment) = self.world.entity_equipment.get(&*entity_id) {
-                                use crate::server::entity::spawn_equipped::send_equipment_packets;
-                                send_equipment_packets(&mut player.packet_buffer, *entity_id, equipment);
-                            }
-                        }
-                    }
-                );
+                // Full chunk+entity resync around the player's current position - also reused
+                // as-is by `dungeon_switch::switch_dungeon` to resync every connected player
+                // into the freshly rebuilt dungeon.
+                sync_player_view(&mut self.world, &mut player);
 
 
                 
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
 
-                // player.write_packet(&self.world.player_info.new_packet());
+                // Full tab-list snapshot (all 80 lines, including the "Dungeon: Catacombs"
+                // line at index 0) - without this, a newly-joining player only ever gets tab
+                // list content via `get_packet()`'s delta, which only includes lines changed
+                // since the last drain. `set_line(0, ...)` runs once at server startup, so
+                // that delta only ever reaches whichever players happened to already be
+                // connected on the very first tick - anyone joining afterward (i.e. virtually
+                // always) never received this at all. Client mods that detect "is this a
+                // dungeon" by scanning tab-list entries for "Area:"/"Dungeon:"-prefixed text
+                // (e.g. OdinClient's `LocationUtils`) depend on this line actually arriving.
+                player.write_packet(&self.world.player_info.new_packet());
 
                 player.write_packet(&PlayerListHeaderFooter {
                     header: header(),
@@ -233,6 +241,10 @@ impl Server {
                 player.inventory.set_slot(ItemSlot::Filled(Item::BonzoStaff, 1), 14);
                 player.inventory.set_slot(ItemSlot::Filled(Item::JerryChineGun, 1), 15);
                 player.inventory.set_slot(ItemSlot::Filled(Item::VanillaChest, 64), 16);
+                // Boots armor slot (5=helmet, 6=chestplate, 7=leggings, 8=boots) - was previously
+                // only given via the `/depthstrider` testing command; now on by default so water
+                // in the dungeon doesn't slow players down without them having to ask for it.
+                player.inventory.set_slot(ItemSlot::Filled(Item::DepthStriderBoots, 1), 8);
 
                 player.sync_inventory();
 
@@ -332,4 +344,40 @@ impl Server {
         }
         Ok(())
     }
+}
+
+/// Sends `player` a full, authoritative snapshot of everything currently in view of their
+/// position: fresh chunk data (`new = true`, so it fully replaces whatever the client
+/// previously had for that chunk - no stray blocks can survive this) plus spawn/equipment
+/// packets for every entity in those chunks. Used both for a brand-new player's initial join
+/// and by `dungeon_switch::switch_dungeon` to resync every connected player into a freshly
+/// rebuilt dungeon in one atomic burst.
+pub fn sync_player_view(world: &mut World, player: &mut Player) {
+    let chunk_x = (player.position.x.floor() as i32) >> 4;
+    let chunk_z = (player.position.z.floor() as i32) >> 4;
+    let view_distance = world::VIEW_DISTANCE as i32 + 1;
+
+    world.chunk_grid.for_each_in_view(
+        chunk_x,
+        chunk_z,
+        view_distance,
+        |chunk, x, z| {
+            player.write_packet(&chunk.get_chunk_data(x, z, true));
+
+            for entity_id in chunk.entities.iter_mut() {
+                // A stale ID here (chunk-membership desync) should never crash this - skip it
+                // rather than unwrap.
+                let Some((entity, entity_impl)) = world.entities.get_mut(&entity_id) else { continue };
+                // Player-model entities (e.g. Mort) need their tab-list entry before
+                // SpawnPlayer or they render invisible - see `write_entity_spawn`.
+                crate::server::world::write_entity_spawn(entity, entity_impl.as_mut(), &mut player.packet_buffer);
+
+                // Resync equipment if this entity has equipment
+                if let Some(equipment) = world.entity_equipment.get(&*entity_id) {
+                    use crate::server::entity::spawn_equipped::send_equipment_packets;
+                    send_equipment_packets(&mut player.packet_buffer, *entity_id, equipment);
+                }
+            }
+        }
+    );
 }

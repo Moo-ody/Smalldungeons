@@ -113,7 +113,16 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             ..AiProfile::defaults()
         },
 
-        CryptUndead => AiProfile { vision_range: 5.0, ..AiProfile::placeholder() },
+        // Crypt Undead: same melee shape as Crypt Dreadlord (per user request - "crypt
+        // dreadlord mechanics"). Appears both in ordinary room-JSON spawns and ad hoc at an
+        // exploded Crypt's position (`spawner::spawn_crypt_undead`, holding a Bone instead of
+        // a sword - see `spawner::crypt_undead_equipment`) once a player detonates one.
+        CryptUndead => AiProfile {
+            vision_range: 16.0,
+            movement: MovementStyle::Approach,
+            attack: AttackModule::Melee { range: 2.5 },
+            ..AiProfile::defaults()
+        },
 
         // Withermancer: shoulder-skull charges (remaining_skulls = 2) aren't implemented yet
         // (Phase 3), but it shouldn't just stand there doing nothing in the meantime - falls
@@ -158,6 +167,30 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             vision_range: 24.0,
             movement: MovementStyle::MaintainDistance { preferred: 10.0, tolerance: 2.0 },
             attack: AttackModule::Ranged { speed_bps: 24.0, cooldown_ticks: 25 },
+            ..AiProfile::defaults()
+        },
+
+        // Mimic: same basic detect/approach/melee controller as the plain zombies - it's a
+        // disguised baby zombie underneath, not a distinct combat pattern. Real Hypixel attack
+        // range isn't verified, so this reuses the standard melee shape rather than guessing
+        // bespoke numbers - speed_multiplier is the one deliberately-set value (2.5x a normal
+        // zombie, per request).
+        Mimic => AiProfile {
+            vision_range: 32.0,
+            requires_los: true,
+            movement: MovementStyle::Approach,
+            attack: AttackModule::Melee { range: 2.5 },
+            speed_multiplier: 2.5,
+            ..AiProfile::defaults()
+        },
+
+        // King Midas: same melee shape as Crypt Dreadlord/Crypt Undead - approaches and
+        // swings his golden sword. His actual "mechanic" (armor breaking off per hit, dying on
+        // the 5th) lives in `ai/combat.rs::apply_king_midas_hit`, not here.
+        KingMidas => AiProfile {
+            vision_range: 16.0,
+            movement: MovementStyle::Approach,
+            attack: AttackModule::Melee { range: 2.5 },
             ..AiProfile::defaults()
         },
     }

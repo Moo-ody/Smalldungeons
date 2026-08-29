@@ -20,6 +20,13 @@ pub fn get_block_aabb(block: Blocks, x: i32, y: i32, z: i32) -> Option<AABB> {
         | Blocks::FlowingLava { .. }
         | Blocks::Lava { .. } => None,
 
+        // Torches are thin decoration attached to a surface, no real hitbox in vanilla -
+        // without this they fell through to the full-cube default below, so pearls (and
+        // anything else using this for collision) would stop dead next to a torch.
+        Blocks::Torch { .. }
+        | Blocks::UnlitRedstoneTorch { .. }
+        | Blocks::RedstoneTorch { .. } => None,
+
         // Single slabs are half-height "climbable" obstructions, not a full 1x1 block -
         // combined with `physics::move_horizontal`'s step-up, this lets mobs walk onto them
         // instead of being stopped cold. Double slabs stay full-height (handled by the `_`

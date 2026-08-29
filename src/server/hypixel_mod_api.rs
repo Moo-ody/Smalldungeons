@@ -13,11 +13,17 @@ use crate::net::var_int::write_var_int;
 /// sets onHypixel = true and accepts other Hypixel packets.
 pub const HYPIXEL_HELLO_CHANNEL: &str = "hypixel:hello";
 
-/// Hypixel Mod API channel for the location packet.
-pub const HYPIXEL_LOCATION_CHANNEL: &str = "hypixel:location";
+/// Hypixel Mod API channel for the location packet. Registered under the `hyevent:` prefix
+/// (not `hypixel:`) since it's an event packet, not a request/response one - confirmed via
+/// `HypixelModAPI.registerEventPackets` in the bundled mod-api jar's bytecode. The old
+/// `hypixel:location` string wasn't a registered identifier at all, so the client's packet
+/// registry silently dropped every location packet this server sent (see
+/// `ForgeModAPI$HypixelPacketHandler.channelRead0`: unregistered identifiers are ignored,
+/// not errored), meaning `SBInfo.mode`/`serverType` never got set and Skytils' dungeon
+/// detection never fired via this path.
+pub const HYPIXEL_LOCATION_CHANNEL: &str = "hyevent:location";
 
 const LOCATION_PACKET_VERSION: u8 = 1;
-const HELLO_PACKET_VERSION: u8 = 1;
 
 /// Writes a Minecraft-style string: VarInt(length) + UTF-8 bytes.
 fn write_mc_string(buf: &mut Vec<u8>, s: &str) {
@@ -37,15 +43,33 @@ fn write_optional_string(buf: &mut Vec<u8>, opt: Option<&str>) {
     }
 }
 
-/// Builds the payload for ClientboundHelloPacket (version 1).
-/// The client sets onHypixel = true when it receives this; send it before location.
-/// Format: version (1 byte).
-pub fn build_hello_payload() -> Vec<u8> {
-    vec![HELLO_PACKET_VERSION]
+/// Every Hypixel Mod API packet (hello, location, etc.) is dispatched through
+/// `HypixelModAPI.handle(String identifier, PacketSerializer)` client-side, which reads a
+/// leading `success` boolean *before* handing off to the packet's own `read()` - `true` means
+/// "here's the packet", `false` means "here's an error reason VarInt instead". Omitting this
+/// byte (as this file previously did) shifts every subsequent field by one: for the location
+/// packet specifically, the real version VarInt ends up read from the middle of the
+/// server-name string, fails `isExpectedVersion()`, and the whole packet is silently dropped
+/// before Skytils' handler ever sees it - which is why fixing just the channel identifier
+/// wasn't enough on its own.
+fn write_success_prefix(buf: &mut Vec<u8>) {
+    buf.push(1);
 }
 
+/// Builds the payload for ClientboundHelloPacket (version 1).
+/// The client sets onHypixel = true when it receives this; send it before location.
+/// Format: success (1 byte, always true here) | environment (VarInt: 0=PRODUCTION, 1=BETA, 2=TEST).
+pub fn build_hello_payload() -> Vec<u8> {
+    let mut buf = Vec::new();
+    write_success_prefix(&mut buf);
+    write_var_int(&mut buf, HELLO_ENVIRONMENT_PRODUCTION);
+    buf
+}
+
+const HELLO_ENVIRONMENT_PRODUCTION: i32 = 0;
+
 /// Builds the payload for ClientboundLocationPacket (version 1).
-/// Format: version (1 byte) | serverName (string) | serverType? | lobbyName? | mode? | map?
+/// Format: success (1 byte) | version (VarInt) | serverName (string) | serverType? | lobbyName? | mode? | map?
 /// Optional fields are: 1 byte (0/1) then if 1, Minecraft string.
 pub fn build_location_payload(
     server_name: &str,
@@ -55,7 +79,8 @@ pub fn build_location_payload(
     map: Option<&str>,
 ) -> Vec<u8> {
     let mut buf = Vec::new();
-    buf.push(LOCATION_PACKET_VERSION);
+    write_success_prefix(&mut buf);
+    write_var_int(&mut buf, LOCATION_PACKET_VERSION as i32);
     write_mc_string(&mut buf, server_name);
     write_optional_string(&mut buf, server_type);
     write_optional_string(&mut buf, lobby_name);

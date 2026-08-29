@@ -61,7 +61,7 @@ impl CommandMetadata for Term {
     }
 
     fn arguments(world: &mut World, player: &mut Player) -> Vec<Argument> {
-        vec![Argument { name: "type", completions: vec!["melody".to_string(), "order".to_string(), "panes".to_string(), "rubix".to_string(), "select".to_string(), "startswith".to_string()]}]
+        vec![Argument { name: "type", required: true, completions: vec!["melody".to_string(), "order".to_string(), "panes".to_string(), "rubix".to_string(), "select".to_string(), "startswith".to_string()]}]
     }
 }
 

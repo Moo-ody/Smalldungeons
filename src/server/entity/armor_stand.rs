@@ -110,11 +110,14 @@ impl EntityImpl for ArmorStandImpl {
         // Armor stands don't need to do anything on tick
     }
 
-    fn interact(&mut self, _entity: &mut Entity, player: &mut Player, _interaction_type: &EntityInteractionType) {
+    fn interact(&mut self, _entity: &mut Entity, player: &mut Player, _interaction_type: &EntityInteractionType) -> bool {
         // Handle terminal interaction
         if let Some(terminal_id) = self.armor_stand.terminal_id {
             // TODO: Open terminal for the player
             println!("Player {} interacted with terminal {}", player.client_id, terminal_id);
+            true
+        } else {
+            false
         }
     }
 }

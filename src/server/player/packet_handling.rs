@@ -33,9 +33,29 @@ impl ProcessPacket for ChatMessage {
 
 impl ProcessPacket for UseEntity {
     fn process_with_player(&self, player: &mut Player) {
+        let mut handled = false;
         if let Some((entity, entity_impl)) = player.world_mut().entities.get_mut(&self.entity_id.0) {
-            entity_impl.interact(entity, player, &self.action)
+            handled = entity_impl.interact(entity, player, &self.action);
         }
+
+        // Right-click abilities (pearl, etherwarp, hyperion, spirit sceptre, etc.) go through
+        // the generic `Item::on_right_click` -> `Player::handle_right_click` path, same as the
+        // `PlayerBlockPlacement` handler below - without this, clicking while an entity (e.g. a
+        // mob) is under the crosshair silently ate the click for every item, since UseEntity
+        // never called into item logic at all. Left-click (`Attack`) is a punch, not an
+        // item-use gesture, so it's excluded; an entity that already handled the interaction
+        // itself (Mort's dialogue, an armor stand terminal) takes priority and suppresses it.
+        if handled || self.action == EntityInteractionType::Attack {
+            return;
+        }
+        // The 1.8 client always sends both `InteractAt` and `Interact` for one right-click on
+        // an entity, so without this the item would fire twice per click.
+        let tick = player.world_mut().tick_count;
+        if player.last_entity_interact_tick == tick {
+            return;
+        }
+        player.last_entity_interact_tick = tick;
+        player.handle_right_click();
     }
 }
 
@@ -70,6 +90,36 @@ impl ProcessPacket for PlayerDigging {
     fn process_with_player(&self, player: &mut Player) {
         match self.action {
             PlayerDiggingAction::StartDestroyBlock => {
+                // Left-click also opens a wither/blood door, same as right-click. Every block
+                // across the whole door face is already registered in `interactable_blocks`
+                // (see `Dungeon`'s door-registration loop), so this covers any part of the
+                // door, not just one spot - matches the `// todo: left click open doors` note
+                // that used to sit on `BlockInteractAction::WitherDoor`.
+                {
+                    let world = player.world_mut();
+                    if let Some(interact_block) = world.interactable_blocks.get(&self.position) {
+                        use crate::server::block::block_interact_action::BlockInteractAction;
+                        if matches!(interact_block, BlockInteractAction::WitherDoor { .. } | BlockInteractAction::BloodDoor { .. }) {
+                            interact_block.interact(player, &self.position);
+                            // Without a key, `interact()` returns without changing the block, but
+                            // nothing here tells the CLIENT that - vanilla still locally predicts
+                            // a normal dig (coal block has finite hardness), and once its own
+                            // timer completes it removes the block client-side regardless of what
+                            // the server actually did, with nothing left to correct it back since
+                            // this handler already returns before `FinishDestroyBlock` would fire
+                            // a resync. Send the true post-interact block state immediately so the
+                            // client can't end up desynced into thinking it mined through.
+                            let world = player.world_mut();
+                            let block = world.get_block_at(self.position.x, self.position.y, self.position.z);
+                            player.write_packet(&BlockChange {
+                                block_pos: self.position,
+                                block_state: block.get_block_state_id(),
+                            });
+                            return;
+                        }
+                    }
+                }
+
                 // Check for Simon Says puzzle first
                 // let action = {
                 //     let world = player.world_mut();
@@ -214,9 +264,17 @@ impl ProcessPacket for PlayerBlockPlacement {
                 if let Err(e) = player.shoot_jerry_projectile() {
                 }
                 return;
-            } else if let Item::SpiritSceptre = item {
-                // Spirit Sceptre should fire even when right-clicking the ground / non-interactable blocks.
-                // If the clicked block is interactable, allow normal interaction instead.
+            } else if matches!(item, Item::SpiritSceptre | Item::AspectOfTheVoid | Item::EnderPearl | Item::Hyperion | Item::TacticalInsertion | Item::MagicalMap) {
+                // These items' abilities (etherwarp/ether transmission, pearl throw, wither
+                // impact, tactical insertion, map GUI, guided bat) go through the generic
+                // `Item::on_right_click` -> `Player::handle_right_click` path, which previously
+                // only ran from the "air click" branch below. Any target within normal ~5-block
+                // reach (e.g. etherwarping/pearling at a nearby wall) made the client report a
+                // valid block position instead, so the click silently did nothing - the ability
+                // only fired once the player's aim drifted past reach, using whatever aim/position
+                // had drifted to by then. Special-case them here (like Spirit Sceptre already was)
+                // so they always fire immediately on click, regardless of what's in reach, while
+                // still preferring a genuinely interactable block (chest/door/lever) if aimed at one.
                 if !self.position.is_invalid() {
                     let world = player.world_mut();
                     if world.interactable_blocks.contains_key(&self.position) {
@@ -247,7 +305,7 @@ impl ProcessPacket for PlayerBlockPlacement {
                     });
                 }
 
-                // Fire bat (air click OR non-interactable block)
+                // Fire the item's ability (air click OR non-interactable block)
                 player.handle_right_click();
                 return;
             }

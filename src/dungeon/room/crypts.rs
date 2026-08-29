@@ -76,6 +76,16 @@ static RELATIVE_EXTRA: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
     }
 });
 
+// King Midas's golden "crypt" pattern: same shape/schema as a real crypt, but deliberately
+// kept in its own file/lookup (`get_room_kingmidas` below) instead of being merged into
+// `get_room_crypts`'s sources - blowing it up spawns the King Midas NPC instead of a Crypt
+// Undead, and his kill is never wired to `entity_crypt_room`/`record_crypt_killed`, so it
+// doesn't count as a real crypt (see `Room::explode_kingmidas_near`/`Dungeon::superboom_at`).
+static RELATIVE_KINGMIDAS: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
+    let data = include_str!("../../room_data/relativecoords/kingmidas.json");
+    serde_json::from_str::<RelativeCoordsFile>(data).ok()
+});
+
 pub fn get_room_crypts(shape: &str, room_name: &str) -> Option<RoomCrypts> {
     // Select primary source based on shape
     let primary = match shape {
@@ -126,6 +136,30 @@ pub fn get_room_crypts(shape: &str, room_name: &str) -> Option<RoomCrypts> {
     if all_blocks.is_empty() { return None; }
 
     let patterns = all_blocks.into_iter().map(|blocks| CryptPattern { blocks }).collect();
+    Some(RoomCrypts { patterns })
+}
+
+/// Looks up King Midas's golden "crypt" pattern by room name - see `RELATIVE_KINGMIDAS`.
+/// Only one file/room ever needs this (unlike `get_room_crypts`, which merges several shape
+/// buckets), so there's no shape parameter here.
+pub fn get_room_kingmidas(room_name: &str) -> Option<RoomCrypts> {
+    let file = RELATIVE_KINGMIDAS.as_ref()?;
+
+    fn normalize(s: &str) -> String {
+        s.to_lowercase()
+            .replace('_', " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    let want = normalize(room_name);
+
+    let entry = file.rooms.get(room_name)
+        .or_else(|| file.rooms.iter().find(|(k, _)| normalize(k) == want).map(|(_, v)| v))?;
+
+    if entry.crypts.is_empty() { return None; }
+
+    let patterns = entry.crypts.iter().cloned().map(|blocks| CryptPattern { blocks }).collect();
     Some(RoomCrypts { patterns })
 }
 

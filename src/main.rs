@@ -51,6 +51,376 @@ use uuid::Uuid;
 // Mort skin constants
 const MORT_SKIN_VALUE: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMDcyNTkwMDEzOSwKICAicHJvZmlsZUlkIiA6ICJhNzdkNmQ2YmFjOWE0NzY3YTFhNzU1NjYxOTllYmY5MiIsCiAgInByb2ZpbGVOYW1lIiA6ICIwOEJFRDUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWI1Njg5NWI5NjU5ODk2YWQ2NDdmNTg1OTkyMzhhZjUzMmQ0NmRiOWMxYjAzODliOGJiZWI3MDk5OWRhYjMzZCIKICAgIH0KICB9Cn0=";
 const MORT_SKIN_SIGNATURE: &str = "ihevlFAZ1u+xG/eeEnUzMRu1l8i+2j6pw1jIw0yxcsLn1x749GL+ToaVRyU56+13vDg9G6QjWRHQaA1DpPIkgmthhZsxQ067Q2A2SASywQiQIvIPJwmzjRmkP3eYHtKnJ7t4uZ31qjMazaONNq00Nq2t8s983u2TPfCFZJQlx8RqNWjRZjmGh7Gw+YXKbecwnlQmvpKZSiPolCcTgobPl0aZCr+benffxA0bcAohkr5Kp8U2VZW73wF0P7FGkANIhLYOtokLTemaYOMPWe4q/SU3D5yZswM6/SQ63g0mAvZJfQW/Vb+lAGzlm3zXia7T6tAJjFYuV1kg5yVcODbYOb2fgLJK3OQvUjnf9xlXXyDcESOILsPhft5SYVbBQuDkuLitG7YecJMV9cbCqldnvv4Z4XKs3jaCzZqYDRql4MVx8rYd+7hLaGXuprfrwBYL1xzzgMFSTFUCkIm942L5B7/6tZJGT5GT7g4DN1vrJpnZz4+gxdebcbcUEfP313/gHFU/U3phfN89TBbbNAfi0t5uQ5SRCGXdCz+YbO56zTKjzeUg57u49XOZaKwNZyF6hmv2IdO9CJctYw9cvljEkALOkMjMShaP95QYHsahc3mFLavJbseY7x5/vlexjRvPxdnxQCDG+Fkf9eBwUjyCqUjQozYYM6euDHFqib7uBHM=";
+/// Fixed, deterministic UUID reused for the Mort NPC across every dungeon (both at boot and
+/// every `dungeon_switch::switch_dungeon` rebuild). Because it never changes, a client that
+/// already has a tab-list entry/hidden-nameplate team for this UUID from a *previous* Mort
+/// must have both explicitly removed before a new Mort spawns - see
+/// `dungeon_switch::remove_stale_mort_client_state` - or the client sees a duplicate
+/// `ADD_PLAYER`/`CREATE_TEAM` for already-existing state, which can corrupt its packet
+/// handling for everything else in the same burst (this was the "everything entity-related
+/// breaks after a dungeon switch" bug).
+pub const MORT_UUID_STR: &str = "550e8400-e29b-41d4-a716-446655440000";
+
+/// The Mort NPC's `EntityImpl`. Module-level (not defined inline in `populate_dungeon_world`)
+/// so it can be constructed both at boot and every time `dungeon_switch::switch_dungeon`
+/// rebuilds the dungeon from scratch.
+pub struct MortImpl {
+    /// `Entity::ticks_existed` of the last interaction we acted on, so a single
+    /// right-click that arrives as two `UseEntity` packets (InteractAt + Interact)
+    /// only opens the menu once. `u32::MAX` = "never interacted yet".
+    last_interact_tick: u32,
+}
+
+impl EntityImpl for MortImpl {
+    fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
+        // Add Mort to player list so the player entity can be spawned properly
+        if let Some(uuid) = entity.uuid {
+            let mort_profile = GameProfile {
+                uuid,
+                username: "Mort".to_string(),
+                properties: HashMap::from([
+                    ("textures".to_string(), GameProfileProperty {
+                        value: MORT_SKIN_VALUE.to_string(),
+                        signature: Some(MORT_SKIN_SIGNATURE.to_string()),
+                    })
+                ]),
+            };
+
+            let player_data = PlayerData {
+                ping: 20, // More realistic ping for NPCs
+                game_mode: GameType::Survival, // Use Survival instead of Creative for better modded client compatibility
+                profile: mort_profile,
+                display_name: Some(ChatComponentTextBuilder::new("Mort").build()),
+            };
+
+            // Send PlayerInfo Add packet
+            buffer.write_packet(&PlayerListItem {
+                action: VarInt(0), // ADD_PLAYER
+                players: vec![&player_data],
+            });
+
+            // First create the hidden team to prevent vanilla nameplate from showing
+            buffer.write_packet(&Teams {
+                name: SizedString::truncated("npc_hide"),
+                display_name: SizedString::truncated("npc_hide"),
+                prefix: SizedString::truncated(""),
+                suffix: SizedString::truncated(""),
+                name_tag_visibility: SizedString::truncated("never"),
+                color: 0,
+                players: vec![],
+                action: CREATE_TEAM,
+                friendly_flags: 0,
+            });
+
+            // Then add Mort to the hidden team
+            buffer.write_packet(&Teams {
+                name: SizedString::truncated("npc_hide"),
+                display_name: SizedString::truncated("npc_hide"),
+                prefix: SizedString::truncated(""),
+                suffix: SizedString::truncated(""),
+                name_tag_visibility: SizedString::truncated("never"),
+                color: 0,
+                players: vec![SizedString::truncated("Mort")],
+                action: ADD_PLAYER,
+                friendly_flags: 0,
+            });
+        }
+    }
+
+    fn tick(&mut self, entity: &mut Entity, _: &mut PacketBuffer) {
+        // Same "personal space" facing reaction dungeon mobs get while idle (see
+        // `ai::mod::IDLE_FACE_PLAYER_RANGE`/its handling in `run_mob_ai`) - Mort isn't on the
+        // dungeon-mob AI pipeline at all (no combat, no wandering), so this is his only motion.
+        const MORT_FACE_PLAYER_RANGE: f64 = 8.0;
+        let mort_pos = entity.position;
+        let world = entity.world_mut();
+        let nearest_player_pos = world.players.values()
+            .map(|player| (player.position, player.position.distance_to(&mort_pos)))
+            .filter(|(_, dist)| *dist <= MORT_FACE_PLAYER_RANGE)
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(pos, _)| pos);
+
+        if let Some(player_pos) = nearest_player_pos {
+            crate::server::entity::dungeon_mobs::ai::movement::face_toward(entity, player_pos);
+        }
+    }
+    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) -> bool {
+        // Right-clicking an entity is how you talk to Mort on Hypixel. In the 1.8
+        // protocol a right-click on an entity is delivered as `InteractAt` (type 2,
+        // carries the hit vector) - NOT `Interact` (type 0) - so the old code, which
+        // returned early on `InteractAt` and only opened on `Interact`, never fired on
+        // an actual right-click. Left-click (`Attack`) is not a valid way to open Mort,
+        // so it's ignored here rather than used as a stand-in.
+        if *action == EntityInteractionType::Attack {
+            return false;
+        }
+        // Some clients send both `InteractAt` and `Interact` for one right-click;
+        // debounce on the tick so a single click opens the menu only once. Still report
+        // `true` on the debounced duplicate - it's the same click as the one that opened
+        // the menu, so the held item shouldn't also fire for it.
+        if entity.ticks_existed == self.last_interact_tick {
+            return true;
+        }
+        self.last_interact_tick = entity.ticks_existed;
+        player.open_ui(UI::MortReadyUpMenu);
+        true
+    }
+}
+
+/// Loads every room's blocks into the world, spawns Mort in the entrance room and sets the
+/// world spawn point, spawns locked chests, applies a handful of special per-room block
+/// tweaks, and loads every door's blocks. Assumes `server.dungeon` is already a freshly built
+/// `Dungeon` (rooms/doors populated, no blocks placed into `server.world` yet) - used both by
+/// `main()` at boot and by `dungeon_switch::switch_dungeon` to repopulate after a full reset.
+pub fn populate_dungeon_world(server: &mut Server) -> anyhow::Result<()> {
+    let dungeon = &mut server.dungeon;
+
+    for room in &mut dungeon.rooms {
+        // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
+        room.load_into_world(&mut server.world);
+        // Mobs are spawned when a player actually enters the room (see Dungeon::tick /
+        // Dungeon::start_dungeon), not eagerly here for the whole dungeon at once.
+
+        // Immediately scan crypts on world load for debug visibility
+        if room.crypt_patterns.len() > 0 && !room.crypts_checked {
+            let count = room.detect_crypts(&server.world);
+            if count == 0 {
+                room.debug_crypt_mismatch(&server.world);
+            }
+        }
+
+
+        // Set the spawn point to be inside of the spawn room
+        if room.room_data.room_type == RoomType::Entrance {
+            server.world.set_spawn_point(
+                room.get_world_block_pos(&BlockPos {
+                    x: 15,
+                    y: 72,
+                    z: 18,
+                })
+                .as_dvec3()
+                .add_x(0.5)
+                .add_z(0.5),
+                180.0.rotate(room.rotation),
+                0.0,
+            );
+
+            // Generate deterministic UUID for Mort NPC using parse_str with a fixed UUID
+            let mort_uuid = Uuid::parse_str(MORT_UUID_STR).unwrap(); // Mort NPC UUID
+
+            let id = server.world.spawn_entity_with_uuid(
+                room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
+                    .as_dvec3()
+                    .add(DVec3::new(0.5, 0.0, 0.5)),
+                EntityMetadata::new(EntityVariant::Player),
+                MortImpl { last_interact_tick: u32::MAX },
+                Some(mort_uuid),
+            )?;
+            if let Some((entity, _)) = server.world.entities.get_mut(&id) {
+                entity.yaw = 0.0.rotate(room.rotation);
+            }
+
+            // Create two-line armorstand nametag for Mort
+            // Get Mort's position first
+            let mort_pos = if let Some((entity, _)) = server.world.entities.get(&id) {
+                entity.position
+            } else {
+                // Fallback to the original position if entity not found yet
+                room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
+                    .as_dvec3()
+                    .add(DVec3::new(0.5, 0.0, 0.5))
+            };
+
+            // Try following nametags first
+            // Bumped up from 0.4/0.1 - `spawn_following_nametag`'s armor stand now renders at
+            // ~half scale ("small" status bit, added for the starred-mob-box height fix), so
+            // its own model contributes much less passive height than before, and Mort's
+            // offsets (tuned under the old full-size assumption) ended up sitting too low.
+            // Mort isn't a starred mob so there's no box constraint here - free to just
+            // compensate directly.
+            // 1.3/1.0 (bumped from the original 0.4/0.1) came back "a bit high" - splitting the
+            // difference down a bit rather than all the way back.
+            match spawn_following_nametag(&mut server.world, id, "§bMort", 1.0, EntityVariant::ArmorStand) {
+                Ok(_top_nametag_id) => {
+                    // Spawn bottom nametag
+                    match spawn_following_nametag(&mut server.world, id, "§eCLICK", 0.75, EntityVariant::ArmorStand) {
+                        Ok(_bottom_nametag_id) => {
+                            // Both nametags spawned successfully
+                        }
+                        Err(e) => {
+                            println!("Failed to spawn bottom nametag: {}", e);
+                            // Fallback to static armorstands
+                            let _bottom_nametag_id = server.world.spawn_entity(
+                                mort_pos + DVec3::new(0.0, 0.1, 0.0),
+                                {
+                                    let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                                    metadata.is_invisible = true;
+                                    metadata.custom_name = Some("§eCLICK".to_string());
+                                    metadata.custom_name_visible = true;
+                                    metadata.ai_disabled = true;
+                                    metadata
+                                },
+                                NoEntityImpl,
+                            )?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to spawn top nametag: {}", e);
+                    // Fallback to static armorstands
+                    let _top_nametag_id = server.world.spawn_entity(
+                        mort_pos + DVec3::new(0.0, 0.4, 0.0),
+                        {
+                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                            metadata.is_invisible = true;
+                            metadata.custom_name = Some("§bMort".to_string());
+                            metadata.custom_name_visible = true;
+                            metadata.ai_disabled = true;
+                            metadata
+                        },
+                        NoEntityImpl,
+                    )?;
+
+                    let _bottom_nametag_id = server.world.spawn_entity(
+                        mort_pos + DVec3::new(0.0, 0.1, 0.0),
+                        {
+                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                            metadata.is_invisible = true;
+                            metadata.custom_name = Some("§eCLICK".to_string());
+                            metadata.custom_name_visible = true;
+                            metadata.ai_disabled = true;
+                            metadata
+                        },
+                        NoEntityImpl,
+                    )?;
+                }
+            }
+
+            // Ensure entity is properly visible first, then add team hiding if needed
+            if let Some((_entity, _)) = server.world.entities.get(&id) {
+                // Player entity should be properly registered now
+                // For modded clients, we might want to ensure no immediate team modifications
+                // that could interfere with visibility
+            }
+        }
+    }
+
+    // Spawn locked chests for all rooms
+    for room in &dungeon.rooms {
+        room.spawn_locked_chests(
+            &mut server.world,
+            &mut dungeon.locked_chests,
+            &mut dungeon.lever_to_chests,
+        );
+    }
+
+    // One random locked chest per dungeon becomes the mimic chest: same block/appearance as a
+    // normal chest, swapped to `TrappedChest` (still visually identical - the real vanilla
+    // block just has a different clientbound id) and taken out of the lock/lever system
+    // entirely, since a mimic that also needed a key would give itself away. Trap rooms are
+    // excluded - they already have their own trap mechanic, so a mimic there would be piling
+    // one gimmick on top of another rather than a normal chest room's single surprise.
+    let mimic_eligible_chests: Vec<&BlockPos> = dungeon.locked_chests.keys()
+        .filter(|&&pos| {
+            match dungeon.get_room_at(pos.x, pos.z).and_then(|idx| dungeon.rooms.get(idx)) {
+                Some(room) => room.room_data.room_type != RoomType::Trap,
+                None => true,
+            }
+        })
+        .collect();
+    if let Some(&&mimic_pos) = mimic_eligible_chests.choose(&mut rand::rng()) {
+        if let Some(state) = dungeon.locked_chests.remove(&mimic_pos) {
+            dungeon.lever_to_chests.entry(state.lever_world_pos).and_modify(|chests| {
+                chests.retain(|&pos| pos != mimic_pos);
+            });
+
+            let direction = match server.world.get_block_at(mimic_pos.x, mimic_pos.y, mimic_pos.z) {
+                crate::server::block::blocks::Blocks::Chest { direction } => direction,
+                _ => crate::server::utils::direction::Direction::North,
+            };
+            server.world.set_block_at(
+                crate::server::block::blocks::Blocks::TrappedChest { direction },
+                mimic_pos.x, mimic_pos.y, mimic_pos.z,
+            );
+            server.world.interactable_blocks.insert(
+                mimic_pos,
+                crate::server::block::block_interact_action::BlockInteractAction::MimicChest,
+            );
+        }
+    }
+
+    // Remove vines from specific rooms and add special blocks after all rooms are loaded
+    for room in &dungeon.rooms {
+        let corner = room.get_corner_pos();
+
+        if room.room_data.name == "Rails" {
+            // Remove vines at 15 58 15, 15 57 15, 15 56 15, 15 55 15, 15 54 15 (no rotation)
+            let vines_to_remove = [
+                (15, 58, 15),
+                (15, 57, 15),
+                (15, 56, 15),
+                (15, 55, 15),
+                (15, 54, 15),
+            ];
+
+            for (rel_x, rel_y, rel_z) in &vines_to_remove {
+                let vine_world_pos = BlockPos {
+                    x: corner.x + *rel_x,
+                    y: *rel_y,
+                    z: corner.z + *rel_z,
+                };
+
+                // Remove the vine block
+                server.world.set_block_at(
+                    Blocks::Air,
+                    vine_world_pos.x,
+                    vine_world_pos.y,
+                    vine_world_pos.z
+                );
+            }
+        } else if room.room_data.name == "Flags" {
+            // Remove vine at 55 88 47 (no rotation)
+            let vine_world_pos = BlockPos {
+                x: corner.x + 55,
+                y: 88,
+                z: corner.z + 47,
+            };
+
+            // Remove the vine block
+            server.world.set_block_at(
+                Blocks::Air,
+                vine_world_pos.x,
+                vine_world_pos.y,
+                vine_world_pos.z
+            );
+        } else if room.room_data.name == "Grand Library" {
+            // Spawn torch at 47 86 15 (no rotation, like vines)
+            let torch_world_pos = BlockPos {
+                x: corner.x + 47,
+                y: 86,
+                z: corner.z + 15,
+            };
+
+            // Spawn the torch block (default direction is up - placed on top of block below)
+            server.world.set_block_at(
+                Blocks::Torch {
+                    direction: crate::server::block::block_parameter::TorchDirection::Up,
+                },
+                torch_world_pos.x,
+                torch_world_pos.y,
+                torch_world_pos.z
+            );
+        }
+    }
+
+    // Lever system is now integrated into room generation (like crypts and superboom walls)
+
+    for door in &dungeon.doors {
+        door.load_into_world(&mut server.world, &server.door_type_blocks);
+    }
+
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -163,30 +533,50 @@ async fn main() -> Result<()> {
         .split("\n")
         .collect::<Vec<&str>>();
 
-    // Check if a custom dungeon str has been given via cli args
+    // Practice mode is a separate launch mode (`cargo run -- practice`, or the more
+    // flag-shaped `--practice` - both accepted), not an in-game toggle: no dungeon layout is
+    // generated at all - the world starts with zero rooms, and the first
+    // `/practice <room> <door>` command builds one (see `dungeon::practice`). Anything else
+    // in that argument slot falls through to being treated as a dungeon layout string, same as
+    // before practice mode existed - a typo'd flag landing there would otherwise silently
+    // panic deep in `Dungeon::from_str`'s layout parsing instead of doing what was intended.
+    let practice_mode = matches!(args.get(1).map(|s| s.as_str()), Some("practice") | Some("--practice"));
 
-    // let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
+    let dungeon = if practice_mode {
+        println!("Launching in PRACTICE mode - use /practice <room> <door> in-game to load a room.");
+        Dungeon::from_layout(Vec::new(), Vec::new())?
+    } else {
+        // Check if a custom dungeon str has been given via cli args
 
-    let dungeon_str = match args.len() {
-        0..=1 => {
-            let mut rng = rand::rng();
-            dungeon_strings.choose(&mut rng).unwrap_or(&"080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009")
-        }
-        _ => args.get(1).map(|s| s.as_str()).unwrap_or("080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009"),
+        // let dungeon_str = "080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009";
+
+        let dungeon_str = match args.len() {
+            0..=1 => {
+                let mut rng = rand::rng();
+                dungeon_strings.choose(&mut rng).unwrap_or(&"080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009")
+            }
+            _ => args.get(1).map(|s| s.as_str()).unwrap_or("080809010400100211121300101415161304171418161300191403161304191905160600919999113099910991099909090099999919990929999999099999999009"),
+        };
+        println!("Dungeon String: {}", dungeon_str);
+
+        let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
+        // let rng_seed: u64 = 12946977352813673410;
+
+        println!("Rng Seed: {}", rng_seed);
+        SeededRng::set_seed(rng_seed);
+
+        Dungeon::from_str(dungeon_str, &room_data_storage)?
     };
-    println!("Dungeon String: {}", dungeon_str);
 
-    let rng_seed: u64 = rand::random(); // using a second seed for rng enables the same layout to have randomized rooms. Maybe should be included in the dungeon seed string?
-    // let rng_seed: u64 = 12946977352813673410;
-
-    println!("Rng Seed: {}", rng_seed);
-    SeededRng::set_seed(rng_seed);
-
-    let dungeon = Dungeon::from_str(dungeon_str, &room_data_storage)?;
-    
-    let mut server = Server::initialize_with_dungeon(network_tx, dungeon);
+    let mut server = Server::initialize_with_dungeon(network_tx, dungeon, room_data_storage, door_type_blocks);
     server.world.server = &mut server;
     server.dungeon.server = &mut server;
+    server.practice_mode = practice_mode;
+    if practice_mode {
+        // No entrance room exists yet to set a real spawn point from - park players somewhere
+        // safe above the (currently empty) dungeon grid until the first `/practice` runs.
+        server.world.set_spawn_point(DVec3::new(15.5, 75.0, 15.5), 0.0, 0.0);
+    }
 
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     tokio::spawn(run_network_thread(
@@ -268,278 +658,7 @@ async fn main() -> Result<()> {
     //         total_chunks, bossroom_chunk_x_max - bossroom_chunk_x_min + 1, bossroom_chunk_z_max - bossroom_chunk_z_min + 1);
     // }
 
-    let dungeon = &mut server.dungeon;
-    
-    for room in &mut dungeon.rooms {
-        // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
-        room.load_into_world(&mut server.world);
-        // Mobs are spawned when a player actually enters the room (see Dungeon::tick /
-        // Dungeon::start_dungeon), not eagerly here for the whole dungeon at once.
-
-        // Immediately scan crypts on world load for debug visibility
-        if room.crypt_patterns.len() > 0 && !room.crypts_checked {
-            let count = room.detect_crypts(&server.world);
-            if count == 0 {
-                room.debug_crypt_mismatch(&server.world);
-            }
-        }
-
-        
-        // Set the spawn point to be inside of the spawn room
-        if room.room_data.room_type == RoomType::Entrance {
-            server.world.set_spawn_point(
-                room.get_world_block_pos(&BlockPos {
-                    x: 15,
-                    y: 72,
-                    z: 18,
-                })
-                .as_dvec3()
-                .add_x(0.5)
-                .add_z(0.5),
-                180.0.rotate(room.rotation),
-                0.0,
-            );
-
-            // test
-            pub struct MortImpl;
-            
-            impl EntityImpl for MortImpl {
-                fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
-                    // Add Mort to player list so the player entity can be spawned properly
-                    if let Some(uuid) = entity.uuid {
-                        let mort_profile = GameProfile {
-                            uuid,
-                            username: "Mort".to_string(),
-                            properties: HashMap::from([
-                                ("textures".to_string(), GameProfileProperty {
-                                    value: MORT_SKIN_VALUE.to_string(),
-                                    signature: Some(MORT_SKIN_SIGNATURE.to_string()),
-                                })
-                            ]),
-                        };
-                        
-                        let player_data = PlayerData {
-                            ping: 20, // More realistic ping for NPCs
-                            game_mode: GameType::Survival, // Use Survival instead of Creative for better modded client compatibility
-                            profile: mort_profile,
-                            display_name: Some(ChatComponentTextBuilder::new("Mort").build()),
-                        };
-                        
-                        // Send PlayerInfo Add packet
-                        buffer.write_packet(&PlayerListItem {
-                            action: VarInt(0), // ADD_PLAYER
-                            players: vec![&player_data],
-                        });
-                        
-                        // First create the hidden team to prevent vanilla nameplate from showing
-                        buffer.write_packet(&Teams {
-                            name: SizedString::truncated("npc_hide"),
-                            display_name: SizedString::truncated("npc_hide"),
-                            prefix: SizedString::truncated(""),
-                            suffix: SizedString::truncated(""),
-                            name_tag_visibility: SizedString::truncated("never"),
-                            color: 0,
-                            players: vec![],
-                            action: CREATE_TEAM,
-                            friendly_flags: 0,
-                        });
-                        
-                        // Then add Mort to the hidden team
-                        buffer.write_packet(&Teams {
-                            name: SizedString::truncated("npc_hide"),
-                            display_name: SizedString::truncated("npc_hide"),
-                            prefix: SizedString::truncated(""),
-                            suffix: SizedString::truncated(""),
-                            name_tag_visibility: SizedString::truncated("never"),
-                            color: 0,
-                            players: vec![SizedString::truncated("Mort")],
-                            action: ADD_PLAYER,
-                            friendly_flags: 0,
-                        });
-                    }
-                }
-                
-                fn tick(&mut self, _: &mut Entity, _: &mut PacketBuffer) {
-                    // rotate
-                }
-                fn interact(&mut self, _: &mut Entity, player: &mut Player, action: &EntityInteractionType) {
-                    if action == &EntityInteractionType::InteractAt {
-                        return;
-                    }
-                    player.open_ui(UI::MortReadyUpMenu);
-                }
-            }
-            
-            // Generate deterministic UUID for Mort NPC using parse_str with a fixed UUID
-            let mort_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(); // Mort NPC UUID
-            
-            let id = server.world.spawn_entity_with_uuid(
-                room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
-                    .as_dvec3()
-                    .add(DVec3::new(0.5, 0.0, 0.5)),
-                EntityMetadata::new(EntityVariant::Player),
-                MortImpl,
-                Some(mort_uuid),
-            )?;
-            if let Some((entity, _)) = server.world.entities.get_mut(&id) {
-                entity.yaw = 0.0.rotate(room.rotation);
-            }
-            
-            // Create two-line armorstand nametag for Mort
-            // Get Mort's position first
-            let mort_pos = if let Some((entity, _)) = server.world.entities.get(&id) {
-                entity.position
-            } else {
-                // Fallback to the original position if entity not found yet
-                room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 })
-                    .as_dvec3()
-                    .add(DVec3::new(0.5, 0.0, 0.5))
-            };
-            
-            // Try following nametags first
-            match spawn_following_nametag(&mut server.world, id, "§bMort", 0.4) {
-                Ok(_top_nametag_id) => {
-                    // Spawn bottom nametag
-                    match spawn_following_nametag(&mut server.world, id, "§eCLICK", 0.1) {
-                        Ok(_bottom_nametag_id) => {
-                            // Both nametags spawned successfully
-                        }
-                        Err(e) => {
-                            println!("Failed to spawn bottom nametag: {}", e);
-                            // Fallback to static armorstands
-                            let _bottom_nametag_id = server.world.spawn_entity(
-                                mort_pos + DVec3::new(0.0, 0.1, 0.0),
-                                {
-                                    let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
-                                    metadata.is_invisible = true;
-                                    metadata.custom_name = Some("§eCLICK".to_string());
-                                    metadata.custom_name_visible = true;
-                                    metadata.ai_disabled = true;
-                                    metadata
-                                },
-                                NoEntityImpl,
-                            )?;
-                        }
-                    }
-                }
-                Err(e) => {
-                    println!("Failed to spawn top nametag: {}", e);
-                    // Fallback to static armorstands
-                    let _top_nametag_id = server.world.spawn_entity(
-                        mort_pos + DVec3::new(0.0, 0.4, 0.0),
-                        {
-                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
-                            metadata.is_invisible = true;
-                            metadata.custom_name = Some("§bMort".to_string());
-                            metadata.custom_name_visible = true;
-                            metadata.ai_disabled = true;
-                            metadata
-                        },
-                        NoEntityImpl,
-                    )?;
-                    
-                    let _bottom_nametag_id = server.world.spawn_entity(
-                        mort_pos + DVec3::new(0.0, 0.1, 0.0),
-                        {
-                            let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
-                            metadata.is_invisible = true;
-                            metadata.custom_name = Some("§eCLICK".to_string());
-                            metadata.custom_name_visible = true;
-                            metadata.ai_disabled = true;
-                            metadata
-                        },
-                        NoEntityImpl,
-                    )?;
-                }
-            }
-            
-            // Ensure entity is properly visible first, then add team hiding if needed
-            if let Some((_entity, _)) = server.world.entities.get(&id) {
-                // Player entity should be properly registered now
-                // For modded clients, we might want to ensure no immediate team modifications
-                // that could interfere with visibility
-            }
-        }
-    }
-    
-    // Spawn locked chests for all rooms
-    for room in &dungeon.rooms {
-        room.spawn_locked_chests(
-            &mut server.world,
-            &mut dungeon.locked_chests,
-            &mut dungeon.lever_to_chests,
-        );
-    }
-    
-    // Remove vines from specific rooms and add special blocks after all rooms are loaded
-    for room in &dungeon.rooms {
-        let corner = room.get_corner_pos();
-        
-        if room.room_data.name == "Rails" {
-            // Remove vines at 15 58 15, 15 57 15, 15 56 15, 15 55 15, 15 54 15 (no rotation)
-            let vines_to_remove = [
-                (15, 58, 15),
-                (15, 57, 15),
-                (15, 56, 15),
-                (15, 55, 15),
-                (15, 54, 15),
-            ];
-            
-            for (rel_x, rel_y, rel_z) in &vines_to_remove {
-                let vine_world_pos = BlockPos {
-                    x: corner.x + *rel_x,
-                    y: *rel_y,
-                    z: corner.z + *rel_z,
-                };
-                
-                // Remove the vine block
-                server.world.set_block_at(
-                    Blocks::Air,
-                    vine_world_pos.x,
-                    vine_world_pos.y,
-                    vine_world_pos.z
-                );
-            }
-        } else if room.room_data.name == "Flags" {
-            // Remove vine at 55 88 47 (no rotation)
-            let vine_world_pos = BlockPos {
-                x: corner.x + 55,
-                y: 88,
-                z: corner.z + 47,
-            };
-            
-            // Remove the vine block
-            server.world.set_block_at(
-                Blocks::Air,
-                vine_world_pos.x,
-                vine_world_pos.y,
-                vine_world_pos.z
-            );
-        } else if room.room_data.name == "Grand Library" {
-            // Spawn torch at 47 86 15 (no rotation, like vines)
-            let torch_world_pos = BlockPos {
-                x: corner.x + 47,
-                y: 86,
-                z: corner.z + 15,
-            };
-            
-            // Spawn the torch block (default direction is up - placed on top of block below)
-            server.world.set_block_at(
-                Blocks::Torch {
-                    direction: crate::server::block::block_parameter::TorchDirection::Up,
-                },
-                torch_world_pos.x,
-                torch_world_pos.y,
-                torch_world_pos.z
-            );
-        }
-    }
-    
-    // Lever system is now integrated into room generation (like crypts and superboom walls)
-
-    for door in &dungeon.doors {
-        door.load_into_world(&mut server.world, &door_type_blocks);
-    }
+    populate_dungeon_world(&mut server)?;
 
     // let zombie_spawn_pos = DVec3 {
     //     x: 25.0,
@@ -600,6 +719,86 @@ async fn main() -> Result<()> {
             }
         }
 
+        // OdinClient's dungeon stats (Secrets Found, Cleared %, Completed/Opened Rooms, Crypts,
+        // Team Deaths, Time - everything `DungeonUtils`/MapInfo read) come from `updateDungeonStats`
+        // in its `DungeonListener`, which is fed from `S38PacketPlayerListItem` - the TAB LIST,
+        // not the sidebar scoreboard - confirmed by tracing the actual call site in the mod's
+        // bytecode: it's reached from inside the tab-list-entry-parsing branch of `onPacket`,
+        // not anything scoreboard-related. Each stat is its own fake tab-list row (same trick
+        // `PlayerList`/`generate_default_lines` already uses for alphabetical ordering) whose
+        // plain display-name text (colors are stripped before matching) exactly matches one of
+        // Odin's `^ Secrets Found: (\d+)%$`-style regexes. Real values come from
+        // `dungeon.score` (`DungeonScoreState`, src/dungeon/score.rs), the same live-ticked
+        // scoring system behind the S/S+ chat announcements - not recomputed here.
+        if let DungeonState::Started { current_ticks } = &server.dungeon.state {
+            let elapsed_ticks = if server.dungeon.practice_room {
+                if let Some(finish_seconds) = server.dungeon.practice_route_finish_seconds {
+                    (finish_seconds * 20.0) as u64
+                } else if let Some(start_tick) = server.dungeon.practice_route_start_tick {
+                    current_ticks.saturating_sub(start_tick)
+                } else {
+                    0
+                }
+            } else {
+                *current_ticks
+            };
+            let seconds = elapsed_ticks / 20;
+            let odin_time = {
+                let hours = seconds / 3600;
+                let minutes = (seconds % 3600) / 60;
+                let secs = seconds % 60;
+                let mut parts = Vec::new();
+                if hours > 0 {
+                    parts.push(format!("{hours}h"));
+                }
+                if hours > 0 || minutes > 0 {
+                    parts.push(format!("{minutes}m"));
+                }
+                parts.push(format!("{secs}s"));
+                parts.join(" ")
+            };
+
+            let score = &server.dungeon.score;
+            let clear_percent = if score.total_rooms == 0 {
+                0
+            } else {
+                (score.cleared_rooms * 100) / score.total_rooms
+            };
+            // Odin's `secretPercentRegex` (`^ Secrets Found: ([\d.]+)%$`) allows a decimal point -
+            // real Hypixel sends fractional precision here, and `DungeonUtils.getTotalSecrets()`
+            // derives the total as `secretsFound / (secretsPercent / 100)`, which is extremely
+            // sensitive to rounding at low counts. A truncated integer percent (e.g. 1/40 secrets
+            // rounding to "3%" instead of "2.5%") threw that derivation off until enough secrets
+            // accumulated to wash the error out - matches the "took 13 secrets to converge"
+            // symptom. Two decimal places gets it right from the first secret found.
+            let secrets_percent = if score.total_secrets == 0 {
+                0.0
+            } else {
+                (score.secrets_found as f64 * 100.0) / score.total_secrets as f64
+            };
+            let cleared_rooms = score.cleared_rooms;
+            let crypts = score.crypts;
+            let deaths = score.deaths;
+            let opened_rooms = server.dungeon.rooms.iter().filter(|room| room.entered).count();
+
+            let tab_stat_line = |text: String| ChatComponentTextBuilder::new(text).color(MCColors::Gray).build();
+            server.world.player_info.set_line(1, tab_stat_line(format!(" Time: {odin_time}")));
+            server.world.player_info.set_line(2, tab_stat_line(format!("Cleared: {clear_percent}% ({cleared_rooms})")));
+            server.world.player_info.set_line(3, tab_stat_line(format!(" Completed Rooms: {cleared_rooms}")));
+            server.world.player_info.set_line(4, tab_stat_line(format!(" Opened Rooms: {opened_rooms}")));
+            server.world.player_info.set_line(5, tab_stat_line(format!(" Secrets Found: {secrets_percent:.2}%")));
+            server.world.player_info.set_line(6, tab_stat_line(format!(" Crypts: {crypts}")));
+            server.world.player_info.set_line(7, tab_stat_line(format!("Team Deaths: {deaths}")));
+            // MapInfo's actual secrets calculation (`MapInfo$compactSecrets$2`, traced directly)
+            // needs BOTH `DungeonStats.secretsFound` (this raw-count line, `secretCountRegex` =
+            // `^ Secrets Found: (\d+)$`) AND `secretsPercent` (the line above, `secretPercentRegex`
+            // = `^ Secrets Found: ([\d.]+)%$`) - `getTotalSecrets()`'s formula is
+            // `secretsFound / (secretsPercent / 100)`, so with secretsFound stuck at its default
+            // 0 (no raw-count line ever sent before), the result was always 0 regardless of the
+            // percent line - confirmed in bytecode, not assumed this time.
+            server.world.player_info.set_line(8, tab_stat_line(format!(" Secrets Found: {}", score.secrets_found)));
+        }
+
         let tab_list_packet = server.world.player_info.get_packet();
 
         // this needs to be changed to work with loaded chunks, tracking last sent data per player (maybe), etc.
@@ -633,7 +832,16 @@ async fn main() -> Result<()> {
                 };
                 
                 // Use section-sign approach (guaranteed to work in 1.8.9)
-                let legacy_string = crate::server::player::dungeon_stats::build_action_bar_string(stats, found_secrets, total_secrets);
+                let mut legacy_string = crate::server::player::dungeon_stats::build_action_bar_string(stats, found_secrets, total_secrets);
+                // Practice-mode route timer (see `Dungeon::tick`) rides along in the same
+                // action-bar packet rather than being sent separately - only one message can
+                // occupy the action bar at a time, so a second packet would just overwrite this
+                // one instead of showing alongside it.
+                if server.dungeon.practice_room {
+                    if let Some(timer_text) = &server.dungeon.practice_timer_text {
+                        legacy_string = format!("{}   {}", legacy_string, timer_text);
+                    }
+                }
                 let json_str = crate::server::player::dungeon_stats::legacy_to_actionbar_json(&legacy_string);
                 
                 // Parse JSON string into ChatComponentText
@@ -695,8 +903,10 @@ async fn main() -> Result<()> {
                                 for &entity_id in &valid_entity_ids {
                                     if let Some((entity, entity_impl)) = server.world.entities.get_mut(&entity_id) {
                                         let buffer = &mut chunk.packet_buffer;
-                                        entity.write_spawn_packet(buffer);
-                                        entity_impl.spawn(entity, buffer);
+                                        // Player-model entities (e.g. Mort) need their tab-list
+                                        // entry before SpawnPlayer or they render invisible - see
+                                        // `write_entity_spawn`.
+                                        crate::server::world::write_entity_spawn(entity, entity_impl.as_mut(), buffer);
                                     }
                                 }
                                 
@@ -709,6 +919,25 @@ async fn main() -> Result<()> {
                             };
                         }
                         ChunkDiff::Old => {
+                            // Entities are only ever (re)announced to a client via the
+                            // ChunkDiff::New branch above, piggybacking on "this chunk is now
+                            // in view" - there's no independent per-entity tracking. So a
+                            // client that already knows about an entity here MUST be told to
+                            // forget it before the chunk unloads, or the client's own
+                            // spawn-once entity model means the *next* ChunkDiff::New for this
+                            // chunk (re-sending SpawnMob/SpawnPlayer for the same still-alive
+                            // entity ID) gets silently ignored as a duplicate - permanently
+                            // invisible from then on, even though it's still alive server-side.
+                            // This is a per-player packet only; the chunk's own `entities` list
+                            // (shared, server-side bookkeeping of what's actually there) is
+                            // untouched, since other players may still have this chunk in view.
+                            if let Some(chunk) = player.world_mut().chunk_grid.get_chunk(x, z) {
+                                if !chunk.entities.is_empty() {
+                                    player.write_packet(&clientbound::DestroyEntites {
+                                        entities: chunk.entities.iter().map(|id| VarInt(*id)).collect(),
+                                    });
+                                }
+                            }
                             let chunk_data = Chunk::new().get_chunk_data(x, z, true);
                             player.write_packet(&chunk_data)
                         }
@@ -891,7 +1120,23 @@ async fn main() -> Result<()> {
                     }
                     DungeonState::Started { current_ticks } => {
                         // this is scuffed but it works
-                        let seconds = current_ticks / 20;
+                        //
+                        // In practice mode the route timer doesn't start until a player first
+                        // moves (see `Dungeon::tick`'s `practice_route_start_tick` gating) - the
+                        // sidebar should reflect that instead of counting up from room load like
+                        // a normal dungeon run does.
+                        let elapsed_ticks = if server.dungeon.practice_room {
+                            if let Some(finish_seconds) = server.dungeon.practice_route_finish_seconds {
+                                (finish_seconds * 20.0) as u64
+                            } else if let Some(start_tick) = server.dungeon.practice_route_start_tick {
+                                current_ticks.saturating_sub(start_tick)
+                            } else {
+                                0
+                            }
+                        } else {
+                            current_ticks
+                        };
+                        let seconds = elapsed_ticks / 20;
                         let time = if seconds >= 60 {
                             let minutes = seconds / 60;
                             let seconds = seconds % 60;
@@ -962,7 +1207,7 @@ async fn main() -> Result<()> {
             // So we'll pass the world reference through the player's world_mut method
             // let world_ref = player.world_mut();
             // apply_lava_boost(player, world_ref, is_in_boss_room);
-            
+
             player.last_position = player.position;
             player.flush_packets();
         }

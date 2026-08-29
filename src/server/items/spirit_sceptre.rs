@@ -11,7 +11,8 @@ const MAX_LIFETIME_TICKS: u32 = 40; // ~2 seconds; tweak later
 const SPEED_PER_TICK: f64 = 1.0; // blocks per tick (20 bps)
 
 pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
-    let spawn_pos = player.player_eye_position();
+    let mut spawn_pos = player.player_eye_position();
+    spawn_pos.y -= 1.0;
     let shooter = player.client_id;
 
     player.world_mut().spawn_entity(

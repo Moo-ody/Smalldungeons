@@ -79,6 +79,16 @@ pub struct Player {
     
     // Jerry-Chine Gun cooldown tracking
     pub jerry_last_shot_tick: u64,
+
+    /// Hyperion right-click cooldown (1/6 second - doesn't divide evenly into this codebase's
+    /// 20-tick-per-second loop the way Bonzo/Jerry's whole-tick cooldowns do, so this is
+    /// tracked as a real timestamp instead of a tick count for actual precision).
+    pub hyperion_last_used: Option<std::time::Instant>,
+
+    /// World tick of the last `UseEntity` packet that fired the held item's right-click ability.
+    /// The 1.8 client always sends two `UseEntity` packets (`InteractAt` then `Interact`) for a
+    /// single right-click on an entity, so without this the item would fire twice per click.
+    pub last_entity_interact_tick: u64,
     
     // Lava bounce tracking
     pub in_lava: bool,
@@ -93,9 +103,25 @@ pub struct Player {
     
     // Redstone key tracking (stored on player but not in inventory)
     pub has_redstone_key: bool,
-    
+
+    // Wither key tracking (stored on player but not in inventory) - consumed on opening a Wither Door
+    pub has_wither_key: bool,
+
+    // Blood key tracking (stored on player but not in inventory) - consumed on opening a Blood Door
+    pub has_blood_key: bool,
+
     // Track when player first entered the dungeon (for simplified scoreboard)
     pub dungeon_entry_tick: Option<u64>,
+
+    /// Whether the "Undersized party!" head in the CNC menu has already been clicked this menu
+    /// session - it's single-use per opening, reset to `false` each time `/cnc` (re)opens the
+    /// menu (see `Cnc::run`), not per-player-lifetime.
+    pub cnc_undersized_used: bool,
+
+    /// Position/yaw/pitch this player last spawned at in the current practice room (set by
+    /// `/practice`, reused as-is by `/rs`) - see `dungeon::practice`. Unused outside practice
+    /// mode.
+    pub practice_last_spawn: Option<(DVec3, f32, f32)>,
 }
 
 impl Player {
@@ -120,9 +146,18 @@ impl Player {
             on_ground: false,
             yaw,
             pitch,
-            last_position: DVec3::ZERO,
-            last_yaw: 0.0,
-            last_pitch: 0.0,
+            // Must match `position`/`yaw`/`pitch` above, not a hardcoded zero: main.rs's
+            // per-tick view-diff compares `position` against `last_position` to compute which
+            // chunks are newly in view. A mismatched last_position here makes literally every
+            // chunk within view distance look "new" on the player's very first tick, which
+            // redundantly re-sends every entity's spawn packets a second time - right after
+            // the join handler above already sent them once via `for_each_in_view`. For
+            // player-model entities (Mort, NPC mobs) that means a duplicate PlayerListItem +
+            // CREATE_TEAM + SpawnPlayer sequence to the same client, which is what was causing
+            // broken rendering/interaction (not just occasional invisibility).
+            last_position: position,
+            last_yaw: yaw,
+            last_pitch: pitch,
 
             ticks_existed: 0,
             last_keep_alive: -1,
@@ -140,6 +175,8 @@ impl Player {
             
             // Bonzo Staff cooldown tracking
             bonzo_last_shot_tick: 0,
+            hyperion_last_used: None,
+            last_entity_interact_tick: 0,
             
             // Jerry-Chine Gun cooldown tracking
             jerry_last_shot_tick: 0,
@@ -155,10 +192,15 @@ impl Player {
             
             // Redstone key tracking
             has_redstone_key: false,
+            has_wither_key: false,
+            has_blood_key: false,
             
             // Dungeon entry tracking
             dungeon_entry_tick: None,
-            
+
+            cnc_undersized_used: false,
+            practice_last_spawn: None,
+
             // observed_entities: HashSet::new(),
         }
     }

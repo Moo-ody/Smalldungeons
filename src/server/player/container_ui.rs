@@ -11,6 +11,7 @@ use crate::server::player::terminals::starts_with::LETTERS;
 use crate::server::server::Server;
 use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::sounds::Sounds;
+use indoc::indoc;
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -24,6 +25,8 @@ pub enum UI {
     // this is here to direct clicks to the actual inventory where all the items are stored, etc.
     Inventory,
     MortReadyUpMenu,
+    CncMenu,
+    MapSettingsMenu,
     TerminalUI {
         typ: TerminalType,
         rand: i16
@@ -39,6 +42,14 @@ impl UI {
             UI::MortReadyUpMenu => Some(ContainerData {
                 title: "Ready Up".to_string(),
                 slot_amount: 54,
+            }),
+            UI::CncMenu => Some(ContainerData {
+                title: "Undersized party!".to_string(),
+                slot_amount: 36,
+            }),
+            UI::MapSettingsMenu => Some(ContainerData {
+                title: "Map Settings".to_string(),
+                slot_amount: 27,
             }),
             UI::TerminalUI { typ: TerminalType::Panes, rand } => Some(ContainerData {
                 title: "Correct all the panes!".to_string(),
@@ -110,13 +121,70 @@ impl UI {
                 });
                 Some(content)
             }
+            UI::CncMenu => {
+                // 9 wide x 4 tall (36 slots): row 1 (slots 9-17) and row 3/bottom (slots 27-35),
+                // both 0-indexed from the top. Column 4 is the middle column of 9.
+                let mut content = default_container_content(36);
+                content[13] = Some(undersized_party_head());
+                content[31] = Some(ItemStack {
+                    item: 166, // Barrier
+                    stack_size: 1,
+                    metadata: 0,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", "§cClose")
+                        ])
+                    ])),
+                });
+                Some(content)
+            }
+            UI::MapSettingsMenu => {
+                let mut content = default_container_content(27);
+
+                let (name, color) = if server.dungeon.secrets_always_spawn {
+                    ("\u{a7}aSecrets Always Spawn: \u{a7}aON", 13) // green
+                } else {
+                    ("\u{a7}cSecrets Always Spawn: \u{a7}cOFF", 14) // red
+                };
+                content[13] = Some(ItemStack {
+                    item: 95,
+                    stack_size: 1,
+                    metadata: color,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", name),
+                            NBT::list_from_string("Lore", indoc! {r#"
+                                §7When §aON§7, every secret in a room
+                                §7spawns the instant you enter it.
+
+                                §7When §cOFF§7, secrets use their
+                                §7normal bounding boxes and only
+                                §7spawn once you walk near them.
+
+                                §eClick to toggle!
+                            "#})
+                        ])
+                    ])),
+                });
+                content[22] = Some(ItemStack {
+                    item: 166,
+                    stack_size: 1,
+                    metadata: 0,
+                    tag_compound: Some(NBT::with_nodes(vec![
+                        NBT::compound("display", vec![
+                            NBT::string("Name", "§cClose")
+                        ])
+                    ])),
+                });
+                Some(content)
+            }
             UI::TerminalUI { typ, rand } => { // matches any
                 Option::from(player.current_terminal.as_ref()?.get_contents())
             }
             _ => None
         }
     }
-    
+
     /// handles the click window packet for all UI
     pub fn handle_click_window(
         &self,
@@ -174,6 +242,67 @@ impl UI {
                 }
                 player.sync_inventory();
             }
+            UI::CncMenu => {
+                if packet.slot_id == 31 {
+                    player.current_ui = UI::None;
+                    player.write_packet(&CloseWindow {
+                        window_id: player.window_id,
+                    });
+                    return;
+                }
+                // Undersized-party head: single-use per menu opening (see
+                // `cnc_undersized_used`, reset in `Cnc::run`) - either click button works, no
+                // need to check `packet.used_button`.
+                //
+                // This is SkyBlock's "enter a dungeon right now" action: leave whatever
+                // dungeon is currently active (if any) and start a brand new, fully
+                // independent one (see `dungeon_switch::switch_dungeon`), then announce the
+                // entry once the player is actually standing in it.
+                if packet.slot_id == 13 && !player.cnc_undersized_used {
+                    player.cnc_undersized_used = true;
+
+                    use crate::server::utils::sounds::MEOW_SOUNDS;
+                    use rand::seq::IndexedRandom;
+                    if let Some(meow) = MEOW_SOUNDS.choose(&mut rand::rng()) {
+                        player.write_packet(&SoundEffect {
+                            sound: meow.id(),
+                            pos_x: player.position.x,
+                            pos_y: player.position.y,
+                            pos_z: player.position.z,
+                            volume: 1.0,
+                            pitch: 1.0,
+                        });
+                    }
+
+                    if let Err(e) = crate::server::dungeon_switch::switch_dungeon(player.server_mut()) {
+                        eprintln!("switch_dungeon failed: {e}");
+                    } else {
+                        send_dungeon_entry_message(player);
+                    }
+                }
+                // Everything else is purely a display for now - just re-sync so a client-side
+                // pickup attempt on the panes/sword snaps back.
+                player.sync_inventory();
+            }
+            UI::MapSettingsMenu => {
+                match packet.slot_id {
+                    13 => {
+                        let server = player.server_mut();
+                        server.dungeon.secrets_always_spawn = !server.dungeon.secrets_always_spawn;
+                        if server.dungeon.secrets_always_spawn {
+                            server.dungeon.spawn_all_secrets_in_entered_rooms(&mut server.world);
+                        }
+                        player.sync_inventory();
+                    }
+                    22 => {
+                        player.current_ui = UI::None;
+                        player.write_packet(&CloseWindow {
+                            window_id: player.window_id,
+                        });
+                    }
+                    _ => {}
+                }
+            }
             UI::TerminalUI { typ, rand } => {
                 if let Some(mut terminal) = player.current_terminal.take() { // this take thing is kinda weird, but it works ig
                     if terminal.click_slot(packet, player) {
@@ -212,4 +341,54 @@ fn default_container_content(size: usize) -> Vec<Option<ItemStack>> {
         }))
     }
     vec
+}
+
+/// Mojang profile "textures" property value for the "Undersized party!" head - decodes to
+/// `{"textures":{"SKIN":{"url":"http://textures.minecraft.net/texture/1acea2911c2ef31477475e43b27b6fe2906ac1c8e0d84880afb9343ae6532095"}}}`.
+const UNDERSIZED_PARTY_SKIN_VALUE: &str = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWFjZWEyOTExYzJlZjMxNDc3NDc1ZTQzYjI3YjZmZTI5MDZhYzFjOGUwZDg0ODgwYWZiOTM0M2FlNjUzMjA5NSJ9fX0=";
+
+/// The "Undersized party!" head shown in the CNC menu - matches Hypixel's own display
+/// name/lore formatting exactly (each lore line keeps its own color/formatting rather than one
+/// color applied to the whole entry).
+fn undersized_party_head() -> ItemStack {
+    let mut stack = ItemStack {
+        item: 397, // skull
+        stack_size: 1,
+        metadata: 3, // player head - resolves its texture from the embedded SkullOwner
+        tag_compound: None,
+    };
+    stack.set_skull_owner(UNDERSIZED_PARTY_SKIN_VALUE);
+    stack.set_display_name("\u{a7}eUndersized party!");
+    stack.set_lore(&[
+        "\u{a7}7You should party up with \u{a7}f5 players",
+        "\u{a7}7for this instance!",
+        "",
+        "\u{a7}c\u{a7}lTHIS INSTANCE IS BEST",
+        "\u{a7}c\u{a7}lWITH A 5 PLAYER PARTY!",
+        "",
+        "\u{a7}7Your party: \u{a7}bSolo",
+        "",
+        "\u{a7}eClick to play anyway!",
+    ]);
+    stack
+}
+
+/// The Hypixel-style chat separator line used above/below the dungeon-entry announcement.
+/// `§m` (strikethrough) on a run of `-` characters is what renders as the continuous line.
+const DUNGEON_ENTRY_SEPARATOR: &str = "\u{a7}b\u{a7}m-----------------------------------------------------";
+
+/// Sends the full 3-line "entered The Catacombs" announcement (separator, message, separator)
+/// to every connected player, using `player`'s own username - mirrors the real Hypixel dungeon
+/// entry message players see when someone joins/starts an instance.
+fn send_dungeon_entry_message(player: &mut Player) {
+    let entry_line = format!(
+        "\u{a7}2[VIP] \u{a7}a{} \u{a7}eentered \u{a7}aThe Catacombs, Floor VII\u{a7}e!",
+        player.profile.username
+    );
+
+    for (_, other_player) in &mut player.server_mut().world.players {
+        other_player.send_message(DUNGEON_ENTRY_SEPARATOR);
+        other_player.send_message(&entry_line);
+        other_player.send_message(DUNGEON_ENTRY_SEPARATOR);
+    }
 }

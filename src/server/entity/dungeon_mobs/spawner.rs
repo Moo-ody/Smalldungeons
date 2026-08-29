@@ -23,7 +23,7 @@ use crate::server::entity::entity::{Entity, EntityId, EntityImpl, NoEntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::entity::equipment::Equipment;
 use crate::server::entity::spawn_equipped::{send_equipment_packets, spawn_following_nametag, AISuspended, AttackCooldown, CombatState};
-use crate::server::items::item_stack::ItemStack;
+use crate::server::items::item_stack::{ItemStack, ItemStackExt};
 use crate::server::player::player::{GameProfile, GameProfileProperty, Player};
 use crate::server::player::scoreboard::CREATE_TEAM;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
@@ -81,11 +81,18 @@ fn spawn_single_mob(world: &mut World, room_index: usize, room: &Room, corner: B
     );
     let yaw = spawn.yaw.rotate(room.rotation);
 
-    let equipment = convert_equipment(&spawn.equipment);
+    let mut equipment = convert_equipment(&spawn.equipment);
+    if archetype == Some(DungeonMobType::Sniper) {
+        equipment.helmet = Some(sniper_head());
+    }
     // Same format as the reference nametag (§6✰ §cZombie Commander §a3.5M§c❤): the individual
     // mob's own name, star only for actually-starred mobs, and HP only where it's known (rather
     // than inventing a number for archetypes with no confirmed real HP value).
-    let star = if spawn.is_starred { "\u{a7}6\u{2730} " } else { "" };
+    // OdinClient's `CustomHighlight.starredRegex` (`^(?:.* )?§6✯ .+ .*§c❤$`, confirmed from the
+    // mod's raw class-file bytes, not guessed) requires this exact star glyph (U+272F) - a
+    // different one (U+2730, "shadowed white star") was used here before, which never matched,
+    // so RenderOptimizer's "hide unstarred nametags" treated every mob as unstarred and hid it.
+    let star = if spawn.is_starred { "\u{a7}6\u{272F} " } else { "" };
     let health = archetype
         .and_then(|archetype| archetype.base_health())
         .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
@@ -113,13 +120,13 @@ fn spawn_single_mob(world: &mut World, room_index: usize, room: &Room, corner: B
         return;
     }
 
-    spawn_active_mob(world, room_index, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name);
+    let _ = spawn_active_mob(world, room_index, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name);
 }
 
 /// Spawns the real, fully-active mob entity (AI, equipment, nametag, combat-state
 /// registration) - shared by the normal immediate-spawn path and `FelsMarkerImpl`'s
 /// activation once a player triggers it.
-fn spawn_active_mob(
+pub(crate) fn spawn_active_mob(
     world: &mut World,
     room_index: usize,
     counts_toward_clear: bool,
@@ -132,7 +139,7 @@ fn spawn_active_mob(
     equipment: Equipment,
     nametag: String,
     full_name: String,
-) {
+) -> Option<EntityId> {
     // `player`-kind archetypes fall back to a plain zombie model unless explicitly marked
     // `spawn_as_npc` - the real player-NPC path (SpawnPlayer + tab-list skin + hidden nameplate
     // team) is more exotic than the other mob models, so it's opt-in per archetype.
@@ -210,7 +217,7 @@ fn spawn_active_mob(
         world.spawn_entity(world_pos, metadata, NoEntityImpl)
     };
 
-    let Ok(entity_id) = spawn_result else { return };
+    let Ok(entity_id) = spawn_result else { return None };
 
     if let Some((entity, _)) = world.entities.get_mut(&entity_id) {
         entity.yaw = yaw;
@@ -246,10 +253,196 @@ fn spawn_active_mob(
         send_equipment_packets(&mut chunk.packet_buffer, entity_id, &equipment);
     }
 
-    // Enderman is considerably taller than the other mob models, so its nametag needs a
-    // bigger offset to clear its head instead of floating at chest height.
-    let nametag_offset = if base_kind == MobBaseKind::Enderman { 1.0 } else { 0.1 };
-    let _ = spawn_following_nametag(world, entity_id, &nametag, nametag_offset);
+    // Two separate stands don't work, and neither does swapping the real nametag to a
+    // non-ArmorStand species to dodge Skytils' box code - both were tried (Bat, then a baby
+    // Zombie) and both got their *text specifically* suppressed while their hitbox still showed
+    // in F3+B (confirmed via testing), meaning something on the client hides "fake" mobs by
+    // properties (invisible + AI-disabled + unequipped), not by species - and ArmorStand is
+    // almost certainly exempted from that since it's the standard vanilla/SkyBlock convention
+    // for floating text/props, which is exactly why it's the only thing that reliably renders a
+    // name here. So: one ArmorStand, positioned at the real head height Skytils' box needs (raw
+    // Y = box's top edge, confirmed from a decompile of `DungeonFeatures.onRenderLivingPre`) -
+    // this floats the *text* a bit higher than the offsets used for non-starred mobs below look,
+    // since the "small" armor-stand model still adds its own height on top of this raw Y before
+    // text renders above it, but a working box takes priority over ideal text placement.
+    let is_starred = nametag.starts_with("\u{a7}6\u{272F}");
+    let nametag_offset = if is_starred {
+        if base_kind == MobBaseKind::Enderman || archetype == Some(DungeonMobType::Withermancer) {
+            2.9
+        } else {
+            1.9
+        }
+    } else if base_kind == MobBaseKind::Enderman {
+        1.9
+    } else if archetype == Some(DungeonMobType::Withermancer) {
+        1.5
+    } else {
+        1.1
+    };
+    let _ = spawn_following_nametag(world, entity_id, &nametag, nametag_offset, EntityVariant::ArmorStand);
+    Some(entity_id)
+}
+
+/// A Bone (legacy item id 352, `equipment_convert::legacy_item_id`) in the mainhand - matches
+/// what Crypt Undead already holds in the scraped room-JSON spawns of this same archetype
+/// (`convert_equipment` handles those; this ad-hoc spawn has no JSON entry, so it's built
+/// directly here instead).
+fn crypt_undead_equipment() -> Equipment {
+    Equipment {
+        main_hand: Some(ItemStack::new(352)),
+        ..Default::default()
+    }
+}
+
+/// Spawns a Crypt Undead standing at `position` facing `yaw` - called when a player detonates a
+/// Crypt with Superboom TNT (see `Dungeon::superboom_at`/`Room::explode_crypt_near`), instead of
+/// the crypt secret being granted immediately on explosion. Same archetype, AI, nametag, and
+/// skin machinery as the ordinary room-JSON Crypt Undead spawns (`DungeonMobType::CryptUndead`
+/// already existed with Dreadlord-shaped mechanics and a real skin) - just triggered ad hoc
+/// like `spawn_mimic` is for its own chest-triggered spawn, not tied to any room's starred-mob
+/// clear count (`counts_toward_clear: false`) since this isn't a starred mob.
+pub fn spawn_crypt_undead(world: &mut World, room_index: usize, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::CryptUndead;
+    let full_name = "Crypt Undead".to_string();
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}c{full_name}{health}");
+
+    spawn_active_mob(
+        world,
+        room_index,
+        false,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        crypt_undead_equipment(),
+        nametag,
+        full_name,
+    )
+}
+
+/// Full golden armor + a golden sword - what King Midas wears/wields. Legacy numeric item ids:
+/// 283 = golden sword, 314-317 = golden helmet/chestplate/leggings/boots.
+fn king_midas_equipment() -> Equipment {
+    Equipment {
+        main_hand: Some(ItemStack::new(283)),
+        helmet: Some(ItemStack::new(314)),
+        chest: Some(ItemStack::new(315)),
+        legs: Some(ItemStack::new(316)),
+        boots: Some(ItemStack::new(317)),
+        ..Default::default()
+    }
+}
+
+/// Spawns King Midas standing at `position` facing `yaw` - called when a player superbooms his
+/// golden "crypt" (see `Dungeon::superboom_at`/`Room::explode_kingmidas_near`). Uses the same
+/// `spawn_active_mob` pipeline as `spawn_crypt_undead` (player-model NPC, same AI machinery),
+/// but isn't tied to any room's starred-mob clear count and is never registered in
+/// `entity_crypt_room` - his kill is never credited as a crypt. His actual death sequence
+/// (armor breaking off per hit, dying on the 5th, dropping a Superboom TNT) is driven by
+/// `ai/combat.rs::apply_king_midas_hit`, not by the lethal-weapon-only path other archetypes use.
+pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::KingMidas;
+    let full_name = "King Midas".to_string();
+    // Bold red name + the same green-HP/red-heart suffix every other archetype's nametag uses
+    // (see `format_health`) - matches the Mimic's bold-name treatment above.
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}c\u{a7}l{full_name}{health}");
+
+    spawn_active_mob(
+        world,
+        room_index,
+        false,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        king_midas_equipment(),
+        nametag,
+        full_name,
+    )
+}
+
+/// Base64 Mojang profile "textures" value for the mimic's head - a `minecraft:player_head`
+/// skull, same mechanism as `fels_marker_head` below.
+const MIMIC_SKULL_TEXTURE: &str = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTE5YzEyNTQzYmM3NzkyNjA1ZWY2OGUxZjg3NDlhZThmMmEzODFkOTA4NWQ0ZDRiNzgwYmExMjgyZDM1OTdhMCJ9fX0=";
+
+/// Leather chestplate/leggings/boots dyed hex `dbcc8f`, plus the skull above for the helmet -
+/// matches real Hypixel's actual mimic appearance (a disguised baby zombie), not a bare mob.
+fn mimic_equipment() -> Equipment {
+    let dyed = |item: i16| ItemStack::new(item).leather_rgb(0xdb, 0xcc, 0x8f);
+
+    let mut helmet = ItemStack {
+        item: 397, // skull
+        stack_size: 1,
+        metadata: 3, // player head - resolves its texture from the embedded SkullOwner
+        tag_compound: None,
+    };
+    helmet.set_skull_owner(MIMIC_SKULL_TEXTURE);
+
+    Equipment {
+        helmet: Some(helmet),
+        chest: Some(dyed(299)),
+        legs: Some(dyed(300)),
+        boots: Some(dyed(301)),
+        ..Default::default()
+    }
+}
+
+/// Spawns the mimic mob at `position` facing `yaw` - called when a player opens the dungeon's
+/// one designated mimic chest (see `main.rs`'s post-locked-chest-spawn selection step and
+/// `BlockInteractAction::MimicChest`). A disguised baby zombie driven by the same AI pipeline
+/// as room-spawned mobs (`DungeonMobAiImpl`/`Mimic`'s basic-melee `AiProfile`), just spawned
+/// ad hoc instead of from room JSON - not tied to any room's starred-mob clear count.
+///
+/// Note: Odin's `onEntityDeath` mimic-kill heuristic requires armor slots 0-3 (held item/
+/// boots/leggings/chestplate) to all be empty - this mimic doesn't satisfy that, since it's
+/// equipped to match real Hypixel's actual appearance instead of staying bare for that one
+/// mod's detection. Confirmed trade-off, not an oversight.
+pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32) -> anyhow::Result<EntityId> {
+    let metadata = EntityMetadata::new(EntityVariant::Zombie {
+        is_child: true,
+        is_villager: false,
+        is_converting: false,
+        is_attacking: false,
+    });
+
+    let entity_id = world.spawn_entity(position, metadata, DungeonMobAiImpl)?;
+
+    if let Some((entity, _)) = world.entities.get_mut(&entity_id) {
+        entity.yaw = yaw;
+    }
+
+    world.entity_mob_ai.insert(entity_id, MobAiState::new(DungeonMobType::Mimic, position, yaw));
+    world.set_combat_state(entity_id, CombatState { aggressive: false, swing_ticks: 0 });
+    world.set_attack_cooldown(entity_id, AttackCooldown { ticks: 0 });
+    world.set_ai_suspended(entity_id, AISuspended { ticks_left: 10 });
+
+    let equipment = mimic_equipment();
+    let chunk_x = (position.x.floor() as i32) >> 4;
+    let chunk_z = (position.z.floor() as i32) >> 4;
+    if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+        send_equipment_packets(&mut chunk.packet_buffer, entity_id, &equipment);
+    }
+    world.entity_equipment.insert(entity_id, equipment);
+
+    let health = DungeonMobType::Mimic.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}8[\u{a7}7Lv115\u{a7}8]\u{a7}c\u{a7}lMimic{health}");
+    // Roughly half the standard 1.1 head-height offset used elsewhere (see the comment on
+    // that one), matching the mimic's `is_child` baby-zombie scale (~half an adult's height).
+    let _ = spawn_following_nametag(world, entity_id, &nametag, 0.55, EntityVariant::ArmorStand);
+
+    Ok(entity_id)
 }
 
 /// Broadcasts an `ADD_PLAYER` tab-list entry (with skin) for `uuid` to every currently
@@ -339,11 +532,14 @@ impl EntityImpl for DungeonPlayerMobImpl {
         run_mob_ai(entity, buffer);
     }
 
-    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) {
+    fn interact(&mut self, entity: &mut Entity, player: &mut Player, action: &EntityInteractionType) -> bool {
         if *action == EntityInteractionType::Attack {
-            crate::server::entity::dungeon_mobs::ai::combat::apply_lethal_hit(entity, player);
+            if !crate::server::entity::dungeon_mobs::ai::combat::apply_king_midas_hit(entity, player) {
+                crate::server::entity::dungeon_mobs::ai::combat::apply_lethal_hit(entity, player);
+            }
             crate::server::entity::dungeon_mobs::ai::aggro::on_mob_attacked(entity, player.client_id);
         }
+        false
     }
 }
 
@@ -377,6 +573,19 @@ fn fels_marker_head() -> ItemStack {
         tag_compound: None,
     };
     stack.set_skull_owner(MHF_ENDERMAN_SKIN_TEXTURE);
+    stack
+}
+
+const SNIPER_SKULL_TEXTURE: &str = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYjE4YzA3MWYwODBkYmE1MGE2MmE2MjYzZmY3MjRlZGMxNTdjZTRmYjQ4ODNjY2VmZjI0OTFkNWJiZGU4MzBjMSJ9fX0=";
+
+fn sniper_head() -> ItemStack {
+    let mut stack = ItemStack {
+        item: 397, // skull
+        stack_size: 1,
+        metadata: 3, // player head - resolves its texture from the embedded SkullOwner
+        tag_compound: None,
+    };
+    stack.set_skull_owner(SNIPER_SKULL_TEXTURE);
     stack
 }
 
@@ -457,7 +666,7 @@ impl EntityImpl for FelsMarkerImpl {
 
         let entity_id: EntityId = entity.id;
         world.despawn_entity(entity_id);
-        spawn_active_mob(
+        let _ = spawn_active_mob(
             world,
             self.room_index,
             self.counts_toward_clear,

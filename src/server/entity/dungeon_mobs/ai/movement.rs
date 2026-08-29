@@ -111,7 +111,7 @@ fn rotate_2d(x: f64, z: f64, degrees: f64) -> (f64, f64) {
 /// in this codebase's protocol layer (only `EntityTeleport`, sent automatically by
 /// `Entity::tick` whenever position changes) - so a negligible, direction-alternating
 /// vertical nudge is used purely to trigger that broadcast without causing net drift.
-fn face_toward(entity: &mut Entity, target_pos: DVec3) {
+pub fn face_toward(entity: &mut Entity, target_pos: DVec3) {
     let dx = target_pos.x - entity.position.x;
     let dz = target_pos.z - entity.position.z;
     entity.yaw = yaw_towards(dx, dz);
