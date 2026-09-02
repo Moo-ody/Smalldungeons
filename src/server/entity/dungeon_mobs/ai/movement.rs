@@ -23,13 +23,26 @@ pub enum MovementStyle {
     /// holds around `ranged_preferred` (+/- `ranged_tolerance`) like `MaintainDistance`.
     /// Paired with `AttackModule::HybridMeleeRanged` using the same `melee_range`.
     HybridMeleeRanged { melee_range: f64, ranged_preferred: f64, ranged_tolerance: f64 },
-    // Phase 3+: Circling { .. }, Strafe { .. }, SprintJump { .. } - enum extends here,
-    // the pipeline in ai/mod.rs does not need to change when they're added.
+    /// Crypt Dreadlord's documented melee behavior: closes in normally (same as `Approach`)
+    /// until within `melee_range`, then orbits the target instead of standing still or
+    /// continuing to push directly into them - `ai/mod.rs`'s attack-range face-lock (see there)
+    /// keeps head/aim on the target the whole time regardless. Paired with `AttackModule::Melee`
+    /// using the same `melee_range`.
+    CircleStrafe { melee_range: f64 },
+    // Phase 3+: SprintJump { .. } - enum extends here, the pipeline in ai/mod.rs does not need
+    // to change when it's added.
 }
 
 /// Ticks per second, matching the server's fixed 20 TPS main loop.
 const TICKS_PER_SECOND: f64 = 20.0;
 
+/// `target_pos` is used for every distance/hold decision (is the real target in range, too
+/// close, too far); `steer_pos` is the point actually walked toward when approaching - the
+/// next pathfinding waypoint (see `pathfinding::next_steer_point`), or `target_pos` itself
+/// when no path is available. Kept separate so a maintain-distance archetype still measures
+/// its distance against the real target even while walking toward an intermediate waypoint.
+/// `allow_jump` should be `next_steer_point`'s own "is `steer_pos` a real resolved waypoint"
+/// flag - see `physics::move_horizontal`'s doc comment for why jumping is gated on that.
 pub fn apply_movement_style(
     entity: &mut Entity,
     world: &World,
@@ -37,14 +50,16 @@ pub fn apply_movement_style(
     height: f64,
     style: MovementStyle,
     target_pos: DVec3,
+    steer_pos: DVec3,
     speed_bps: f64,
+    allow_jump: bool,
 ) {
     match style {
-        MovementStyle::Approach => steer_toward(entity, world, width, height, target_pos, speed_bps),
+        MovementStyle::Approach => steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump),
         MovementStyle::MaintainDistance { preferred, tolerance } => {
             let distance = entity.position.distance_to(&target_pos);
             if distance > preferred + tolerance {
-                steer_toward(entity, world, width, height, target_pos, speed_bps);
+                steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump);
             } else {
                 face_toward(entity, target_pos);
             }
@@ -52,12 +67,64 @@ pub fn apply_movement_style(
         MovementStyle::HybridMeleeRanged { melee_range, ranged_preferred, ranged_tolerance } => {
             let distance = entity.position.distance_to(&target_pos);
             if distance < melee_range || distance > ranged_preferred + ranged_tolerance {
-                steer_toward(entity, world, width, height, target_pos, speed_bps);
+                steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump);
             } else {
+                // Holding at ranged distance to fire - "slightly strafe left and right while
+                // firing wither skulls" rather than standing bolt still.
+                strafe_lightly(entity, world, width, height, target_pos);
                 face_toward(entity, target_pos);
             }
         }
+        MovementStyle::CircleStrafe { melee_range } => {
+            let distance = entity.position.distance_to(&target_pos);
+            if distance > melee_range {
+                steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump);
+            } else {
+                strafe_around_target(entity, world, width, height, target_pos, speed_bps);
+            }
+        }
     }
+}
+
+/// How often (ticks) a circle-strafing mob flips its orbit direction - long enough to read as a
+/// deliberate arc rather than a jittery back-and-forth, short enough it doesn't just look like
+/// it's endlessly circling one way.
+const STRAFE_FLIP_INTERVAL_TICKS: u32 = 40;
+
+/// Orbits `target_pos` at (roughly) the mob's current distance from it, walking tangentially
+/// instead of directly toward/away - used once a `CircleStrafe` mob is already within
+/// `melee_range`. Direction alternates over time (see `STRAFE_FLIP_INTERVAL_TICKS`) purely from
+/// `entity.ticks_existed`, so no extra per-mob state is needed to track which way it's currently
+/// circling. Doesn't touch yaw/pitch - `ai/mod.rs`'s attack-range face lock handles looking at
+/// the target on top of this.
+fn strafe_around_target(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, speed_bps: f64) {
+    let dx = entity.position.x - target_pos.x;
+    let dz = entity.position.z - target_pos.z;
+    let radius = (dx * dx + dz * dz).sqrt().max(0.5);
+    let direction = if (entity.ticks_existed / STRAFE_FLIP_INTERVAL_TICKS) % 2 == 0 { 1.0 } else { -1.0 };
+    // Tangent to the target->mob radius, rotated 90 degrees.
+    let (tangent_x, tangent_z) = (-dz / radius * direction, dx / radius * direction);
+
+    let step = speed_bps / TICKS_PER_SECOND;
+    physics::move_horizontal(entity, world, width, height, tangent_x * step, tangent_z * step, false);
+}
+
+/// Slow left-right oscillation (not a full orbit) used by a ranged attacker while holding
+/// position and firing - "slightly strafe left and right", not circling. Smooth (sine-based,
+/// not a hard flip) so it reads as a subtle sidestep rather than a sudden direction reversal.
+const RANGED_STRAFE_SPEED_BPS: f64 = 1.5;
+const RANGED_STRAFE_PERIOD_TICKS: f64 = 50.0;
+
+fn strafe_lightly(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3) {
+    let dx = entity.position.x - target_pos.x;
+    let dz = entity.position.z - target_pos.z;
+    let radius = (dx * dx + dz * dz).sqrt().max(0.5);
+    let phase = entity.ticks_existed as f64 / RANGED_STRAFE_PERIOD_TICKS * std::f64::consts::TAU;
+    let direction = phase.sin();
+    let (tangent_x, tangent_z) = (-dz / radius, dx / radius);
+
+    let step = RANGED_STRAFE_SPEED_BPS / TICKS_PER_SECOND * direction;
+    physics::move_horizontal(entity, world, width, height, tangent_x * step, tangent_z * step, false);
 }
 
 /// Deflection angles (degrees) tried in order when a direct step is fully blocked - small
@@ -72,12 +139,19 @@ const DEFLECTION_ANGLES_DEG: [f64; 6] = [30.0, -30.0, 60.0, -60.0, 90.0, -90.0];
 /// thin obstacle rather than just standing there pressed against it. This is a reactive
 /// nudge, not real pathfinding (none exists in this codebase) - it won't solve a maze, but
 /// it stops mobs getting permanently stuck on things like a single iron-bar block.
-pub fn steer_toward(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, speed_bps: f64) {
+pub fn steer_toward(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, speed_bps: f64, allow_jump: bool) {
     let dx = target_pos.x - entity.position.x;
     let dz = target_pos.z - entity.position.z;
     let horizontal_distance = (dx * dx + dz * dz).sqrt();
 
+    // Faces wherever it's actually walking (`target_pos` here is a path waypoint most of the
+    // time, not the real combat target - see `apply_movement_style`'s `steer_pos`), not the
+    // player - a mob crossing the room to reach a staircase should visibly look toward the
+    // staircase route while doing so, not dead-stare at the player the whole way there. `ai/mod.rs`
+    // overrides this back to the real target afterward only once the mob is actually in attack
+    // range - see the comment there.
     entity.yaw = yaw_towards(dx, dz);
+    entity.pitch = pitch_towards(target_pos.y - entity.position.y, horizontal_distance);
     if horizontal_distance < 1e-4 {
         return;
     }
@@ -86,14 +160,14 @@ pub fn steer_toward(entity: &mut Entity, world: &World, width: f64, height: f64,
     let move_x = dx / horizontal_distance * step;
     let move_z = dz / horizontal_distance * step;
 
-    let (moved_x, moved_z) = physics::move_horizontal(entity, world, width, height, move_x, move_z);
+    let (moved_x, moved_z) = physics::move_horizontal(entity, world, width, height, move_x, move_z, allow_jump);
     if moved_x || moved_z {
         return;
     }
 
     for angle_deg in DEFLECTION_ANGLES_DEG {
         let (deflected_x, deflected_z) = rotate_2d(move_x, move_z, angle_deg);
-        let (moved_x, moved_z) = physics::move_horizontal(entity, world, width, height, deflected_x, deflected_z);
+        let (moved_x, moved_z) = physics::move_horizontal(entity, world, width, height, deflected_x, deflected_z, allow_jump);
         if moved_x || moved_z {
             break;
         }
@@ -107,14 +181,24 @@ fn rotate_2d(x: f64, z: f64, degrees: f64) -> (f64, f64) {
     (x * cos - z * sin, x * sin + z * cos)
 }
 
-/// Turns to face `target_pos` without approaching/retreating. There's no look-only packet
-/// in this codebase's protocol layer (only `EntityTeleport`, sent automatically by
-/// `Entity::tick` whenever position changes) - so a negligible, direction-alternating
-/// vertical nudge is used purely to trigger that broadcast without causing net drift.
+/// Turns to face `target_pos` (both yaw and pitch) without approaching/retreating. `target_pos`
+/// is assumed to already be a feet position at roughly the same eye-height convention as
+/// `entity` (both this codebase's mobs and players are approximated at the same eye height
+/// elsewhere - see `perception.rs`), so a plain feet-to-feet Y difference is enough to pitch
+/// toward eye level without needing to add/cancel a shared offset.
+///
+/// There's no look-only packet in this codebase's protocol layer (only `EntityTeleport`, sent
+/// automatically by `Entity::tick` whenever position changes) - so a negligible,
+/// direction-alternating vertical nudge is used purely to trigger that broadcast without
+/// causing net drift. Safe to call even when something else already moved `entity` this tick
+/// (the position-change broadcast already fires; this just adds an unnoticeable extra nudge).
 pub fn face_toward(entity: &mut Entity, target_pos: DVec3) {
     let dx = target_pos.x - entity.position.x;
     let dz = target_pos.z - entity.position.z;
+    let horizontal_distance = (dx * dx + dz * dz).sqrt();
+
     entity.yaw = yaw_towards(dx, dz);
+    entity.pitch = pitch_towards(target_pos.y - entity.position.y, horizontal_distance);
 
     let jitter = if entity.ticks_existed % 2 == 0 { 0.0005 } else { -0.0005 };
     entity.position.y += jitter;
@@ -129,8 +213,8 @@ pub fn yaw_towards(dx: f64, dz: f64) -> f32 {
 }
 
 /// Converts a vertical direction (`dy`) and horizontal distance into vanilla pitch degrees
-/// (positive = looking down, negative = looking up). Only used by `projectile.rs` today -
-/// mobs never need to look up/down since all steering here is horizontal-only.
+/// (positive = looking down, negative = looking up). Used by `projectile.rs` for arrow
+/// orientation and by `face_toward` above to tilt a mob's head toward its target.
 pub fn pitch_towards(dy: f64, horizontal_distance: f64) -> f32 {
     (-dy.atan2(horizontal_distance)).to_degrees() as f32
 }

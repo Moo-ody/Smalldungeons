@@ -4,7 +4,7 @@
 //! not clipping through walls/players/each other is a baseline physical property, not an AI
 //! behavior choice.
 
-use crate::server::block::block_collision::{check_block_collisions, is_liquid};
+use crate::server::block::block_collision::{check_block_collisions, get_block_aabb, is_liquid};
 use crate::server::entity::dungeon_mobs::mob_type::MobBaseKind;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::utils::aabb::AABB;
@@ -97,29 +97,118 @@ pub fn apply_gravity(entity: &mut Entity, world: &World, width: f64, height: f64
 /// `STEP_HEIGHT`) before giving up on that axis - this is what makes slabs/stairs/carpets
 /// climbable instead of a full wall. Returns `(moved_x, moved_z)` so callers (see
 /// `movement::steer_toward`'s obstacle deflection) can tell whether the step was blocked.
-pub fn move_horizontal(entity: &mut Entity, world: &World, width: f64, height: f64, dx: f64, dz: f64) -> (bool, bool) {
-    let moved_x = if dx != 0.0 { try_move_axis(entity, world, width, height, dx, 0.0) } else { false };
-    let moved_z = if dz != 0.0 { try_move_axis(entity, world, width, height, 0.0, dz) } else { false };
+/// `allow_jump` gates the full-height-ledge jump fallback below (see its own comment) - true
+/// only for movement that's actually executing a resolved pathfinding waypoint, per request:
+/// mobs should jump because the path they're following calls for it, not as a general reflex
+/// any time direct-line steering (idle wander, leash return, the first-sight nudge, a
+/// no-path-found fallback) happens to bump into a solid ledge.
+pub fn move_horizontal(entity: &mut Entity, world: &World, width: f64, height: f64, dx: f64, dz: f64, allow_jump: bool) -> (bool, bool) {
+    let moved_x = if dx != 0.0 { try_move_axis(entity, world, width, height, dx, 0.0, allow_jump) } else { false };
+    let moved_z = if dz != 0.0 { try_move_axis(entity, world, width, height, 0.0, dz, allow_jump) } else { false };
     (moved_x, moved_z)
 }
 
-fn try_move_axis(entity: &mut Entity, world: &World, width: f64, height: f64, dx: f64, dz: f64) -> bool {
+fn try_move_axis(entity: &mut Entity, world: &World, width: f64, height: f64, dx: f64, dz: f64, allow_jump: bool) -> bool {
     let flat_candidate = DVec3::new(entity.position.x + dx, entity.position.y, entity.position.z + dz);
-    if !is_blocked(world, flat_candidate, width, height) {
+    if !is_blocked(world, flat_candidate, width, height) && safe_to_step(world, entity, flat_candidate, width) {
         entity.position.x = flat_candidate.x;
         entity.position.z = flat_candidate.z;
         return true;
     }
 
-    let stepped_candidate = DVec3::new(flat_candidate.x, entity.position.y + STEP_HEIGHT, flat_candidate.z);
-    if !is_blocked(world, stepped_candidate, width, height) {
+    // A real ascending staircase (confirmed against actual dungeon block data: consecutive
+    // `Stairs` blocks, each one column over AND one full block higher than the last, e.g.
+    // `Raccoon` room x=5..8 z=6) rises a full 1.0 block per tread, not `STEP_HEIGHT` (0.6) -
+    // vanilla players/mobs climb this smoothly because the game's real collision resolves
+    // against each stair's true diagonal shape continuously as they walk across it, but this
+    // codebase simplifies every stair/slab to one flat half-height box per column
+    // (`block_collision::get_stair_aabb`/`half_height_aabb`), so a mob already standing on one
+    // tread meets the next tread's box as a sudden full-block-ish wall, not a gradual ramp.
+    // `STEP_HEIGHT` alone can clear the *first* rise (flat ground onto a tread), never a
+    // *second* consecutive one - hence "climbs one stair, not a flight". Compensate with a
+    // taller step attempt, but only when what's actually ahead is itself a partial-height
+    // block (stair/slab/carpet) rather than a genuine full 1-block wall/ledge - a full wall
+    // still isn't auto-climbable this way, matching vanilla (that needs an actual jump).
+    let step_height = if obstruction_is_partial_height(world, flat_candidate) {
+        STAIR_STEP_HEIGHT
+    } else {
+        STEP_HEIGHT
+    };
+    let stepped_candidate = DVec3::new(flat_candidate.x, entity.position.y + step_height, flat_candidate.z);
+    if !is_blocked(world, stepped_candidate, width, height) && safe_to_step(world, entity, stepped_candidate, width) {
         entity.position.x = stepped_candidate.x;
         entity.position.y = stepped_candidate.y;
         entity.position.z = stepped_candidate.z;
         return true;
     }
 
+    // Neither an instant step nor a stair-step cleared it - if `allow_jump` (this is a resolved
+    // pathfinding waypoint that actually calls for it, not a direct-line steering reflex - see
+    // `move_horizontal`'s doc comment), this is a genuine full-height obstruction (not a
+    // stair/slab/carpet, already handled above), and the mob is currently grounded, jump instead
+    // of just giving up: matches vanilla mobs' ability to auto-jump a 1-block ledge/wall while
+    // navigating, which nothing here did before (the two step attempts above only ever clear up
+    // to ~1.05 blocks *without* leaving the ground - a real solid full-block ledge stays taller
+    // than that no matter which of them is tried). Unlike the step attempts, this is a genuine
+    // velocity impulse, not an instant teleport - `apply_gravity` (already run once per tick
+    // before movement, see `ai/mod.rs`) carries the resulting arc up and back down over several
+    // ticks just like a real jump, which also naturally prevents chaining multiple jumps in the
+    // same tick or before landing again (`entity.on_ground` only goes back to `true` once it
+    // does) without needing any separate cooldown state.
+    if allow_jump && entity.on_ground && !obstruction_is_partial_height(world, flat_candidate) {
+        entity.velocity.y = JUMP_VELOCITY;
+    }
+
     false
+}
+
+/// Vanilla's real initial jump velocity (`EntityLivingBase.jump()`'s `motionY = 0.42F`, no
+/// jump-boost effect applied here).
+const JUMP_VELOCITY: f64 = 0.42;
+
+/// Taller step-up height for climbing onto another partial-height (stair/slab/carpet) block
+/// specifically - see the comment in `try_move_axis` for why more than `STEP_HEIGHT` is needed
+/// here. 1.05 clears a full 1.0-block tread rise with a small margin.
+const STAIR_STEP_HEIGHT: f64 = 1.05;
+
+/// Whether the block directly at `candidate`'s feet position has a partial-height collision
+/// box (a stair, slab, or carpet - anything shorter than a full 1x1x1 cube), as opposed to a
+/// genuine full-block wall/ledge or open air. Only the block at the mob's own feet height is
+/// checked, matching what `is_blocked`'s flat-candidate test itself just failed against.
+fn obstruction_is_partial_height(world: &World, candidate: DVec3) -> bool {
+    let x = candidate.x.floor() as i32;
+    let y = candidate.y.floor() as i32;
+    let z = candidate.z.floor() as i32;
+    let block = world.get_block_at(x, y, z);
+    match get_block_aabb(block, x, y, z) {
+        Some(aabb) => (aabb.max.y - aabb.min.y) < 1.0,
+        None => false,
+    }
+}
+
+/// Real vanilla mobs generally avoid voluntarily walking off a drop that would deal fall
+/// damage (past 3 blocks) - the same threshold `ai::pathfinding`'s `MAX_SAFE_DROP` already uses
+/// to keep A* from routing *through* a big gap. This is the belt-and-suspenders half of that:
+/// it applies at the base movement layer itself, so the same protection also covers whatever
+/// doesn't go through a computed path at all - the direct-steer fallback when no path exists
+/// (different room, search budget exhausted, genuinely no route), plus idle wander and leash
+/// return-to-spawn, which don't call into pathfinding in the first place.
+const MAX_SAFE_FALL: f64 = 3.0;
+
+/// Whether solid ground exists anywhere within `MAX_SAFE_FALL` blocks below `candidate` - see
+/// `safe_to_step`.
+fn has_safe_landing(world: &World, candidate: DVec3, width: f64) -> bool {
+    let probe = AABB::from_height_width(MAX_SAFE_FALL, width)
+        .offset(DVec3::new(candidate.x, candidate.y - MAX_SAFE_FALL, candidate.z));
+    check_block_collisions(world, &probe)
+}
+
+/// Gates `try_move_axis`'s two step attempts on fall safety, but only while the mob is
+/// currently grounded - a mob already falling for some other reason (knockback, spawned
+/// mid-air) shouldn't have its horizontal drift frozen mid-fall just because there's nothing
+/// below it; that's a pre-existing, unrelated situation this isn't meant to touch.
+fn safe_to_step(world: &World, entity: &Entity, candidate: DVec3, width: f64) -> bool {
+    !entity.on_ground || has_safe_landing(world, candidate, width)
 }
 
 fn is_blocked(world: &World, position: DVec3, width: f64, height: f64) -> bool {

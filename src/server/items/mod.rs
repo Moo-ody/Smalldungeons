@@ -15,6 +15,7 @@ mod hyperion;
 mod spirit_sceptre;
 pub mod bonzo_projectile;
 pub mod jerry_projectile;
+pub mod terminator;
 
 
 
@@ -65,6 +66,9 @@ impl Item {
             }
             Item::Hyperion => {
                 hyperion::on_right_click(player)?;
+            }
+            Item::Terminator => {
+                terminator::on_right_click(player)?;
             }
             Item::SpiritSceptre => {
                 spirit_sceptre::on_right_click(player)?;

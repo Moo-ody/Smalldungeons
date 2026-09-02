@@ -176,6 +176,11 @@ impl Server {
                 // into the freshly rebuilt dungeon.
                 sync_player_view(&mut self.world, &mut player);
 
+                // Tic Tac Toe's 3 map designs are sent once at room setup, which at boot happens
+                // with no players connected yet - resend to every actual joiner here so a filled
+                // map item (e.g. the bot's opening move) doesn't render as an unknown/blank map.
+                crate::dungeon::room::tic_tac_toe::send_map_definitions_to(&mut player);
+
 
                 
                 player.sidebar.write_init_packets(&mut player.packet_buffer);
@@ -286,20 +291,6 @@ impl Server {
                  
                  // Pad the payload to avoid OOB reads from mods (Skytils/Essential/Patcher)
                  data.extend_from_slice(&[0u8; 4]);
-                 
-                 // Log the custom payload before sending
-                 let hex_dump: String = data.iter()
-                     .take(32) // Show first 32 bytes
-                     .map(|b| format!("{:02x}", b))
-                     .collect::<Vec<_>>()
-                     .join(" ");
-                 let hex_suffix = if data.len() > 32 { "..." } else { "" };
-                 println!(
-                     "[RC DEBUG] sending custom payload: channel='MC|Brand', len={}, hex={}{}",
-                     data.len(),
-                     hex_dump,
-                     hex_suffix
-                 );
                  
                  player.write_packet(&CustomPayload {
                      channel: "MC|Brand".into(),

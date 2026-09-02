@@ -46,6 +46,14 @@ pub struct Door {
     /// only one key should ever be produced per door (either from the last starred mob dying in
     /// the room leading to it, or immediately on room entry if that room has none).
     pub key_granted: bool,
+
+    /// Whether this door has been opened (Wither/Blood key used, or forced open at dungeon
+    /// start for the entrance/fairy-entry doors). Lets the map reveal a locked door's room the
+    /// moment it's opened, instead of waiting for the room to be fully walked into (see
+    /// `DungeonMap::draw_room`) - a `NORMAL` door has no discrete open event (it's just always
+    /// air, see `DoorType::get_block`) and never sets this, so `draw_room` still falls back to
+    /// the neighbour room's own `entered` flag for those.
+    pub opened: bool,
 }
 
 impl Door {

@@ -264,7 +264,7 @@ impl ProcessPacket for PlayerBlockPlacement {
                 if let Err(e) = player.shoot_jerry_projectile() {
                 }
                 return;
-            } else if matches!(item, Item::SpiritSceptre | Item::AspectOfTheVoid | Item::EnderPearl | Item::Hyperion | Item::TacticalInsertion | Item::MagicalMap) {
+            } else if matches!(item, Item::SpiritSceptre | Item::AspectOfTheVoid | Item::EnderPearl | Item::Hyperion | Item::TacticalInsertion | Item::MagicalMap | Item::Terminator) {
                 // These items' abilities (etherwarp/ether transmission, pearl throw, wither
                 // impact, tactical insertion, map GUI, guided bat) go through the generic
                 // `Item::on_right_click` -> `Player::handle_right_click` path, which previously
@@ -955,8 +955,16 @@ impl ProcessPacket for HeldItemChange {
     }
 }
 
-// will be useful if we want to add stuff like mage beam
-impl ProcessPacket for ArmSwing {}
+impl ProcessPacket for ArmSwing {
+    fn process_with_player(&self, player: &mut Player) {
+        // The Terminator fires on a left-click swing too, not just right-click - matches
+        // `DungeonSim`'s real `Terminator.java` (`onSwing`/`onPlace` both call the same
+        // `useTerminator`), which this item's whole shooting behavior was ported from.
+        if let Some(ItemSlot::Filled(Item::Terminator, _)) = player.inventory.get_hotbar_slot(player.held_slot as usize) {
+            crate::server::items::terminator::use_terminator(player);
+        }
+    }
+}
 
 impl ProcessPacket for PlayerAction {
     fn process_with_player(&self, player: &mut Player) {
@@ -1092,20 +1100,6 @@ impl ProcessPacket for CustomPayload {
             }
         }
         
-        let hex_dump: String = self.payload.iter()
-            .take(32) // Show first 32 bytes
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let hex_suffix = if self.payload.len() > 32 { "..." } else { "" };
-        
-        println!(
-            "[RC DEBUG] received plugin message from client: channel='{}', len={}, hex={}{}",
-            self.channel,
-            self.payload.len(),
-            hex_dump,
-            hex_suffix
-        );
         // IMPORTANT: Return Ok (implicit) - never disconnect on plugin messages
     }
 }

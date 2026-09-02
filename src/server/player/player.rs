@@ -80,6 +80,11 @@ pub struct Player {
     // Jerry-Chine Gun cooldown tracking
     pub jerry_last_shot_tick: u64,
 
+    /// Terminator's "Shot Cooldown: 0.5s" (10 ticks) - the real item's other stats (damage,
+    /// crit, headshot bonus) have nothing to plug into since there's no player-vs-mob damage
+    /// system in this codebase yet; the cooldown is the one number that actually gates behavior.
+    pub terminator_last_shot_tick: u64,
+
     /// Hyperion right-click cooldown (1/6 second - doesn't divide evenly into this codebase's
     /// 20-tick-per-second loop the way Bonzo/Jerry's whole-tick cooldowns do, so this is
     /// tracked as a real timestamp instead of a tick count for actual precision).
@@ -180,7 +185,8 @@ impl Player {
             
             // Jerry-Chine Gun cooldown tracking
             jerry_last_shot_tick: 0,
-            
+            terminator_last_shot_tick: 0,
+
             // Lava bounce tracking
             in_lava: false,
             lava_bounce_last_tick: 0,

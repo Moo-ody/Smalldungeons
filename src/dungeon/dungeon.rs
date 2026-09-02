@@ -4,7 +4,7 @@ use crate::dungeon::map::DungeonMap;
 use crate::dungeon::room::room::{Room, RoomNeighbour, RoomSegment};
 use crate::dungeon::room::room_data::{get_random_data_with_type, RoomData, RoomShape, RoomType};
 use crate::dungeon::score::DungeonScoreState;
-use crate::net::protocol::play::clientbound::Maps;
+use crate::net::protocol::play::clientbound::{Maps, MapIcon};
 use crate::server::block::block_interact_action::BlockInteractAction;
 use crate::server::block::block_parameter::Axis;
 use crate::server::block::block_position::BlockPos;
@@ -48,6 +48,14 @@ pub(crate) fn spawn_pickup(world: &mut world::World, pos: DVec3, kind: PickupKin
 
 // The top leftmost corner of the dungeon
 pub const DUNGEON_ORIGIN: (i32, i32) = (-200, -200);
+
+/// A room's mobs don't spawn the instant the room is entered - they queue in
+/// `Dungeon::pending_mob_spawn_rooms` and only actually spawn on a tick where
+/// `current_ticks % MOB_SPAWN_CYCLE_TICKS == 0`. This cycle runs continuously off the dungeon's
+/// own tick counter for as long as it stays `Started` (not reset per-room), so a room entered
+/// mid-cycle waits for the next 0 rather than spawning immediately - see the `Started` arm of
+/// `Dungeon::tick`.
+pub const MOB_SPAWN_CYCLE_TICKS: u64 = 5;
 
 // The positions of the doors in the world
 pub const DOOR_POSITIONS: [(i32, i32); 60] = [(DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 15), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 15), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 15), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 15), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 15), (DUNGEON_ORIGIN.0 + 15, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 47, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 79, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 111, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 143, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 175, DUNGEON_ORIGIN.1 + 31), (DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 47), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 47), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 47), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 47), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 47), (DUNGEON_ORIGIN.0 + 15, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 47, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 79, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 111, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 143, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 175, DUNGEON_ORIGIN.1 + 63), (DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 79), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 79), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 79), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 79), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 79), (DUNGEON_ORIGIN.0 + 15, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 47, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 79, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 111, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 143, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 175, DUNGEON_ORIGIN.1 + 95), (DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 111), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 111), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 111), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 111), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 111), (DUNGEON_ORIGIN.0 + 15, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 47, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 79, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 111, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 143, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 175, DUNGEON_ORIGIN.1 + 127), (DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 143), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 143), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 143), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 143), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 143), (DUNGEON_ORIGIN.0 + 15, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 47, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 79, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 111, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 143, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 175, DUNGEON_ORIGIN.1 + 159), (DUNGEON_ORIGIN.0 + 31, DUNGEON_ORIGIN.1 + 175), (DUNGEON_ORIGIN.0 + 63, DUNGEON_ORIGIN.1 + 175), (DUNGEON_ORIGIN.0 + 95, DUNGEON_ORIGIN.1 + 175), (DUNGEON_ORIGIN.0 + 127, DUNGEON_ORIGIN.1 + 175), (DUNGEON_ORIGIN.0 + 159, DUNGEON_ORIGIN.1 + 175)];
@@ -129,7 +137,12 @@ pub struct Dungeon {
     /// per-secret bounding-box proximity gating in `tick` below. Off by default so ordinary runs
     /// keep vanilla secret-spawn behavior.
     pub secrets_always_spawn: bool,
-    
+
+    /// Room indices that have been entered but whose mobs haven't spawned yet - drained once
+    /// per `MOB_SPAWN_CYCLE_TICKS` ticks (see `tick`'s `Started` arm), instead of spawning the
+    /// instant a room is entered.
+    pub pending_mob_spawn_rooms: Vec<usize>,
+
     // Boss room data
     // pub boss_room_corner: BlockPos,
     // pub boss_room_width: i32,
@@ -239,6 +252,7 @@ impl Dungeon {
             locked_chests: HashMap::new(),
             lever_to_chests: HashMap::new(),
             secrets_always_spawn: false,
+            pending_mob_spawn_rooms: Vec::new(),
             // boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
             // boss_room_width: 0, // Will be set when boss room is loaded
             // boss_room_length: 0, // Will be set when boss room is loaded
@@ -277,6 +291,7 @@ impl Dungeon {
                     direction,
                     door_type,
                     key_granted: false,
+                    opened: false,
                 };
 
                 doors.push(door);
@@ -636,6 +651,7 @@ impl Dungeon {
                 player.write_packet(&Maps {
                     id: 1,
                     scale: 0,
+                    icons: vec![],
                     columns: width as u8,
                     rows: height as u8,
                     x: region.min_x as u8,
@@ -758,9 +774,14 @@ impl Dungeon {
         let fairy_entry_door = self.find_fairy_entry_door();
 
         let world = &mut self.server_mut().world;
-        for (index, door) in self.doors.iter().enumerate() {
+        // Indexed loop rather than `self.doors.iter()` - `opened` below needs a fresh `&mut
+        // self.doors[index]` each iteration, which can't coexist with a single long-lived
+        // iterator borrow of the whole Vec.
+        for index in 0..self.doors.len() {
+            let door = &self.doors[index];
             if door.door_type == DoorType::ENTRANCE {
                 door.open_door(world);
+                self.doors[index].opened = true;
                 continue;
             }
 
@@ -769,9 +790,11 @@ impl Dungeon {
             // further out/deeper into the dungeon) stays a normal locked wither door.
             if door.door_type == DoorType::WITHER && fairy_entry_door == Some(index) {
                 door.open_door(world);
+                self.doors[index].opened = true;
                 continue;
             }
 
+            let door = &self.doors[index];
             if door.door_type == DoorType::NORMAL {
                 continue;
             }
@@ -809,12 +832,10 @@ impl Dungeon {
         // Draw the entrance room on the map if it was just marked as entered
         if let Some(room_index) = entrance_room_index {
             self.map.draw_room(&self.rooms, &self.doors, room_index);
-            // Spawn this room's mobs now that the entrance room has been entered (dungeon started)
+            // Queue this room's mobs to spawn on the next mob-spawn cycle tick (see
+            // `MOB_SPAWN_CYCLE_TICKS`/`tick`'s `Started` arm), rather than spawning immediately.
             if !self.practice_room {
-                if let Some(room) = self.rooms.get(room_index) {
-                    let world = &mut self.server_mut().world;
-                    spawn_room_mobs(world, room_index, room);
-                }
+                self.pending_mob_spawn_rooms.push(room_index);
             }
         }
     }
@@ -892,6 +913,35 @@ impl Dungeon {
 
             DungeonState::Started { current_ticks } => {
                 *current_ticks += 1;
+
+                // Every player's own position/facing arrow on the magical map - unlike the room
+                // pixel data (only resent when something on the map actually changes), this has
+                // to be pushed every tick since the player is presumably moving continuously.
+                // `columns: 0` means no pixel data is included, just the icon list (see
+                // `Maps::write`) - a real client-holds-a-filled-map update, not a room redraw.
+                {
+                    let icons: Vec<MapIcon> = server.world.players.values().map(|player| {
+                        let (x, z) = self.map.world_to_icon(player.position.x, player.position.z, DUNGEON_ORIGIN);
+                        // `yaw` is degrees, sign/range varies by how it was last set - normalize
+                        // into 0..360 before quantizing to one of the 16 directions.
+                        let normalized_yaw = ((player.yaw % 360.0) + 360.0) % 360.0;
+                        let direction = ((normalized_yaw / 22.5).round() as u8) & 0x0F;
+                        MapIcon { icon_type: 0, direction, x, z }
+                    }).collect();
+
+                    for (_, player) in &mut server.world.players {
+                        player.write_packet(&Maps {
+                            id: 1,
+                            scale: 0,
+                            icons: icons.clone(),
+                            columns: 0,
+                            rows: 0,
+                            x: 0,
+                            z: 0,
+                            map_data: Vec::new(),
+                        });
+                    }
+                }
 
                 // Score is re-derived from live room state every tick (covers room clears and
                 // secrets found - both already tracked authoritatively on `Room` - without a
@@ -1114,11 +1164,50 @@ impl Dungeon {
                     );
                 }
                 
-                // Spawn each newly-entered room's mobs now, rather than for the whole dungeon up front
+                // Rooms entered this tick queue behind the same mob-spawn cycle as any room
+                // already pending (e.g. the entrance room, queued in `start_dungeon`) - mobs
+                // only actually spawn on a tick where `current_ticks % MOB_SPAWN_CYCLE_TICKS ==
+                // 0`, so a room entered mid-cycle waits for the next cycle point instead of
+                // spawning the instant it's entered. The cycle runs continuously off
+                // `current_ticks` for as long as the dungeon stays `Started` - it's never reset
+                // per-room, so it doesn't restart just because a new room got queued.
+                let mut rooms_spawned_this_tick: Vec<usize> = Vec::new();
                 if !self.practice_room {
-                    for room_index in &rooms_just_entered {
-                        if let Some(room) = self.rooms.get(*room_index) {
-                            spawn_room_mobs(&mut server.world, *room_index, room);
+                    self.pending_mob_spawn_rooms.extend(rooms_just_entered.iter().copied());
+                    if *current_ticks % MOB_SPAWN_CYCLE_TICKS == 0 {
+                        rooms_spawned_this_tick = std::mem::take(&mut self.pending_mob_spawn_rooms);
+                        for &room_index in &rooms_spawned_this_tick {
+                            if let Some(room) = self.rooms.get(room_index) {
+                                spawn_room_mobs(&mut server.world, room_index, room);
+                            }
+                            if let Some(room) = self.rooms.get_mut(room_index) {
+                                room.mobs_spawned = true;
+                            }
+
+                            // Redraw now that `mobs_spawned` (and, for a room with no starred
+                            // mobs, `starred_mobs_remaining == 0`) is finally accurate - the
+                            // room-entry draw earlier (see `did_mark_entered` below) may have
+                            // already happened on an earlier tick, before this room's mobs
+                            // existed, so its checkmark can't rely on that call alone. Inlined
+                            // rather than calling `update_map_for_room` - `match &mut self.state`
+                            // above already holds `self` mutably borrowed for this whole arm.
+                            self.map.draw_room(&self.rooms, &self.doors, room_index);
+                            if let Some((region, data)) = self.map.get_updated_area() {
+                                let width = region.max_x - region.min_x;
+                                let height = region.max_y - region.min_y;
+                                for (_, player) in &mut server.world.players {
+                                    player.write_packet(&Maps {
+                                        id: 1,
+                                        scale: 0,
+                                        icons: vec![],
+                                        columns: width as u8,
+                                        rows: height as u8,
+                                        x: region.min_x as u8,
+                                        z: region.min_y as u8,
+                                        map_data: data.clone(),
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -1131,7 +1220,11 @@ impl Dungeon {
                 // the `combat.rs` call site) - `match &mut self.state` above is already holding
                 // `self` mutably borrowed here, and a method call on `self` would conflict with
                 // that, the same borrow-conflict class as the chest-particle code just below.
-                for &room_index in &rooms_just_entered {
+                // Keyed off `rooms_spawned_this_tick`, NOT `rooms_just_entered` - mobs may not
+                // have actually spawned into a just-entered room yet (still queued behind the
+                // cycle gate above), and `starred_mobs_remaining` would still misleadingly read 0
+                // for a room that does have starred mobs coming, wrongly granting the key early.
+                for &room_index in &rooms_spawned_this_tick {
                     for kind in [PickupKind::Wither, PickupKind::Blood] {
                         if let Some(room) = self.rooms.get(room_index) {
                             if room.starred_mobs_remaining == 0 {
@@ -1308,6 +1401,7 @@ impl Dungeon {
                                     player.write_packet(&Maps {
                                         id: 1,
                                         scale: 0,
+                                        icons: vec![],
                                         columns: width as u8,
                                         rows: height as u8,
                                         x: region.min_x as u8,
@@ -1460,6 +1554,7 @@ impl Dungeon {
                             player.write_packet(&Maps {
                                 id: 1,
                                 scale: 0,
+                                icons: vec![],
                                 columns: width as u8,
                                 rows: height as u8,
                                 x: region.min_x as u8,

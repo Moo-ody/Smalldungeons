@@ -65,6 +65,63 @@ pub struct Room {
     /// count as cleared immediately). See `spawner.rs` (incremented on spawn) and
     /// `ai/combat.rs::kill_mob` (decremented on death, triggers a map redraw at 0).
     pub starred_mobs_remaining: u32,
+
+    /// Whether `spawn_room_mobs` has actually run for this room yet. Room entry and mob spawning
+    /// are no longer the same instant - entry queues the room behind `Dungeon`'s mob-spawn cycle
+    /// (see `MOB_SPAWN_CYCLE_TICKS`), so `starred_mobs_remaining` reads 0 for a room that simply
+    /// hasn't had its mobs spawned in yet, same as a room with no starred mobs at all. Without
+    /// this, `DungeonMap::draw_room`'s checkmark logic couldn't tell those two 0s apart and drew
+    /// a checkmark the instant the room was entered, before any of its mobs even existed.
+    pub mobs_spawned: bool,
+
+    /// World position of the one specific secret chest that marks a Trap room "cleared" - `None`
+    /// for every room except the two known Trap layouts (see `trap_completion_secret_relative_pos`).
+    /// Trap rooms have no starred mobs at all, so the ordinary `starred_mobs_remaining == 0`
+    /// check `DungeonMap::draw_room` uses for the checkmark reads true the instant the room is
+    /// entered - real Hypixel instead ties a Trap room's clear state to grabbing this specific
+    /// chest (confirmed against the real in-room coordinates: Old Trap's is at relative (4, 71,
+    /// 9), New Trap's at (26, 90, 14) - both taken from `secrets_loader.rs`'s own `schest` data
+    /// for those rooms, not guessed).
+    pub trap_completion_chest_pos: Option<BlockPos>,
+    /// Whether `trap_completion_chest_pos`'s secret has been obtained - see
+    /// `block_interact_action.rs`'s `Chest` handler (sets this) and `DungeonMap::draw_room`
+    /// (reads it in place of `starred_mobs_remaining == 0` for Trap rooms).
+    pub trap_completed: bool,
+
+    /// Whether this room's puzzle has been resolved (solved *or* failed - either way it's done,
+    /// matching real Hypixel: a failed puzzle still marks the room complete on the map, it just
+    /// costs score). `false` for every non-`RoomType::Puzzle` room, which never sets it. Same
+    /// role for puzzle rooms that `trap_completed` plays for Trap rooms - see that field's doc
+    /// comment and `DungeonMap::draw_room`'s `is_cleared` check, which reads this instead of the
+    /// usual `starred_mobs_remaining == 0` (puzzle rooms have no starred mobs, so that check
+    /// would otherwise read true the instant the room is entered).
+    pub puzzle_completed: bool,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Teleport Maze" - set by
+    /// `teleport_maze::setup`. Lives directly on `Room` rather than in a `world.interactable_blocks`
+    /// entry like `three_weirdos`/`creeper_beams`'s puzzle state, because a teleport pad triggers
+    /// by being walked onto (checked every tick in `teleport_maze::tick`, called from `Room::tick`
+    /// below), not right-clicked - there's no single interactable block position to hang an
+    /// `Rc` off of instead.
+    pub teleport_maze_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::teleport_maze::TeleportMazeState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Tic Tac Toe" - set by
+    /// `tic_tac_toe::setup`. Currently only backs the board's display (the 9 Item Frames'
+    /// entity ids and each cell's shown state) - the actual game (buttons, AI, win detection)
+    /// isn't wired up yet, but the state already lives here, same `Rc<RefCell<>>` pattern as
+    /// every other puzzle, so that follow-up has something to reach into.
+    pub tic_tac_toe_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::tic_tac_toe::TicTacToeState>>>,
+}
+
+/// Relative (pre-rotation) position of the specific secret chest whose pickup marks a Trap room
+/// "cleared" - see `Room::trap_completion_chest_pos`. `None` for anything that isn't a known trap
+/// layout (including rooms not yet scraped/added).
+fn trap_completion_secret_relative_pos(room_name: &str) -> Option<BlockPos> {
+    match room_name {
+        "Old Trap" => Some(BlockPos { x: 4, y: 71, z: 9 }),
+        "New Trap" => Some(BlockPos { x: 26, y: 90, z: 14 }),
+        _ => None,
+    }
 }
 
 impl Room {
@@ -80,6 +137,14 @@ impl Room {
         
         let rotation = Room::get_rotation_from_segments(&segments, dungeon_doors);
         let corner_pos = Room::get_corner_pos_from(&segments, &rotation, &room_data);
+
+        // Same relative -> world transform `secrets_loader.rs` uses for `schest` entries (Y is
+        // absolute, only X/Z rotate) - has to match exactly, since this is compared directly
+        // against a loaded secret's own `block_pos` later (see `trap_completion_chest_pos`).
+        let trap_completion_chest_pos = trap_completion_secret_relative_pos(&room_data.name).map(|rel| {
+            let rotated = rel.rotate(rotation);
+            BlockPos { x: corner_pos.x + rotated.x, y: rotated.y, z: corner_pos.z + rotated.z }
+        });
 
         let crushers = room_data.crusher_data.iter().map(|data| {
             let mut crusher = Crusher::from_json(data);
@@ -282,6 +347,12 @@ impl Room {
             json_secrets: Vec::new(),
             room_entry_secrets_spawned: false,
             starred_mobs_remaining: 0,
+            mobs_spawned: false,
+            trap_completion_chest_pos,
+            trap_completed: false,
+            puzzle_completed: false,
+            teleport_maze_state: None,
+            tic_tac_toe_state: None,
         }
     }
 
@@ -319,9 +390,14 @@ impl Room {
 
     pub fn tick(&mut self, world: &mut World) {
         self.tick_amount += 1;
-        
+
         // Process scheduled falling block removals
         self.process_scheduled_falling_removals(world);
+
+        // Checks every player's position against the Teleport Maze's pad list, if this room has
+        // one - no-op otherwise (see `teleport_maze_state`'s doc comment for why this needs a
+        // per-tick check instead of the click-based `BlockInteractAction` every other puzzle uses).
+        crate::dungeon::room::teleport_maze::tick(self, world);
     }
 
     pub fn detect_crypts(&mut self, world: &World) -> usize {
@@ -344,20 +420,6 @@ impl Room {
         self.crypts_detected_count = detected;
         self.crypts_checked = true;
         detected
-    }
-
-    pub fn debug_crypt_mismatch(&self, world: &World) {
-        if self.crypt_patterns.is_empty() { return; }
-        let pattern = &self.crypt_patterns[0];
-        println!("[crypts] debug first pattern for '{}' ({} blocks):", self.room_data.name, pattern.len());
-        for (i, (pos, expected)) in pattern.iter().enumerate().take(12) {
-            let state_id = world.get_block_at(pos.x, pos.y, pos.z).get_block_state_id();
-            let id = (state_id >> 4) as u16;
-            println!(
-                "[crypts]   #{} at ({}, {}, {}): world_id={} expected={:?}",
-                i, pos.x, pos.y, pos.z, id, expected
-            );
-        }
     }
 
     /// Explodes (removes) all crypt patterns that have any block within `radius`
@@ -806,7 +868,7 @@ impl Room {
         }
     }
 
-    pub fn load_into_world(&mut self, world: &mut World) {
+    pub fn load_into_world(&mut self, room_index: usize, world: &mut World) {
         if self.room_data.block_data.is_empty() {
             self.load_default(world);
             return;
@@ -823,6 +885,18 @@ impl Room {
         
         // Register levers for this room
         self.register_levers(world);
+
+        // Spawns the Three Weirdos NPCs + registers their chests, if this is that room - no-op
+        // for every other room (see the check at the top of `setup`).
+        crate::dungeon::room::three_weirdos::setup(self, room_index, world);
+
+        // Spawns the Creeper Beams floating creeper + registers its 22 lanterns, if this is
+        // that room - no-op for every other room.
+        crate::dungeon::room::creeper_beams::setup(self, room_index, world);
+
+        // Generates the Teleport Maze puzzle's pad-link graph, if this is that room - no-op for
+        // every other room.
+        crate::dungeon::room::teleport_maze::setup(self, room_index, world);
 
         // Special placement for Gold room
         if self.room_data.name == "Gold" {
@@ -1014,6 +1088,15 @@ impl Room {
 
             world.set_block_at(block, corner.x + bp.x, y, corner.z + bp.z);
         }
+
+        // Spawns the Tic Tac Toe board's 9 Item Frames (display only for now - see
+        // `tic_tac_toe_state`'s doc comment), if this is that room - no-op for every other room.
+        // Deliberately runs after the block-placement loop just above (not up with the other
+        // puzzle setups) - it needs to read back each button's actual placed (rotated) direction
+        // so the frames it later spawns can match, rather than recomputing that rotation itself
+        // and risking disagreeing with whatever `Blocks::rotate` actually produced for the
+        // buttons - see `tic_tac_toe::setup`'s doc comment.
+        crate::dungeon::room::tic_tac_toe::setup(self, room_index, world);
     }
 
     // pub fn get_world_pos(&self, position: DVec3) -> DVec3 {
@@ -1031,6 +1114,37 @@ impl Room {
             .rotate(self.rotation)
             .add_x(corner.x)
             .add_z(corner.z)
+    }
+
+    /// World-space AABB (inclusive) this room's blocks occupy - built from the same
+    /// `get_world_block_pos` transform actually used to place blocks, rather than re-deriving
+    /// the rotation/axis-swap logic by hand, so it can't disagree with it for East/West-rotated
+    /// rooms. Used by `ai::pathfinding` to bound the A* search volume to just this room.
+    pub fn get_world_bounds(&self) -> (BlockPos, BlockPos) {
+        let rd = &self.room_data;
+        let corners = [
+            BlockPos::new(0, 0, 0),
+            BlockPos::new(rd.width - 1, 0, 0),
+            BlockPos::new(0, 0, rd.length - 1),
+            BlockPos::new(rd.width - 1, 0, rd.length - 1),
+        ];
+
+        let mut min_x = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut min_z = i32::MAX;
+        let mut max_z = i32::MIN;
+        for corner in corners {
+            let world_pos = self.get_world_block_pos(&corner);
+            min_x = min_x.min(world_pos.x);
+            max_x = max_x.max(world_pos.x);
+            min_z = min_z.min(world_pos.z);
+            max_z = max_z.max(world_pos.z);
+        }
+
+        (
+            BlockPos::new(min_x, rd.bottom, min_z),
+            BlockPos::new(max_x, rd.bottom + rd.height - 1, max_z),
+        )
     }
 
     /// Spawn locked chests for this room

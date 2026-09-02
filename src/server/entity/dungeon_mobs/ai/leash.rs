@@ -27,9 +27,14 @@ pub fn tick_leash(state: &mut MobAiState, current_pos: DVec3, leash_distance: Op
     }
 }
 
-/// Forces a mob to stop chasing/attacking and head back toward its spawn point. Used both
-/// when the leash distance is exceeded and when the target disengages via a green room.
+/// Forces a mob to stop chasing/attacking and head back toward its spawn point. Used when the
+/// leash distance is exceeded, the target disengages via a green room, or LOS to the target has
+/// been lost long enough to give up (see `ai/mod.rs`'s `LOS_FORGET_TICKS`). Sets `activation`
+/// back to `Idle` immediately (not just once arrived, like `tick_leash`'s own arrival branch
+/// does) so the mob's active-mode visuals (raised arms, sprint - see `ai/mod.rs`) drop right
+/// away too, matching "shouldn't fight the active mode" during the return trip.
 pub fn disengage(state: &mut MobAiState) {
     state.target = None;
     state.leashed_out = true;
+    state.activation = ActivationState::Idle;
 }

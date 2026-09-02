@@ -57,6 +57,7 @@ id_enum! {
         CatPurr("mob.cat.purr"),
         CatPurreow("mob.cat.purreow"),
         AnvilBreak("random.anvil_break"),
+        DonkeyHit("mob.horse.donkey.hit"),
     }
 }
 

@@ -56,11 +56,18 @@ impl PlayerList {
 }
 
 // this is what hypixel does to force alphabetical order. We should be able to change this however we want as long as it maintains order.
+//
+// The first letter is uppercase and the second lowercase (`!A-b`, not `!a-b`) - matching real
+// Hypixel's exact convention, confirmed against Skytils' own source (`DungeonListener.kt`'s
+// `playerEntryNames` map hardcodes `"!A-b" to 1, "!A-f" to 5, "!A-j" to 9, "!A-n" to 13, "!A-r"
+// to 17`, which Catlas/DungeonListener uses as anchor points to find each real player's tab
+// slot). Getting the case wrong here means those lookups never match anything, so `team` never
+// populates - which is also why the map's player-position arrow never renders, regardless of
+// anything else being correct.
 fn generate_default_lines<const N: usize>() -> [PlayerData; N] {
     array::from_fn(|i| {
-        let left = index_to_letter(i / 26);
+        let left = index_to_letter(i / 26).to_ascii_uppercase();
         let right = index_to_letter(i % 26);
-        // havent tested it
         PlayerData::new(GameProfile {
             uuid: Uuid::new_v4(),
             username: format!("!{}-{}", left, right),

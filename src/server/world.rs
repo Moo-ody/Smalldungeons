@@ -9,6 +9,7 @@ use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::entity::equipment::Equipment;
 use crate::server::entity::spawn_equipped::{CombatState, AISuspended, AttackCooldown, CurrentTarget};
+use crate::server::entity::dungeon_mobs::ai::pathfinding::MobPath;
 use crate::server::entity::dungeon_mobs::ai::state::MobAiState;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::server::Server;
@@ -90,6 +91,12 @@ pub struct World {
     /// rather than one per "reusable component", see `dungeon_mobs::ai::state` module docs.
     pub entity_mob_ai: HashMap<EntityId, MobAiState>,
 
+    /// Cached A* path per dungeon mob, refreshed periodically by `ai::pathfinding` - kept out
+    /// of `MobAiState` because it isn't `Copy` (see `state.rs` for why that struct is `Copy`
+    /// by design), same reasoning as `entity_starred_mob_room` below living alongside rather
+    /// than inside `entity_mob_ai`.
+    pub entity_mob_path: HashMap<EntityId, MobPath>,
+
     /// Which room a *starred* dungeon mob belongs to - only starred mobs are tracked here
     /// (non-starred mobs don't gate the room's map checkmark, see `Room::starred_mobs_remaining`).
     /// Consulted by `ai/combat.rs::kill_mob` to decrement the room's count and redraw the map
@@ -158,6 +165,7 @@ impl World {
             entity_current_target: HashMap::new(),
             entity_following_nametag: HashMap::new(),
             entity_mob_ai: HashMap::new(),
+            entity_mob_path: HashMap::new(),
             entity_starred_mob_room: HashMap::new(),
             entity_crypt_room: HashMap::new(),
             entity_king_midas_hits: HashMap::new(),
@@ -247,6 +255,34 @@ impl World {
         Ok(id)
     }
 
+    /// Like `spawn_entity`, but sets the entity's initial `yaw`/`pitch` *before* the spawn
+    /// packet is written - needed for hanging entities (e.g. Item Frames), whose `SpawnObject`
+    /// packet must carry their real facing yaw immediately: setting `entity.yaw` from a hook run
+    /// after `spawn_entity` returns is too late, since `write_spawn_packet` already ran by then.
+    pub fn spawn_entity_with_rotation<E : EntityImpl + 'static>(&mut self, position: DVec3, yaw: f32, pitch: f32, metadata: EntityMetadata, mut entity_impl: E) -> anyhow::Result<EntityId> {
+        let world_ptr: *mut World = self;
+        let mut entity = Entity::new(
+            world_ptr,
+            self.new_entity_id(),
+            position,
+            metadata.clone(),
+        );
+        entity.yaw = yaw;
+        entity.pitch = pitch;
+
+        let chunk_x = (entity.position.x.floor() as i32) >> 4;
+        let chunk_z = (entity.position.z.floor() as i32) >> 4;
+
+        if let Some(chunk) = self.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+            chunk.insert_entity(entity.id);
+            write_entity_spawn(&mut entity, &mut entity_impl, &mut chunk.packet_buffer);
+        }
+
+        let id = entity.id;
+        self.entities.insert(id, (entity, Box::new(entity_impl)));
+        Ok(id)
+    }
+
     /// Queues the entity for removal. If this entity has a following nametag (armor stand), that is despawned too.
     pub fn despawn_entity(&mut self, entity_id: EntityId) {
         // If this entity is a host for following nametag(s), despawn those first
@@ -281,6 +317,7 @@ impl World {
                 }
                 self.entity_following_nametag.retain(|_, ids| !ids.is_empty());
                 self.entity_mob_ai.remove(&entity_id);
+                self.entity_mob_path.remove(&entity_id);
                 self.entity_starred_mob_room.remove(&entity_id);
                 self.entity_crypt_room.remove(&entity_id);
                 self.entity_king_midas_hits.remove(&entity_id);
@@ -556,8 +593,15 @@ impl World {
             }
         }
         
-        // Update metadata for entities that changed state
+        // Update metadata for entities that changed state - except dungeon-mob-AI-controlled
+        // zombies (`ai/mod.rs::run_mob_ai`), whose raised-arms pose is now a persistent
+        // "detected the player" state owned by that pipeline (`MobAiState::arms_raised`), not
+        // this per-swing pulse - resetting it here on a stale timer would fight that and drop
+        // the arms mid-combat between individual swings.
         for entity_id in entities_to_update {
+            if self.entity_mob_ai.contains_key(&entity_id) {
+                continue;
+            }
             if let Some((entity, _)) = self.entities.get_mut(&entity_id) {
                 if let EntityVariant::Zombie { is_child, is_villager, is_converting, .. } = entity.metadata.variant {
                     entity.metadata.variant = EntityVariant::Zombie {

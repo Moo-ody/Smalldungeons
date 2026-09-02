@@ -135,8 +135,8 @@ impl EntityImpl for JerryProjectileImpl {
         let post_pos = entity.position; // Store post position
 
         // No rotation like Java version (unlike Bonzo)
-        let yaw_byte = (entity.yaw * 256.0 / 360.0) as i8;
-        let pitch_byte = (entity.pitch * 256.0 / 360.0) as i8;
+        let yaw_byte = (entity.yaw * 256.0 / 360.0) as i32 as i8;
+        let pitch_byte = (entity.pitch * 256.0 / 360.0) as i32 as i8;
 
         let delta_x = ((post_pos.x - pre_pos.x) * 32.0) as i8;
         let delta_y = ((post_pos.y - pre_pos.y) * 32.0) as i8;

@@ -47,6 +47,26 @@ pub enum BlockInteractAction {
     RedstoneKeySkull {
         room_index: usize,
     },
+    /// One of the Three Weirdos puzzle's 3 chests - see `dungeon::room::three_weirdos`. `state`
+    /// is shared (`Rc<RefCell<_>>`, same idiom as `Self::Chest`'s `secret`) with the 3 NPC
+    /// entities' own interact handlers and the other 2 chests, so all 6 see the same
+    /// `clicked_weirdos`/`resolved` state.
+    ThreeWeirdosChest {
+        chest_index: usize,
+        state: Rc<RefCell<crate::dungeon::room::three_weirdos::ThreeWeirdosState>>,
+    },
+    /// One of the Creeper Beams puzzle's 22 sea lantern positions - see
+    /// `dungeon::room::creeper_beams`. Triggered either by a direct right-click or (the actual
+    /// intended way to play it) a Terminator arrow hitting the block - see
+    /// `ai::projectile::MobProjectileImpl`'s `on_block_hit`.
+    CreeperBeamsLantern {
+        state: Rc<RefCell<crate::dungeon::room::creeper_beams::CreeperBeamsState>>,
+    },
+    /// One of the Tic Tac Toe puzzle's 9 wall buttons - see `dungeon::room::tic_tac_toe`.
+    TicTacToeButton {
+        state: Rc<RefCell<crate::dungeon::room::tic_tac_toe::TicTacToeState>>,
+        index: usize,
+    },
     // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
@@ -89,6 +109,11 @@ impl BlockInteractAction {
                     player.has_wither_key = false;
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
+                    dungeon.doors[*id].opened = true;
+
+                    if let Some(room_index) = player.current_room_index {
+                        player.server_mut().dungeon.update_map_for_room(room_index);
+                    }
 
                     // Send message to all players when WITHER door is opened
                     let message = format!("§b{} §aopened a §8§lWITHER §adoor!", player.profile.username);
@@ -130,6 +155,11 @@ impl BlockInteractAction {
                     player.has_blood_key = false;
                     let door = &dungeon.doors[*id];
                     door.open_door(world);
+                    dungeon.doors[*id].opened = true;
+
+                    if let Some(room_index) = player.current_room_index {
+                        player.server_mut().dungeon.update_map_for_room(room_index);
+                    }
 
                     // Send message to all players when BLOOD door is opened
                     for (_, other_player) in &mut player.server_mut().world.players {
@@ -177,38 +207,114 @@ impl BlockInteractAction {
                     });
                     secret.obtained = true;
                     
-                    // Increment found_secrets for the room containing this secret (only if not already obtained)
-                    if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
-                        let should_update_map = {
-                            let room = player.server_mut().dungeon.rooms.get(room_index);
-                            room.map(|r| r.found_secrets < r.room_data.secrets && r.entered).unwrap_or(false)
-                        };
-                        
-                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
-                            if room.found_secrets < room.room_data.secrets {
-                                room.found_secrets += 1;
+                    // Increment found_secrets for the room containing this secret (only if not
+                    // already obtained, and only if this chest actually counts as one of the
+                    // room's secrets - see `DungeonSecret::counts_as_secret`'s doc comment).
+                    if secret.counts_as_secret {
+                        if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                            // Trap rooms have no starred mobs at all, so `DungeonMap::draw_room`'s
+                            // usual `starred_mobs_remaining == 0` clear check can't apply to them (it
+                            // reads true the instant the room is entered - see `room.rs`'s
+                            // `trap_completion_chest_pos` doc comment for the full story). This is
+                            // that room type's actual clear signal instead: grabbing this one
+                            // specific chest.
+                            let is_trap_completion_chest = {
+                                let room = player.server_mut().dungeon.rooms.get(room_index);
+                                room.is_some_and(|r| r.trap_completion_chest_pos == Some(*block_pos))
+                            };
+
+                            let should_update_map = {
+                                let room = player.server_mut().dungeon.rooms.get(room_index);
+                                room.map(|r| (r.found_secrets < r.room_data.secrets && r.entered) || is_trap_completion_chest).unwrap_or(false)
+                            };
+
+                            if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+                                if room.found_secrets < room.room_data.secrets {
+                                    room.found_secrets += 1;
+                                }
+                                if is_trap_completion_chest {
+                                    room.trap_completed = true;
+                                }
+                            }
+
+                            // Update map if room is entered and secret count changed (or this was the
+                            // Trap room's completion chest, which changes its clear state even if
+                            // every other secret was already found)
+                            if should_update_map {
+                                player.server_mut().dungeon.update_map_for_room(room_index);
                             }
                         }
-                        
-                        // Update map if room is entered and secret count changed
-                        if should_update_map {
-                            player.server_mut().dungeon.update_map_for_room(room_index);
+                    }
+
+                    // A chest whose own opening is a puzzle's actual win condition (Teleport
+                    // Maze - confirmed: reaching it only reveals the chest, opening it is what
+                    // actually solves the puzzle, unlike e.g. Creeper Beams which completes on
+                    // its own) marks that room done and broadcasts the solved message right here,
+                    // not any earlier.
+                    if let Some(puzzle_room_index) = secret.puzzle_room_index {
+                        let room_name = player.server_mut().dungeon.rooms.get(puzzle_room_index)
+                            .map(|r| r.room_data.name.clone())
+                            .unwrap_or_default();
+                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(puzzle_room_index) {
+                            room.puzzle_completed = true;
                         }
+                        let username = player.profile.username.clone();
+                        let message = format!("\u{a7}a\u{a7}lPUZZLE SOLVED! \u{a7}7{username} \u{a7}esolved the {room_name} puzzle!");
+                        for other_player in player.server_mut().world.players.values_mut() {
+                            other_player.send_message(&message);
+                        }
+                        player.server_mut().dungeon.update_map_for_room(puzzle_room_index);
+                    }
+
+                    // A "blessing" chest also gets the same real captured effect
+                    // `WitherEssence` uses (this file's own left-behind note above confirmed it,
+                    // once - "if its a blessing, can likely re-use wither essence as these values
+                    // appear to be the same"): the ascending `note.harp` sequence, plus a
+                    // floating, spinning skull wearing the blessing's own texture.
+                    if let Some(texture) = secret.blessing_texture {
+                        let world = player.world_mut();
+                        let pitches = [0.7936508, 0.8888889, 1.0, 1.0952381, 1.1904762];
+                        let world_tick = world.tick_count;
+                        let pos = (block_pos.x as f64 + 0.5, block_pos.y as f64 + 0.5, block_pos.z as f64 + 0.5);
+                        for (i, &pitch) in pitches.iter().enumerate() {
+                            world.scheduled_fixed_sounds.push(crate::server::world::tactical_insertion::ScheduledFixedSound {
+                                due_tick: world_tick + (i as u64 * 5),
+                                sound: Sounds::Harp,
+                                volume: 1.0,
+                                pitch,
+                                pos_x: pos.0,
+                                pos_y: pos.1,
+                                pos_z: pos.2,
+                            });
+                        }
+
+                        use crate::dungeon::room::secrets::EssenceEntityImpl;
+                        // One of the 4 real Catacombs blessing types, picked fresh each time this
+                        // specific chest is opened.
+                        const BLESSING_TYPES: [&str; 4] = ["Power", "Stone", "Wisdom", "Life"];
+                        use rand::Rng;
+                        let blessing_type = BLESSING_TYPES[rand::rng().random_range(0..BLESSING_TYPES.len())];
+                        let nametag = format!("\u{a7}dBlessing of {blessing_type}");
+
+                        // Same offset `WitherEssence` uses for this exact effect - the armor
+                        // stand's own body height means the equipped head only lines up with
+                        // where the block was at -1.4 on Y.
+                        let _ = world.spawn_entity(
+                            DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
+                            {
+                                let mut metadata = EntityMetadata::new(EntityVariant::ArmorStand);
+                                metadata.is_invisible = true;
+                                metadata.custom_name = Some(nametag);
+                                metadata.custom_name_visible = true;
+                                metadata
+                            },
+                            // 15s, confirmed - long enough to actually read the nametag and grab
+                            // the buff, unlike the original 1s wither-essence animation this
+                            // reuses.
+                            EssenceEntityImpl { texture, lifetime_ticks: 300 },
+                        );
                     }
                 }
-                /*
-[19:37:29] sound random.chestopen, 0.5 0.9206349 -94.0 82.0 -51.0
-[19:37:29] sound random.chestopen, 0.5 0.984127 -93.5 82.5 -50.5
-
-// if its a blessing, can likely re-use wither essence as these values appear to be the same
-
-[19:37:29] sound note.harp, 1.0 0.7936508 -94.0 82.0 -51.0
-[19:37:29] sound note.harp, 1.0 0.8888889 -94.0 82.0 -51.0
-[19:37:30] sound note.harp, 1.0 1.0 -94.0 82.0 -51.0
-[19:37:30] sound note.harp, 1.0 1.0952381 -94.0 82.0 -51.0
-[19:37:30] sound note.harp, 1.0 1.1904762 -94.0 82.0 -51.0
-                */
-                // player.send_msg("hi").unwrap();
             }
 
             Self::MimicChest => {
@@ -360,7 +466,7 @@ impl BlockInteractAction {
                     world.interactable_blocks.remove(block_pos);
 
                     // Spawn essence entity with animation
-                    use crate::dungeon::room::secrets::EssenceEntityImpl;
+                    use crate::dungeon::room::secrets::{EssenceEntityImpl, WITHER_ESSENCE_TEXTURE};
                     world.spawn_entity(
                         DVec3::from(block_pos).add_x(0.5).add_y(-1.4).add_z(0.5),
                         {
@@ -368,7 +474,7 @@ impl BlockInteractAction {
                             metadata.is_invisible = true;
                             metadata
                         },
-                        EssenceEntityImpl,
+                        EssenceEntityImpl { texture: WITHER_ESSENCE_TEXTURE, lifetime_ticks: 20 },
                     ).unwrap();
 
                     secret.obtained = true;
@@ -671,6 +777,18 @@ impl BlockInteractAction {
                 });
             }
             
+            Self::ThreeWeirdosChest { chest_index, state } => {
+                crate::dungeon::room::three_weirdos::interact_chest(player, block_pos, *chest_index, state);
+            }
+
+            Self::CreeperBeamsLantern { state } => {
+                crate::dungeon::room::creeper_beams::interact_lantern(player, block_pos, state);
+            }
+
+            Self::TicTacToeButton { state, index } => {
+                crate::dungeon::room::tic_tac_toe::interact_cell(player, *index, state);
+            }
+
             Self::Callback(func) => {
                 func(player, block_pos);
             }

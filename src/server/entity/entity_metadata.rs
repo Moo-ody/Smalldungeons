@@ -1,6 +1,7 @@
 use crate::net::packets::packet_serialize::PacketSerializable;
 use crate::server::items::item_stack::ItemStack;
 use crate::server::entity::player_skin_bits::SkinParts;
+use crate::server::utils::direction::Direction;
 
 /// Represents an entity type in Minecraft.
 #[derive(Debug, Clone)]
@@ -43,6 +44,50 @@ pub enum EntityVariant {
     /// Crypt Souleater's ranged attack - visually a Wither Skull, flies in a straight line
     /// (no gravity/drag), unlike `Arrow`.
     WitherSkullProjectile,
+    /// Zombie Commander's cast - vanilla's "Fishing Float" object. Flies in a straight line
+    /// like `WitherSkullProjectile`; on reaching the target it switches to reeling them in
+    /// instead of despawning outright (see `ai::projectile`).
+    FishingHook,
+    /// Creeper Beams puzzle's central prop - see `dungeon::room::creeper_beams`.
+    Creeper {
+        /// Vanilla's "charged" (lightning-struck, blue-glow) creeper flag - used for the
+        /// visual after the 3rd correct beam, before the puzzle actually completes on the 4th.
+        powered: bool,
+    },
+    /// Creeper Beams puzzle's guardian-beam trick, half of it - a Guardian targeting a `Squid`
+    /// (see that variant) renders vanilla's real laser between them. Vanilla's guardian laser
+    /// only ever draws from a live guardian's own eye position toward whatever entity it's
+    /// currently targeting, so there's no generic "beam between two arbitrary fixed points"
+    /// packet - this Guardian-targeting-a-Squid combo is the real, long-established community
+    /// technique for faking one (see `creeper_beams.rs`'s `spawn_guardian_pair`). Both this and
+    /// the Squid are spawned invisible - vanilla still renders the laser for an invisible
+    /// guardian, just not its body, which is the whole point (a clean beam, no floating fish).
+    /// The metadata this actually writes (see the `write` impl below) was re-verified directly
+    /// against Mojang's own decompiled `EntityGuardian.java` server source after an intermediate
+    /// version (sourced from a third-party plugin instead) compiled fine and didn't crash
+    /// anything, but never actually rendered the beam.
+    Guardian {
+        target_entity_id: i32,
+    },
+    /// The other half of the guardian-beam trick - a plain, invisible, stationary marker a
+    /// `Guardian` targets. Squid specifically (not e.g. `ArmorStand`) to match the real,
+    /// confirmed-working technique - `EntityGuardian.cq()`'s real target lookup requires an
+    /// `EntityLiving`, which a Squid is and an `ArmorStand` isn't.
+    Squid,
+    /// Tic Tac Toe puzzle's board cells - a real Item Frame holding a filled map (see
+    /// `dungeon::room::tic_tac_toe`). `facing` is fixed at spawn (the `SpawnObject` packet's
+    /// "Object Data" direction byte is only ever read once, at spawn); `held_item`/`rotation`
+    /// are mutable afterward - swap the board's displayed X/O/blank by reconstructing this
+    /// variant with a new `held_item` and calling `world.send_metadata_update`, the same pattern
+    /// `creeper_beams.rs` already uses for its own dynamic Creeper/Guardian metadata.
+    ItemFrame {
+        facing: Direction,
+        held_item: Option<ItemStack>,
+        /// Visual rotation of the held item within the frame, 0-7 (45° steps) - vanilla's own
+        /// DataWatcher byte. Always `0` here (upright) - nothing about this puzzle needs a map
+        /// rotated.
+        rotation: u8,
+    },
 }
 
 impl EntityVariant {
@@ -74,6 +119,13 @@ impl EntityVariant {
             // vanilla 1.8's object type table, not Wither Skull - confirmed by this exact bug
             // (a wither skull rendering as a thrown pearl). The real Wither Skull id is 66.
             EntityVariant::WitherSkullProjectile => 66,
+            // Fishing Float object type id (Spawn Object space, 1.8).
+            EntityVariant::FishingHook => 90,
+            EntityVariant::Creeper { .. } => 50,
+            EntityVariant::Guardian { .. } => 68,
+            EntityVariant::Squid => 94,
+            // Item Frame object type id (Spawn Object space, 1.8).
+            EntityVariant::ItemFrame { .. } => 71,
         }
     }
 
@@ -91,11 +143,36 @@ impl EntityVariant {
     /// correct client-side motion/rotation, so they must use a nonzero value here.
     pub const fn object_data(&self) -> i32 {
         match self {
-            EntityVariant::Arrow | EntityVariant::WitherSkullProjectile => 1,
+            // `Arrow` briefly had this removed on a theory that the client's own independent
+            // gravity/drag simulation (from this initial velocity) was slowly diverging from the
+            // server's and fighting our per-tick corrections. Restored: that divergence theory
+            // turned out to be a red herring - the real bug was `ai::projectile::face_velocity`
+            // silently mirroring a projectile's rotation (fixed by giving it its own correct,
+            // source-verified formula instead of reusing the mob body-facing one). Without this
+            // initial velocity, the client has nothing to smoothly interpolate *between* our
+            // 20/sec position updates, which reads as choppy/laggy motion instead of a
+            // continuous line - keeping it is what gives smooth sub-tick motion in the first
+            // place, same as every other object type here already relies on.
+            EntityVariant::Arrow | EntityVariant::WitherSkullProjectile | EntityVariant::FishingHook => 1,
+            // For hanging entities (Item Frame here, Painting in real vanilla), "Object Data"
+            // means something entirely different from the velocity-presence flag above: the
+            // facing direction, verified against real vanilla's decompiled 1.8.9 client source
+            // (`NetHandlerPlayClient` decodes this field via `EnumFacing.getHorizontal(data)`,
+            // whose real `horizontalIndex` values are South=0, West=1, North=2, East=3). The
+            // actual root cause of this rendering wrong despite that being correct was a
+            // saturating-cast bug in `SpawnObject`'s yaw byte encoding (see `clientbound.rs`),
+            // not this mapping - now fixed there, so this can stay as the real vanilla value.
+            EntityVariant::ItemFrame { facing, .. } => match facing {
+                Direction::South => 0,
+                Direction::West => 1,
+                Direction::North => 2,
+                Direction::East => 3,
+                Direction::Up | Direction::Down => 0,
+            },
             _ => 0,
         }
     }
-    
+
     /// Returns if the variant is an object and needs to be spawned
     /// using Spawn Object packet instead of Spawn Mob
     pub const fn is_object(&self) -> bool {
@@ -109,6 +186,8 @@ impl EntityVariant {
             // NEW: bonzo projectiles are objects
             EntityVariant::BonzoProjectile => true,
             EntityVariant::WitherSkullProjectile => true,
+            EntityVariant::FishingHook => true,
+            EntityVariant::ItemFrame { .. } => true,
             _ => false,
         }
     }
@@ -122,6 +201,11 @@ pub struct EntityMetadata {
     pub custom_name: Option<String>,
     pub custom_name_visible: bool,
     pub ai_disabled: bool,
+    /// Base `Entity` flags byte 5 (0x08) - vanilla's actual sprint-animation trigger (leaning
+    /// forward posture + running particles), same byte `is_invisible`/`ai_disabled` already
+    /// live in. Used by `ai::mod` to visually sprint humanoid NPC-model dungeon mobs while
+    /// active in combat.
+    pub is_sprinting: bool,
     pub skin_parts: Option<SkinParts>, // For Player entities
     /// `EntityVariant::ArmorStand`-only: renders at ~0.5x scale (vanilla "small" status bit).
     /// Following-nametag armor stands (`spawn_following_nametag`) need this - otherwise the
@@ -148,6 +232,7 @@ impl EntityMetadata {
             custom_name: None,
             custom_name_visible: false,
             ai_disabled: false,
+            is_sprinting: false,
             skin_parts,
             is_small_armor_stand: false,
         }
@@ -176,6 +261,10 @@ impl PacketSerializable for EntityMetadata {
 
         if self.ai_disabled {
             flags |= 0b0100_0000; // Bit 6: AI disabled
+        }
+
+        if self.is_sprinting {
+            flags |= 0b0000_1000; // Bit 3: Sprinting
         }
 
         write_data(buf, BYTE, 0, flags);
@@ -233,6 +322,55 @@ impl PacketSerializable for EntityMetadata {
             // non-nametag armor stands (e.g. the Fels marker) keep their normal full size.
             EntityVariant::ArmorStand if self.is_small_armor_stand => {
                 write_data(buf, BYTE, 10, 0x01u8);
+            }
+            EntityVariant::Creeper { powered } => {
+                // Vanilla EntityCreeper's real DataWatcher layout - re-verified directly against
+                // Mojang's own decompiled server source (`EntityCreeper.java`'s `h()`/
+                // `setPowered`/`isPowered`): 16 (Byte) = fuse/swell state (-1 = idle, never lit
+                // here), 17 (Byte) = "powered" - the actual charged/lightning-struck blue-glow
+                // flag. A previous version of this used 12/13 - both entities in this match arm
+                // were "corrected" together in one earlier pass under the mistaken assumption
+                // Creeper and Guardian would share index numbers (they don't - DataWatcher
+                // indices are assigned per-class based on that class's own field registration
+                // order), which likely means this specific pair (16/17, Byte) was fine all along
+                // and got needlessly reverted then - see `Guardian`'s doc comment for the same
+                // mistake, confirmed and fixed there.
+                write_data(buf, BYTE, 16, -1i8);
+                write_data(buf, BYTE, 17, *powered as u8);
+            }
+            EntityVariant::Guardian { target_entity_id } => {
+                // Vanilla EntityGuardian's real DataWatcher layout - re-verified directly against
+                // Mojang's own decompiled server source (`EntityGuardian.java`, the real
+                // `net.minecraft.server` class, not a third-party plugin's guess): 16 (Int) is a
+                // bitmask (`h()` inits it to 0; bit 0x02, set/cleared by `l(boolean)`, is the
+                // "isMoving"/spikes-retracted state - `false` i.e. bit unset is what real vanilla
+                // sends once a guardian has stopped swimming and is holding still on a target,
+                // which is when the beam actually shows), 17 (Int) is the target entity id
+                // (`cq()`'s `this.world.a(datawatcher.getInt(17))` - the exact lookup the beam
+                // renderer uses to resolve who to draw the laser at). An earlier version of this
+                // used 12 (Byte)/13 (Int), sourced from `GuardianBeamAPI`'s ProtocolLib code -
+                // that avoided crashing the client (unlike a wrong first guess of 16/17 with the
+                // wrong *type*, Byte instead of Int, which did crash it), but never actually
+                // matched real vanilla's own indices, which is why the beam itself never rendered
+                // despite the metadata otherwise looking plausible.
+                write_data(buf, INT, 16, 0i32);
+                write_data(buf, INT, 17, *target_entity_id);
+            }
+            EntityVariant::ItemFrame { held_item, rotation, .. } => {
+                // Vanilla EntityItemFrame's real DataWatcher (decompiled 1.8.9 `entityInit`):
+                // 8 (Slot/ItemStack) = the held item - omitted entirely when empty, matching
+                // vanilla (an empty frame has no index-8 entry at all), 9 (Byte) = rotation
+                // step. NOT 2/3 - those are `EntityLivingBase`'s CustomName/CustomNameVisible
+                // indices (see `custom_name` above), a completely unrelated class hierarchy
+                // (`EntityHanging` extends `Entity` directly, never `EntityLivingBase`); writing
+                // the item there doesn't crash the client since nothing at 2/3 has a defined
+                // meaning for a hanging entity, but the item-frame render code specifically
+                // reads index 8, so the item just silently never appears - confirmed as the
+                // actual root cause of the frame always rendering empty.
+                if let Some(item) = held_item {
+                    write_data(buf, ITEM_STACK, 8, Some(item.clone()));
+                }
+                write_data(buf, BYTE, 9, *rotation);
             }
             _ => {}
         }

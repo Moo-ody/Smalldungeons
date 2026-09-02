@@ -45,6 +45,7 @@ pub struct MobSpawnJson {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EquipmentJson {
     pub id: String,
     #[serde(default = "default_count")]

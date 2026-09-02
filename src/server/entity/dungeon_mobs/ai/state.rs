@@ -57,6 +57,29 @@ pub struct MobAiState {
     pub idle_wander_cooldown: Cooldown,
 
     pub attack_cooldowns: AttackCooldowns,
+
+    /// Ticks remaining in a ranged attacker's current bow-draw/skull-nock wind-up - 0 means not
+    /// currently drawing. See `attack::try_ranged`; only meaningful for `AttackModule::Ranged`/
+    /// `HybridMeleeRanged` archetypes.
+    pub bow_draw_ticks: u32,
+
+    /// Last arm-raised pose actually sent to players (`Zombie`'s `is_attacking` metadata bit,
+    /// repurposed by `ai/mod.rs` as a persistent "detected the player" pose rather than a brief
+    /// per-swing pulse) - tracked so metadata is only resent on an actual change, not every tick.
+    pub arms_raised: bool,
+    /// Last sprint pose actually sent to players (`EntityMetadata::is_sprinting`) - same
+    /// change-tracking purpose as `arms_raised`, for humanoid NPC-model archetypes' combat
+    /// sprint (see `ai/mod.rs`).
+    pub sprinting: bool,
+
+    /// Throttles the (block-sampled raycast, not free) line-of-sight re-check on an existing
+    /// combat target to once every `LOS_CHECK_INTERVAL_TICKS` instead of every tick.
+    pub los_check_cooldown: Cooldown,
+    /// Ticks since LOS to the current target was last actually confirmed - reset to 0 whenever
+    /// a check (throttled by `los_check_cooldown`) finds it, incremented by the check interval
+    /// each time one doesn't. Once this reaches `LOS_FORGET_TICKS`, the mob gives up ("relatively
+    /// oblivious") and returns to spawn - see `ai/mod.rs`.
+    pub ticks_since_los: u32,
 }
 
 impl MobAiState {
@@ -72,6 +95,11 @@ impl MobAiState {
             idle_wander_target: None,
             idle_wander_cooldown: Cooldown::ready(),
             attack_cooldowns: AttackCooldowns::default(),
+            bow_draw_ticks: 0,
+            arms_raised: false,
+            sprinting: false,
+            los_check_cooldown: Cooldown::ready(),
+            ticks_since_los: 0,
         }
     }
 }

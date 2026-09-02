@@ -6,14 +6,38 @@ use std::cmp::{max, min};
 
 const RED: u8 = 4 * 4 + 2;
 const GREEN: u8 = 7 * 4 + 2;
-const GRAY: u8 = 11 * 4 + 3;
-const WHITE: u8 = 14 * 4 + 2;
-const ORANGE: u8 = 15 * 4 + 2; 
+const ORANGE: u8 = 15 * 4 + 2;
 const PURPLE: u8 = 16 * 4 + 2;
 const PINK: u8 = 20 * 4 + 2;
-const BLACK: u8 = 29 * 4;
-const YELLOW: u8 = 30 * 4 + 2;
+/// "Yellow" is this codebase's name for what the real dungeon API/Skytils call a Champion room
+/// (`room_data.rs::RoomType::from_str` maps the scraped JSON's literal `"yellow"` type string to
+/// this variant) - vanilla map color id 74. This used to be 122 (`30*4+2`, the same numeric
+/// family as `ENTRANCE`/`GREEN`'s base color but a different shade), which isn't a value
+/// Catlas's `RoomType.fromMapColor` recognizes at all (only 74 maps to `CHAMPION` there) - any
+/// unrecognized side-color makes `scanTile` return `Unknown` for the whole tile, so the room
+/// didn't exist to Catlas at all instead of just rendering with the wrong color.
+const YELLOW: u8 = 18 * 4 + 2;
 const BROWN: u8 = 63;
+
+/// Undiscovered-room/unopened-door placeholder color (vanilla map color id 85 - also doubles as
+/// the "NORMAL" room/door type id, since an unrevealed tile has no known type yet). Skytils'
+/// Catlas (`DungeonMapColorParser.scanTile`) specifically checks for the literal value 85 to
+/// register a tile as `RoomState.UNOPENED` - any other value (this used to be 47, a shade of the
+/// same gray but numerically meaningless to Catlas) falls through to its `else` branch and gets
+/// misread as `DISCOVERED`.
+const GRAY: u8 = 21 * 4 + 1;
+/// Cleared-but-secrets-missing checkmark color (vanilla map color id 34), distinct from
+/// `GREEN`/30 (fully done). Skytils checks for exactly 34 to register `RoomState.CLEARED`
+/// (`DungeonMapColorParser.scanTile`); this used to reuse a `WHITE`/58 constant that isn't a
+/// value Catlas recognizes at all, so this intermediate state was never visible.
+const CLEARED: u8 = 8 * 4 + 2;
+/// Unopened-Wither-door/room placeholder (vanilla map color id 119) - same `UNOPENED` meaning to
+/// Catlas as `GRAY`/85, but also specifically what `DoorType.fromMapColor` reads as `WITHER`, so
+/// it doubles as a "this locked door ahead is a wither door" hint. Reused below for the "?"
+/// glyph on the placeholder room too, which only needs to look black/dark to a human - the exact
+/// shade doesn't matter there. This used to be plain black (116, shade 0 of the same base color)
+/// which isn't one of Catlas's recognized codes.
+const BLACK: u8 = 29 * 4 + 3;
 
 const QUESTION_MARK_POSITIONS: [(usize, usize); 11] = [
     (0, 1), (1, 0), (2, 0), (3, 0), (4, 1), (4, 2), (3, 3), (2, 4), (2, 5), (2, 7), (2, 8),
@@ -51,6 +75,24 @@ impl DungeonMap {
             offset_y,
             dirty_region: None,
         }
+    }
+
+    /// Converts a world position to this map's icon coordinate encoding (the player-position
+    /// arrow - see `MapIcon` in `net::protocol::play::clientbound`). Vanilla doubles the 0..128
+    /// pixel-space coordinate and re-centers it into a signed byte, which is exactly what
+    /// Skytils' `MapUtils.kt` (`Vec4b.mapX`/`mapZ`) decodes back with `(b + 128) shr 1`.
+    /// `dungeon_origin` is the world coordinate that maps to this dungeon's own pixel (0, 0) -
+    /// taken as a parameter (callers pass `DUNGEON_ORIGIN`) rather than imported here, to avoid
+    /// a `dungeon.rs` <-> `map.rs` dependency cycle.
+    pub fn world_to_icon(&self, world_x: f64, world_z: f64, dungeon_origin: (i32, i32)) -> (i8, i8) {
+        // 20 map pixels per 32-block room segment - the same ratio `draw_room` places rooms at
+        // (`segment.x * 20`, for a segment that's 32 world blocks wide).
+        const PX_PER_BLOCK: f64 = 20.0 / 32.0;
+        let pixel_x = (world_x - dungeon_origin.0 as f64) * PX_PER_BLOCK + self.offset_x as f64;
+        let pixel_z = (world_z - dungeon_origin.1 as f64) * PX_PER_BLOCK + self.offset_y as f64;
+        let icon_x = (pixel_x * 2.0 - 128.0).round().clamp(i8::MIN as f64, i8::MAX as f64) as i8;
+        let icon_z = (pixel_z * 2.0 - 128.0).round().clamp(i8::MIN as f64, i8::MAX as f64) as i8;
+        (icon_x, icon_z)
     }
 
     pub fn get_updated_area(&mut self) -> Option<(DirtyMapRegion, Vec<u8>)> {
@@ -182,8 +224,35 @@ impl DungeonMap {
                 };
                 
                 if neighbour_room.entered {
+                    // Neighbour's own 16x16 box (plus its checkmark, if any) was already drawn
+                    // by its own entry-triggered `draw_room` call - only the connecting door gap
+                    // needs touching here.
                     let color = get_door_color(room, neighbour_room);
                     self.fill_px(x, y, width, height, color);
+                } else if door.opened {
+                    // Door has been opened (Wither/Blood key used) but the room beyond hasn't
+                    // been walked into yet - the dungeon layout is already known server-side
+                    // (`room_data` is set at generation time, not on entry), so reveal its real
+                    // shape/type color now instead of the gray "?" placeholder below. This is
+                    // what lets the map show an opened split before it's been explored, same as
+                    // real Hypixel - only the neighbour's own `entered`-gated redraw (above) adds
+                    // the clear/secrets checkmark once it's actually explored.
+                    let color = get_door_color(room, neighbour_room);
+                    self.fill_px(x, y, width, height, color);
+
+                    let mut x = segment.x * 20;
+                    let mut y = segment.z * 20;
+
+                    match index {
+                        0 => y -= 20,
+                        1 => x += 20,
+                        2 => y += 20,
+                        3 => x -= 20,
+                        _ => unreachable!()
+                    }
+
+                    let neighbour_color = get_room_color(&neighbour_room.room_data);
+                    self.fill_px(x, y, 16, 16, neighbour_color);
                 } else {
                     let color = match door.door_type {
                         DoorType::WITHER => BLACK,
@@ -227,15 +296,38 @@ impl DungeonMap {
             // every starred mob spawned into it has died - a room with no starred mobs starts
             // at 0 remaining, so it counts as cleared immediately. Once cleared, green if all
             // secrets are found (or the room has none), white if secrets are still missing.
-            if room.room_data.room_type != Entrance && room.room_data.room_type != Fairy
-                && room.starred_mobs_remaining == 0 {
+            //
+            // `mobs_spawned` matters here: a room queued behind the mob-spawn cycle also reads
+            // `starred_mobs_remaining == 0` before its mobs actually exist (indistinguishable
+            // from "genuinely has none") - without this check the checkmark would flash on the
+            // instant a room is entered, before any of its starred mobs even spawned in.
+            //
+            // Trap rooms are a special case of that same problem: they have no starred mobs by
+            // design (a `starred_mobs_remaining` of 0 there is permanent, not "not spawned yet"),
+            // so the mob-based check alone would show them cleared the instant they're entered.
+            // Real Hypixel ties a Trap room's clear state to grabbing one specific chest instead
+            // (`Room::trap_completion_chest_pos`, set by `block_interact_action.rs`'s `Chest`
+            // handler) - not any of its other secrets, not mob count.
+            //
+            // Puzzle rooms have the exact same problem (no starred mobs either) - tied instead to
+            // `Room::puzzle_completed`, set once a puzzle is actually resolved (solved *or*
+            // failed - either way it's done, matching real Hypixel: a failed puzzle still marks
+            // the room complete, it just costs score - see `three_weirdos::interact_chest`).
+            let is_cleared = if room.room_data.room_type == Trap {
+                room.trap_completed
+            } else if room.room_data.room_type == Puzzle {
+                room.puzzle_completed
+            } else {
+                room.mobs_spawned && room.starred_mobs_remaining == 0
+            };
+            if room.room_data.room_type != Entrance && room.room_data.room_type != Fairy && is_cleared {
                 let x = room.segments[0].x * 20 + 4;
                 let y = room.segments[0].z * 20 + 4;
 
                 let checkmark_color = if room.room_data.secrets == 0 || room.found_secrets >= room.room_data.secrets {
                     GREEN
                 } else {
-                    WHITE
+                    CLEARED
                 };
 
                 for (cx, cy) in CHECKMARK_POSITIONS {

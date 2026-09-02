@@ -13,7 +13,7 @@ pub(crate) struct StartsWith;
 const SIZE: usize = 45; // 9*5
 pub(crate) const LETTERS: [&str; 10] = ["A", "B", "C", "G", "D", "M", "N", "R", "S", "T"];
 static ITEM_MAP: Lazy<HashMap<i16, String>> = Lazy::new(|| {
-    let file_content = include_str!("../../../room_data/minecraft/item_registry.json");
+    let file_content = include_str!("../../../room_data/misc/minecraft/item_registry.json");
     serde_json::from_str(&file_content)
         .expect("Failed to parse JSON")
 });

@@ -95,11 +95,11 @@ let delta_z = ((post_pos.z - pre_pos.z) * 32.0) as i8;
 // Java: byte yaw = (byte) ((this.rotationYaw += 60) * 256 / 360);
 self.current_yaw += ROTATION_PER_TICK;
 entity.yaw = self.current_yaw;
-let yaw_byte = (self.current_yaw * 256.0 / 360.0) as i8;
+let yaw_byte = (self.current_yaw * 256.0 / 360.0) as i32 as i8;
 
 // Java: byte pitch = (byte) (this.rotationPitch * 256 / 360);
 // Use entity.pitch (which should be 0 for projectiles)
-let pitch_byte = (entity.pitch * 256.0 / 360.0) as i8;
+let pitch_byte = (entity.pitch * 256.0 / 360.0) as i32 as i8;
 
 // Send packet to all players (like Java's Utils.sendPacketAll)
 for _player in entity.world_mut().players.values() {

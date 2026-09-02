@@ -52,6 +52,15 @@ pub fn get_block_aabb(block: Blocks, x: i32, y: i32, z: i32) -> Option<AABB> {
         | Blocks::DarkOakStairs { direction, top_half }
         | Blocks::RedSandstoneStairs { direction, top_half } => get_stair_aabb(direction, top_half, base_min, base_max),
 
+        // Carpet is a thin (1/16-block) floor covering, not a full 1x1 block - it fell through
+        // to the full-cube default before, which made it collide as a solid block a mob's
+        // whole body walked into rather than a thin layer it should just walk over. Vanilla
+        // carpet height is exactly 1/16 (0.0625).
+        Blocks::Carpet { .. } => Some(AABB::new(
+            base_min,
+            DVec3::new(base_max.x, base_min.y + 0.0625, base_max.z),
+        )),
+
         // Simplified collision: every other non-air block is a full 1x1x1 solid cube.
         _ => Some(AABB::new(base_min, base_max)),
     }

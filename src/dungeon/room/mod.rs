@@ -8,3 +8,7 @@ pub mod mushroom;
 pub mod superboomwalls;
 pub mod fallingblocks;
 pub mod locked_chests;
+pub mod three_weirdos;
+pub mod creeper_beams;
+pub mod teleport_maze;
+pub mod tic_tac_toe;

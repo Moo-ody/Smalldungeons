@@ -24,7 +24,7 @@ register_packets! {
     PositionLook = 0x08;
     // SetHotbarSlot = 0x09;
     // EntityUsedBed = 0x0a;
-    // SwingAnimation = 0x0b
+    Animation = 0x0b;
     SpawnPlayer = 0x0c;
     CollectItem = 0x0d;
     SpawnObject = 0x0e;
@@ -147,8 +147,8 @@ packet_serializable! {
         pub x: f64 => &((self.x * 32.0).floor() as i32),
         pub y: f64 => &((self.y * 32.0).floor() as i32),
         pub z: f64 => &((self.z * 32.0).floor() as i32),
-        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i8),
-        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i8),
+        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i32 as i8),
+        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i32 as i8),
         pub current_item: i16,
         pub metadata: EntityMetadata,
     }
@@ -184,8 +184,8 @@ impl PacketSerializable for SpawnObject {
         ((self.x * 32.0).floor() as i32).write(buf);
         ((self.y * 32.0).floor() as i32).write(buf);
         ((self.z * 32.0).floor() as i32).write(buf);
-        ((self.pitch * 256.0 / 360.0) as i8).write(buf);
-        ((self.yaw * 256.0 / 360.0) as i8).write(buf);
+        ((self.pitch * 256.0 / 360.0) as i32 as i8).write(buf);
+        ((self.yaw * 256.0 / 360.0) as i32 as i8).write(buf);
         self.data.write(buf);
         if self.data > 0 {
             ((self.velocity_x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16).write(buf);
@@ -202,9 +202,9 @@ packet_serializable! {
         pub x: f64 => &((self.x * 32.0).floor() as i32),
         pub y: f64 => &((self.y * 32.0).floor() as i32),
         pub z: f64 => &((self.z * 32.0).floor() as i32),
-        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i8),
-        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i8),
-        pub head_yaw: f32 => &((self.head_yaw * 256.0 / 360.0) as i8),
+        pub yaw: f32 => &((self.yaw * 256.0 / 360.0) as i32 as i8),
+        pub pitch: f32 => &((self.pitch * 256.0 / 360.0) as i32 as i8),
+        pub head_yaw: f32 => &((self.head_yaw * 256.0 / 360.0) as i32 as i8),
         pub velocity_x: f64 => &((self.velocity_x.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
         pub velocity_y: f64 => &((self.velocity_y.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
         pub velocity_z: f64 => &((self.velocity_z.clamp(-MOTION_CLAMP, MOTION_CLAMP) * 8000.0) as i16),
@@ -281,6 +281,20 @@ packet_serializable! {
     pub struct EntityProperties {
         pub entity_id: VarInt,
         pub properties: AttributeMap,
+    }
+}
+
+// Vanilla 1.8's `Animation` packet (`S0BPacketAnimation`) - `entity_id` (VarInt) + a single
+// `animation_id` byte (0 = swing main arm, 1 = take damage, 2 = leave bed, 3 = eat food,
+// 4 = critical hit particles, 5 = magic-critical hit particles). Used by `ai::attack`'s
+// skeleton bow-draw to trigger a real client-rendered arm swing on a mob entity - vanilla
+// Skeletons have no persistent "bow raised" metadata flag (confirmed against the 1.8 metadata
+// table: index 13 is only the wither-type byte), so a repeated swing during the draw window is
+// the actual vanilla mechanism for the visible "nocking an arrow" motion, not a pose bit.
+packet_serializable! {
+    pub struct Animation {
+        pub entity_id: VarInt,
+        pub animation_id: u8,
     }
 }
 
@@ -467,10 +481,27 @@ impl PacketSerializable for PlayerAbilities {
     }
 }
 
+/// One map decoration icon - a player's own position arrow, in this codebase's case (vanilla
+/// also uses this slot for item-frame markers, treasure Xs, etc., none of which apply here).
+#[derive(Clone)]
+pub struct MapIcon {
+    /// 0 = white arrow, the ordinary player-position pointer. Vanilla defines other numbered
+    /// icon types (green/red arrows for allies/enemies on some server-side map plugins, etc.)
+    /// but nothing else is used here.
+    pub icon_type: u8,
+    /// Facing direction in 16 steps of 22.5 degrees (`yaw / 22.5`, wrapped to 0..16) - matches
+    /// how Skytils' own `MapUtils.kt` (`Vec4b.yaw`) decodes it back: `direction * 22.5f`.
+    pub direction: u8,
+    /// Map-pixel position doubled and re-centered to a signed byte (`pixel*2 - 128`) - the same
+    /// encoding Skytils' `MapUtils.kt` decodes with `(byte + 128) shr 1`.
+    pub x: i8,
+    pub z: i8,
+}
+
 pub struct Maps {
     pub id: i32,
     pub scale: i8,
-    // pub visible_players: Vec<u8>, // bvec4
+    pub icons: Vec<MapIcon>,
     pub columns: u8,
     pub rows: u8,
     pub x: u8,
@@ -483,8 +514,14 @@ impl PacketSerializable for Maps {
         PacketSerializable::write(&VarInt(self.id), buf);
         PacketSerializable::write(&self.scale, buf);
 
-        // todo visible players
-        PacketSerializable::write(&VarInt(0), buf);
+        PacketSerializable::write(&VarInt(self.icons.len() as i32), buf);
+        for icon in &self.icons {
+            // Direction And Type: upper 4 bits = type, lower 4 bits = direction.
+            let direction_and_type = (icon.icon_type << 4) | (icon.direction & 0x0F);
+            PacketSerializable::write(&direction_and_type, buf);
+            PacketSerializable::write(&icon.x, buf);
+            PacketSerializable::write(&icon.z, buf);
+        }
 
         PacketSerializable::write(&self.columns, buf);
         if self.columns > 0 {

@@ -213,10 +213,70 @@ impl DungeonMobType {
                 Some(ZOMBIE_COMMANDER_SKIN_SIGNATURE),
             )),
             Self::CryptUndead => Some((CRYPT_UNDEAD_SKIN, Some(CRYPT_UNDEAD_SKIN_SIGNATURE))),
+            Self::FrozenAdventurer => Some((
+                FROZEN_ADVENTURER_SKIN,
+                Some(FROZEN_ADVENTURER_SKIN_SIGNATURE),
+            )),
+            Self::AngryArchaeologist => Some((
+                ANGRY_ARCHAEOLOGIST_SKIN,
+                Some(ANGRY_ARCHAEOLOGIST_SKIN_SIGNATURE),
+            )),
+            Self::KingMidas => Some((KING_MIDAS_SKIN, Some(KING_MIDAS_SKIN_SIGNATURE))),
             _ => None,
         }
     }
 }
+
+/// Per-spawn body-skin override for Lost Adventurer, keyed by the JSON equipment's helmet
+/// display name. Unlike every other archetype, "Lost Adventurer" covers four distinct armor
+/// sets sharing one `fullName` and one set of AI/combat stats - Young Dragon, Holy Dragon,
+/// Superior Dragon, and Unstable Dragon - found by scanning every room's mob JSON for
+/// `fullName == "Lost Adventurer"` and diffing equipment. Young and Superior happen to share
+/// the exact same underlying body-skin texture hash, leaving 3 distinct skins across the 4
+/// armor variants.
+///
+/// The scraped room JSON already carries each spawn's own `skin` value (`MobSpawnJson::skin`),
+/// but with no `signature` alongside it - an apparent gap in how the data was originally
+/// scraped. A signed player-model skin needs a real signature to render at all (see
+/// `skin_override` above - an unsigned one silently falls back to the default Steve/Alex
+/// skin), so all 3 were re-resolved from the same texture hash already embedded in that `skin`
+/// value via mineskin.org's `/v2/generate` (URL-based, no local file needed since Mojang
+/// already hosts the texture) - same lookup approach as `CRYPT_UNDEAD_SKIN`/
+/// `FROZEN_ADVENTURER_SKIN` above, just keyed by hash instead of by re-uploading a PNG.
+///
+/// Called from `spawner::spawn_single_mob`, which is the only place with access to the current
+/// spawn's own equipment (this can't live in `skin_override` above, which is a pure function of
+/// the archetype alone and has no per-spawn JSON to key off of).
+pub fn lost_adventurer_skin_for_helmet(helmet_name: &str) -> Option<(&'static str, &'static str)> {
+    match helmet_name {
+        "Young Dragon Helmet" | "Superior Dragon Helmet" => Some((
+            LOST_ADVENTURER_YOUNG_SUPERIOR_SKIN,
+            LOST_ADVENTURER_YOUNG_SUPERIOR_SKIN_SIGNATURE,
+        )),
+        "Holy Dragon Helmet" => Some((LOST_ADVENTURER_HOLY_SKIN, LOST_ADVENTURER_HOLY_SKIN_SIGNATURE)),
+        "Unstable Dragon Helmet" => Some((
+            LOST_ADVENTURER_UNSTABLE_SKIN,
+            LOST_ADVENTURER_UNSTABLE_SKIN_SIGNATURE,
+        )),
+        _ => None,
+    }
+}
+
+/// GameProfile "textures" property value shared by the Young Dragon and Superior Dragon Lost
+/// Adventurer body skins (Mojang profile "__notahuman__" - both armor variants render the same
+/// underlying body/head skin), plus its Yggdrasil signature.
+const LOST_ADVENTURER_YOUNG_SUPERIOR_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYxMzAyNTcxNjYyMiwKICAicHJvZmlsZUlkIiA6ICI2MTZiODhkNDMwNzM0ZTM3OWM3NDc1ODdlZTJkNzlmZCIsCiAgInByb2ZpbGVOYW1lIiA6ICJfX25vdGFodW1hbl9fIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzM2YTAzODNhNTI3ODAzZDk5YjY2MmFkMThiY2FjNzhjMTE5MjUwZWJiZmIxNDQ3NWI0ZWI0ZDRhNjYyNzk2YjQiCiAgICB9CiAgfQp9";
+const LOST_ADVENTURER_YOUNG_SUPERIOR_SKIN_SIGNATURE: &str = "whMdXQmOnSvOHeS2G8mIiTyeYKl+o6H0dreFEthtYbUrIt0IhogVYMjDC15pK4Qw6hYsfbu0Mc5254Gpkfnp0/Sdtz12Id4xDlL4zLDqNtlY2RGiOHk8keuuvTzLn1kKxubOodzeIvX8r2HWcjWqYmtTzMAF4DqN0r1A/TKC5xRQ4EDRzbahV9mRa2hm8OFsIQxbyL45uYAzkB5BM7JNh/8/VFTXtkE76flEex9SEqumMiisIf7fxyo8Gfnh/3jFmqR054QJ5siJ5cWapSKzB5sF6GEz2x+EHh01OKBKCECWITaeruXT866+wFkjR/ffdkY9VzO7GAbYmJ8GfZR9Bxt1tppTeWvPVf+u4cxZC7L5IYT2wSDcFR7qXy49SvKEczzZCJNEF23daAHDXJ/mJnw8RjiB6zXfbgEnMGkQP3MgClVal9sXXsgvAubUb+Bgo94m/q6EKGnfdvnVMpEAgTUFqgLUIvMRhDSGGgA+i5hS+f03Y8Aq8s5VOnRguqgJhgdk3uUEDnYteJxymTbGiUnX1gxxRIifCSSKNbTzCP7GN8V+LFxas8mLtSgKL+rQxCq/+iaSYBKVGtTjJFMHRTXT1E4QZCQxUgW2WcP3M1gT1Y1bJqdEJDS5w0k6Q8If97VjwAV24VFvQcHSpnZnuLfdYts/KY/WIsk499XQXu4=";
+
+/// GameProfile "textures" property value for the Holy Dragon Lost Adventurer body skin (Mojang
+/// profile "Tompkin42"), plus its Yggdrasil signature.
+const LOST_ADVENTURER_HOLY_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYxNzcxMjI2MTEwNCwKICAicHJvZmlsZUlkIiA6ICI5ZDQyNWFiOGFmZjg0MGU1OWM3NzUzZjc5Mjg5YjMyZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJUb21wa2luNDIiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2EyNmNmNjZhZjQyYTQ4ZjZiZTUyYTBhNDhhOGViNTk4ZjNhMjM2MzliN2E1YThlZTE3MWMxMzk5OWVlOTRjOSIKICAgIH0KICB9Cn0=";
+const LOST_ADVENTURER_HOLY_SKIN_SIGNATURE: &str = "TOC2JuQ0nZYaN8LdAZnYxzzeJwcPfBgeBhtU9NQoPQE44bo/COdbsD/B7fLqd7GVa1FiGDTEEtgBGd9J18ybB6oMPYtD7sU+PamQEsu/SJiOz6haTQy/kFGBv+KaWie2L9Fr495O5CrXrTMzPCYl4WAvxBfqcWU3ZJ6KOCvT/oNhTGz1xOYrxuAupsvUFFPcsPUy5GxqPT9jW5TS4pCbr3RI6nKB1j7iSWk5+MRaSUkxPdkoGqneP6JNE7gOOI5rio5g1aP6yYwbQDr3+w77laEDTJ5a3DHqdwk05VggIcOvgL4+pCx4cBPsh7yQqu+Yka8whtUAb3A+UNRl6jfbswQyFfCrrj5FwGXXh2XYFarlOQy/yKg+5Ox2djhYOFbnG9Cy9F6Mn8DeAyHwtO3sLVMHyS2zFpznkvfNLuqYiOuoJ6oLr5WcP1Hihxau+7iNPbDldfgL4iunkIXnpIXRGiuhkbMDLiMa55q5t54SS3ypE20RSfRugHUVLlob4Otsvk2NembWYLcspNsVWxCSB+dlIr8mvEakMkJaLPQNDkf+m6UZ3Wjhb3m/zndEKRZHqCmmsPplCwmkIDXRgupOXsgY3PJtxcRwaCztji8ImWNUzKPcUZ2sGp0TT+gzqRWvzuS9mjUyxPo2r8EvMiANqUfW7w0U3/wMbtdc+C5XN4s=";
+
+/// GameProfile "textures" property value for the Unstable Dragon Lost Adventurer body skin
+/// (Mojang profile "QuantumBlocker"), plus its Yggdrasil signature.
+const LOST_ADVENTURER_UNSTABLE_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTczOTMxMTAyMTYyOSwKICAicHJvZmlsZUlkIiA6ICJkYjZiYWRlN2NjMzI0MjM4YjU3OTQ4NzMxNTBkNjA1MiIsCiAgInByb2ZpbGVOYW1lIiA6ICJRdWFudHVtQmxvY2tlciIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lMzgxYTE4NzVlZmViMmEyNjBkMzU3OTg0YzNlNzVhN2RmYmM3YTIyYjU4MmJmZTk5OTA0MjFjYmI0NDVhY2MiCiAgICB9CiAgfQp9";
+const LOST_ADVENTURER_UNSTABLE_SKIN_SIGNATURE: &str = "BWG0CSG/YmMTWffAM5G8CwCvV2LpbSd7Gt/j+Ybbjowd7VP4LH1C8DoFNVDLSGfw/d7Xq8FZP/PolNBRle4YhhpTeQlJJLbKgyZtj0IgSdGejqy4OCAafcybuzc+96/2e9yHm0pULh6PrK4Dy4vXNHAU/vOw8c7WSP3TT7/9uRzovtgIksLeuVooRLg0ZcQ0BN08/dzKKvWa2789VT1IeUnLHG0Z41rhE+QF3F+hEP0QjJeshdfB6xipasXKKRbNQ63veq6e+fD74GTwgX7ceRfvHj/CtNtPjSWZqk3Qmtq/7lAPTxl5fnHS28szWWJCY7LaLt1Qs4TVbTFufuv6XhFYRi+z2jYudTvJMeDWS68SPaeeRJXtbKE/NwMS068y/Xqm59gHQQiJGQEgmTrd1DLsVkpJxVXp2DOOMCVFIWkG/F1AjuWlmWOn/Lpb4JhijI5/tQg/NAEVvcYgwgawnqoUs8oJFfSV3eJWS1W7gOATV79veYvzznJkp6+N61te5yuTInNZb6J6W1p5NqkqQyh9rz122AGODq500sZhZ6BQdHVjW1LuF7xJ54c6qqRgfi1QW/C6Mwu0Cs2cP4jd9H5MwYf/a0zWjqJYd5lxD+DFmKumxPpQ6vFk9AgXaNRrNUPhe4P0cH4t8dlHBmvql27Dw6qHc8ABQJPdd/oD76M=";
 
 /// GameProfile "textures" property value shared by the Crypt Dreadlord and Crypt Souleater
 /// NPC skins (Mojang profile "Yeleha"), plus its Yggdrasil signature.
@@ -240,6 +300,30 @@ const CRYPT_UNDEAD_SKIN_SIGNATURE: &str = "VUUssI0GBkkklcZLDAsot564Eev/cCjmIDi1j
 /// "TheIndra"), plus its Yggdrasil signature.
 const ZOMBIE_COMMANDER_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMzM2MDY3NzU3MCwKICAicHJvZmlsZUlkIiA6ICI1NjY3NWIyMjMyZjA0ZWUwODkxNzllOWM5MjA2Y2ZlOCIsCiAgInByb2ZpbGVOYW1lIiA6ICJUaGVJbmRyYSIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS81MDYxN2M1ZWY1NTJkMTA2OGNkYjA1ODg0ODU0YzA1YjI0MTEyOWI3ZWIxMjk5NjQwN2FkZWFjODA5M2FjYWJlIgogICAgfQogIH0KfQ==";
 const ZOMBIE_COMMANDER_SKIN_SIGNATURE: &str = "E35WvyZCtobqGrHQQLWTaDyDZbt1nwTbImCJUAo4jWEYiyra2LX5WEzQF7rQTCVok2X73koBz6Ukw1n6oACKZGyGGFh95Vre44e68ieT4yuf1IGlpazAcNNhv4VKrDZxc9BteUc5/0HAuyiT7+waDhvnGHm68B+urQf5fj2+Wcqxyi3X6lykMTCct3eV/uM2CXv4/UL/UfnH3B9iaWNwPtAPX64wGLnQyEsU/GeysPna3YKHLT+V6el8g+/b504jiJH+CUhO9doaSJ/JdjCE6EIDK3PWVCHMbcB27kPeiN0mzNCL7tZsmsLgbBp4/IuFL7OJ2Cmqho8i8asjXhGsFTvC8p31ry0Cg45u7IrlsFUTQ2O8ynlR/PT3W9bomvKgjPSjEcr8SqTXxGJmu6nRy/8VWpZCdTS3Sn3aQ7T1udZVEEtIDGwOEU8HBRXJQDrOaR8NettACEcR2Umtejn3m+HA+aP79erVECtcRB3S9uoCKzXfutSjjlvFJgKHPpinsr6aUjF4EIAVcHr96sKS1BO/AImckIPmj3qqX86WIDYrSGdIYn20O4+SRdct0CjWlv+8ibDq50AogWSqaVU4ZSBwMsXUbXy7v6oYS94A3rOJUl/cTINOZDxnkFLkyWVqpATSUrSH+Q4UkepfNEqwIo5AYxONwC0/Lnng9DFCdjg=";
+
+/// GameProfile "textures" property value for the Frozen Adventurer NPC body skin (Mojang
+/// profile "GeyserMC"), plus its Yggdrasil signature. Sourced from a local PrismLauncher skin
+/// cache file (`assets/skins/5e/5e31d404993fed975851cddaf8638eda089b952c` - that filename is a
+/// SHA-1 of the PNG bytes, the client's own local cache key, NOT the Mojang CDN texture hash
+/// this game actually needs) and resolved to the real signed profile via mineskin.org's
+/// `/v2/generate` upload endpoint, which recognized it as an already-hosted texture
+/// (`"duplicate": true` in the response) and returned its real hash/value/signature - same
+/// `mineskin.org` lookup approach already used for `CRYPT_UNDEAD_SKIN` above.
+const FROZEN_ADVENTURER_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYzMDMzNjkyMjE2NywKICAicHJvZmlsZUlkIiA6ICIyMWUzNjdkNzI1Y2Y0ZTNiYjI2OTJjNGEzMDBhNGRlYiIsCiAgInByb2ZpbGVOYW1lIiA6ICJHZXlzZXJNQyIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8zMjYwMzI1MTcxYTdiYTg0NjA4MzBjMGVlYTUxNWM3NTdhNjY1ZTViMTZhMTQyMDdiYTFhMzE4Mjc1MmJlZTg3IgogICAgfQogIH0KfQ==";
+const FROZEN_ADVENTURER_SKIN_SIGNATURE: &str = "YrsEAf5EY/wDxeAhUAyt2YKybLZ7jDHQLY2wzDoozf43CGHaHinumeqNhq4YT6pHScZWy4xJdFGyhrEWDwoJMRIMDQnQpaTZwMrIdWuMIU3VGd2wMhrkcJvTR1jEmCUr0TUqqVhnLOVQHv0v+YvJw8NQQjwH0wH9WD5zqOyOMEJ5hJ/gdf+vivvXJqFGMTg28Z+CFMe1m0gCEWiynv2LAZ2+NbLQzkYoacNvs5WO0Zo3YnxgN4ps2VnVULq0vSNC6GEGVkuHp+9dTobEwr8apoYGqF6qTChTpwaIT++TiZ6fY8zGXILNK8fegshuM2R9WyN91Jz/6vPR722Gr8Y6KqwDbIAhW/Jb5Q/F6co6Sf4f8nZgg1TqmKf3ntb5dwvCh+zSixA7H5xLf8pb+kxIQcwb2O4qHlgNRHcX1HIwVgBagOAuLUKYesTftzm1dCgpPkqgNxU/l2qZkwyt9j45ExYKuULwEYRsgJvcvufZjfmotfRG88x7ZReVGIl+5HfMd5EoG7QyR+tfOCDEXp1h2FBEOlM/1CPFXU1tYuRBLyvPWCJU/1ystVt+acU8eZjtAl5GqfskQRKGveVWXeTKHZN9H/yxtSXdHzYtp2lZOzLCdOTmoqLu+0YJUq0F3DFn6QYhtAzIyR4KY8fQyq+0Tjsi3hRz0PjHHgPJLZQAqCg=";
+
+/// GameProfile "textures" property value for the Angry Archaeologist NPC body skin (Mojang
+/// profile "KAEVERY"), plus its Yggdrasil signature. Sourced the same way as
+/// `FROZEN_ADVENTURER_SKIN` above: a local PrismLauncher skin cache file, resolved to the real
+/// signed profile via mineskin.org's `/v2/generate` upload endpoint.
+const ANGRY_ARCHAEOLOGIST_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYxOTk0MzcyNDk3NiwKICAicHJvZmlsZUlkIiA6ICIwMGM2Yjk0YTY5YmU0MzY3OTkwOTQxNjFjMjAxOWI3ZiIsCiAgInByb2ZpbGVOYW1lIiA6ICJLQUVWRVJZIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlL2M0OGM3ODM0NThlNGNmODUxOGU4YWI1ODYzZmJjNGNiOTQ4ZjkwNTY4ZWViOWE2MGQxNmM0ZmRlMmI5NmMwMzMiCiAgICB9CiAgfQp9";
+const ANGRY_ARCHAEOLOGIST_SKIN_SIGNATURE: &str = "rkTKeilcdLpr6W0kMtW2q/sxg3hKMquKUZFlny68mlENRgh7Lv54qkLRXjslGr6ITxBsmvG8yS0pK+DvAW5sYaFqJSowUy0o28uxTBVD1AaWmg4/wzDkS0HUVWFPZgPjUa4o7drZpkwifuTNQqxQkFVwJtSc5KquB0bfsca4QY9X99TIQRHGGg/comjJG+ewGMy8Y2AqN7WJoYOqhKgpdkYEMDL6DIXxWkbe3T1lI2jq77VY8ClIOde9B9VqnDOPoQviF3dXFMgS7a882xVcs0XhxitgM9KKJo+ehCnCdcT2B5RcRR6edvjeqSM++Vn5358G7Fl+R2PqH2LwMM6XjjjZCvujFHZZ3r4u/EN4TUGeZ7xQWm+kVOA1ncPC0ZOhTLFpazLjQFs6jXKSrnsAgr6uyToeRiFJ4AyR0NGoV9tqgBcUIoFSuKOwhEJ489g4VDFCCauQTBVpZloI2kYpRm8knZ5rRpEu8ZxUA5aV0gim3Fft4fMkF7bA2m7TkjZ9jMn2aR0dW6BTU1Rlr3aQeOklnH2kTLI8M/GJ4JOkeWoboHePk2P3gWpQZ43OQ2N92attD1RrgxuiLpoRFvjPoBXdokPJLFvvt84cQf3vTb9AqXFCkh0Yzt8p9U3BzeG6p8bQoH0OCJzRnixK1WJZj8biz4G1MZFB1tggkuOyPHI=";
+
+/// GameProfile "textures" property value for King Midas's NPC body skin (Mojang profile
+/// "RawLobsters"), plus its Yggdrasil signature. Sourced the same way as
+/// `FROZEN_ADVENTURER_SKIN`/`ANGRY_ARCHAEOLOGIST_SKIN` above.
+const KING_MIDAS_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMjQ3NTc1NDkyMSwKICAicHJvZmlsZUlkIiA6ICJjZGM5MzQ0NDAzODM0ZDdkYmRmOWUyMmVjZmM5MzBiZiIsCiAgInByb2ZpbGVOYW1lIiA6ICJSYXdMb2JzdGVycyIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS82MmJjYTA4NTc1MDA0MzUwM2Y1ZGY5ZjdkZWY4MjRhMmUzYWNmYzI3ODQyYmNkMDlkMmI2Njk1ODgxZTgzMmY1IgogICAgfQogIH0KfQ==";
+const KING_MIDAS_SKIN_SIGNATURE: &str = "QnF9T5bPy3ebZybtwl34TuJIpuOyJLBgZKSzCxUEMoJuXeIcPgOSuwTgG6xv8dPNEdU1YwEugZgYVkH+yoUCvf1tY3NT2/8KIlGC1VX4w5D6h4zYLrAJ7CCJRaNDp0SWVXwDXUqQBHR2ZD5bMy+4AtpoAn/rA+FKnsWjfU2E6nU88BrePVPsvE33xMXO9JyG/AAv+yC6/2uIfieCwYYy57ObF+duyaPxH4MhJQ8Mjs1zMj+ZrcMQjaGyTJOx6ReqW4CC+FoeFQdrJFmC53wGezkU4vUWZTrCa/kUSIeTXeVNAcEmU5IRHlXg/sL91iSIIIDp78dgFSU/tYrK+O/rkwbJYYZoMebhFdED1S6ccHIJp+fsuG1nnSmww9F89vqLUy0NdP2+x78Y96Lc29SWNIYIcXPkW3aKQNMYlQ78ugelY541yIWd6jFuNw8JyQGOg+Ixce3D5c9+rZ4sD46b87fLrNczatpo3NEJvqjgaTvyXPKGHltvtTZbjIc6FWJUEw1zSWMcN7E0fAU0ovxRKi+yVMWs7a23vZCcCg/R8abJY8XC/evF03aqJprpcSDQhKy29krQ/wmPNYWPsgMZNH0RTriJOgs9a54Q+pLdVmutVZy2E4TQ3PamBbwst5md7v+nyqLZ8jo0i9Aq5JyAwYgyP1+SjWlRgQfK9hNcvUY=";
 
 /// Formats a raw HP number the way Hypixel dungeon nametags do: `3,500,000` -> `"3.5M"`,
 /// `90,000` -> `"90k"`. Trims to at most 2 decimal places and drops trailing zeros.

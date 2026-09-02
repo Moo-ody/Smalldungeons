@@ -244,6 +244,7 @@ pub fn switch_dungeon(server: &mut Server) -> anyhow::Result<()> {
         player.write_packet(&Maps {
             id: 1,
             scale: 0,
+            icons: vec![],
             columns: 128,
             rows: 128,
             x: 0,

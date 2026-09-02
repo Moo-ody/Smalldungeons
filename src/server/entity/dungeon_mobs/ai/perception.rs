@@ -38,6 +38,16 @@ pub fn find_vision_target(
         .map(|(client_id, _)| client_id)
 }
 
+/// `has_line_of_sight` for two feet-position points (mob, then player) - applies the same
+/// `EYE_HEIGHT` offset `find_vision_target` uses for initial acquisition, so a mob's *ongoing*
+/// combat LOS (re-checked every tick - see `ai/mod.rs`) uses the exact same definition of
+/// "can see" as the check that let it notice the player in the first place.
+pub fn has_los_to_player(world: &World, mob_pos: DVec3, player_pos: DVec3) -> bool {
+    let mob_eye = DVec3::new(mob_pos.x, mob_pos.y + EYE_HEIGHT, mob_pos.z);
+    let player_eye = DVec3::new(player_pos.x, player_pos.y + EYE_HEIGHT, player_pos.z);
+    has_line_of_sight(world, mob_eye, player_eye)
+}
+
 /// Simple fixed-step (~0.5 block) sampler along the segment `from -> to`, checking each
 /// sampled point's block for passability. Deliberately not the DDA voxel-traversal used by
 /// `ender_pearl.rs` - that solves "find the precise point a physical projectile first hits

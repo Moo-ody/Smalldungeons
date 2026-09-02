@@ -17,7 +17,7 @@ use crate::server::entity::dungeon_mobs::ai::profile::profile_for;
 use crate::server::entity::dungeon_mobs::ai::state::MobAiState;
 use crate::server::entity::dungeon_mobs::ai::{run_mob_ai, DungeonMobAiImpl};
 use crate::server::entity::dungeon_mobs::equipment_convert::convert_equipment;
-use crate::server::entity::dungeon_mobs::mob_type::{format_health, DungeonMobType, MobBaseKind};
+use crate::server::entity::dungeon_mobs::mob_type::{format_health, lost_adventurer_skin_for_helmet, DungeonMobType, MobBaseKind};
 use crate::server::entity::dungeon_mobs::spawn_data::{get_room_mob_spawns, MobSpawnJson};
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl, NoEntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
@@ -85,6 +85,13 @@ fn spawn_single_mob(world: &mut World, room_index: usize, room: &Room, corner: B
     if archetype == Some(DungeonMobType::Sniper) {
         equipment.helmet = Some(sniper_head());
     }
+    // Lost Adventurer covers 4 armor variants (Young/Holy/Superior/Unstable Dragon) under one
+    // `fullName` - the helmet's own display name is what actually distinguishes which body skin
+    // this particular spawn should wear (see `lost_adventurer_skin_for_helmet`).
+    let skin_override = (archetype == Some(DungeonMobType::LostAdventurer))
+        .then(|| spawn.equipment.get("head").and_then(|head| head.name.as_deref()))
+        .flatten()
+        .and_then(lost_adventurer_skin_for_helmet);
     // Same format as the reference nametag (§6✰ §cZombie Commander §a3.5M§c❤): the individual
     // mob's own name, star only for actually-starred mobs, and HP only where it's known (rather
     // than inventing a number for archetypes with no confirmed real HP value).
@@ -120,7 +127,7 @@ fn spawn_single_mob(world: &mut World, room_index: usize, room: &Room, corner: B
         return;
     }
 
-    let _ = spawn_active_mob(world, room_index, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name);
+    let _ = spawn_active_mob(world, room_index, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name, skin_override);
 }
 
 /// Spawns the real, fully-active mob entity (AI, equipment, nametag, combat-state
@@ -139,6 +146,7 @@ pub(crate) fn spawn_active_mob(
     equipment: Equipment,
     nametag: String,
     full_name: String,
+    skin_override: Option<(&'static str, &'static str)>,
 ) -> Option<EntityId> {
     // `player`-kind archetypes fall back to a plain zombie model unless explicitly marked
     // `spawn_as_npc` - the real player-NPC path (SpawnPlayer + tab-list skin + hidden nameplate
@@ -184,12 +192,15 @@ pub(crate) fn spawn_active_mob(
     let spawn_result = if spawn_as_npc {
         let uuid = Uuid::new_v4();
         let username: String = full_name.chars().take(16).collect();
-        // Use this archetype's real skin if one has been set (see `DungeonMobType::skin_override`),
-        // otherwise fall back to the same known-good placeholder skin the tab-list system
-        // already uses, so these NPCs are guaranteed to render as a normal humanoid instead of
-        // risking an invisible/broken model.
-        let (texture_value, texture_signature) = archetype
-            .and_then(|archetype| archetype.skin_override())
+        // Use the per-spawn override if one was passed (currently only Lost Adventurer, whose
+        // body skin varies by which of its 4 armor variants this particular spawn is wearing -
+        // see `DungeonMobType::lost_adventurer_skin_for_helmet`), else this archetype's fixed
+        // skin if one has been set (see `DungeonMobType::skin_override`), else fall back to the
+        // same known-good placeholder skin the tab-list system already uses, so these NPCs are
+        // guaranteed to render as a normal humanoid instead of risking an invisible/broken model.
+        let (texture_value, texture_signature) = skin_override
+            .map(|(value, signature)| (value, Some(signature)))
+            .or_else(|| archetype.and_then(|archetype| archetype.skin_override()))
             .map(|(value, signature)| (value.to_string(), signature.map(str::to_string)))
             .unwrap_or_else(|| (GRAY.to_string(), Some(GRAY_SIG.to_string())));
 
@@ -322,6 +333,7 @@ pub fn spawn_crypt_undead(world: &mut World, room_index: usize, position: DVec3,
         crypt_undead_equipment(),
         nametag,
         full_name,
+        None,
     )
 }
 
@@ -368,6 +380,7 @@ pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, y
         king_midas_equipment(),
         nametag,
         full_name,
+        None,
     )
 }
 
@@ -450,7 +463,7 @@ pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32) -> anyhow::Resu
 /// `SpawnPlayer` packet is sent (see call site for why the order matters). Players who join
 /// later still get it fresh via `DungeonPlayerMobImpl::spawn`'s own registration when they
 /// first view the mob's chunk.
-fn register_npc_tab_list_entry(world: &mut World, uuid: Uuid, username: &str, texture_value: &str, texture_signature: Option<&str>) {
+pub(crate) fn register_npc_tab_list_entry(world: &mut World, uuid: Uuid, username: &str, texture_value: &str, texture_signature: Option<&str>) {
     let mut properties = HashMap::new();
     properties.insert("textures".to_string(), GameProfileProperty {
         value: texture_value.to_string(),
@@ -679,6 +692,7 @@ impl EntityImpl for FelsMarkerImpl {
             self.equipment.clone(),
             self.nametag.clone(),
             self.full_name.clone(),
+            None,
         );
     }
 }

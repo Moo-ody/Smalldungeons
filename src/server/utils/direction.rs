@@ -85,4 +85,15 @@ impl Direction {
             Direction::Down => (0, -1, 0),
         }
     }
+
+    pub const fn opposite(&self) -> Direction {
+        match self {
+            Direction::North => Direction::South,
+            Direction::South => Direction::North,
+            Direction::East => Direction::West,
+            Direction::West => Direction::East,
+            Direction::Up => Direction::Down,
+            Direction::Down => Direction::Up,
+        }
+    }
 }

@@ -39,35 +39,35 @@ pub struct RoomCrypts {
 }
 
 static RELATIVE_1X1: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/1x1crypts.json");
+    let data = include_str!("../../room_data/crypts/1x1crypts.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 
 static RELATIVE_1X2: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/1x2crypts.json");
+    let data = include_str!("../../room_data/crypts/1x2crypts.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 
 static RELATIVE_REST: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/rest.json");
+    let data = include_str!("../../room_data/crypts/rest.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 
 // Additional sources contributed later
 static RELATIVE_CHAMBERS: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/Chambers.json");
+    let data = include_str!("../../room_data/crypts/Chambers.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 
 static RELATIVE_L1X3: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/Lroomsandonebythrees.json");
+    let data = include_str!("../../room_data/crypts/Lroomsandonebythrees.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 
 // Optional extra file: crypts(1).json. Loaded if present in the directory bundle.
 static RELATIVE_EXTRA: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
     // Embed the directory and try to fetch the file at runtime (path relative to crate root)
-    static DIR: include_dir::Dir<'_> = include_dir!("src/room_data/relativecoords");
+    static DIR: include_dir::Dir<'_> = include_dir!("src/room_data/crypts");
     if let Some(file) = DIR.get_file("crypts(1).json") {
         let contents = file.contents_utf8().unwrap_or("");
         serde_json::from_str::<RelativeCoordsFile>(contents).ok()
@@ -82,7 +82,7 @@ static RELATIVE_EXTRA: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
 // Undead, and his kill is never wired to `entity_crypt_room`/`record_crypt_killed`, so it
 // doesn't count as a real crypt (see `Room::explode_kingmidas_near`/`Dungeon::superboom_at`).
 static RELATIVE_KINGMIDAS: Lazy<Option<RelativeCoordsFile>> = Lazy::new(|| {
-    let data = include_str!("../../room_data/relativecoords/kingmidas.json");
+    let data = include_str!("../../room_data/crypts/kingmidas.json");
     serde_json::from_str::<RelativeCoordsFile>(data).ok()
 });
 

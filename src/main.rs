@@ -48,9 +48,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::unbounded_channel;
 use uuid::Uuid;
 
-// Mort skin constants
-const MORT_SKIN_VALUE: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMDcyNTkwMDEzOSwKICAicHJvZmlsZUlkIiA6ICJhNzdkNmQ2YmFjOWE0NzY3YTFhNzU1NjYxOTllYmY5MiIsCiAgInByb2ZpbGVOYW1lIiA6ICIwOEJFRDUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWI1Njg5NWI5NjU5ODk2YWQ2NDdmNTg1OTkyMzhhZjUzMmQ0NmRiOWMxYjAzODliOGJiZWI3MDk5OWRhYjMzZCIKICAgIH0KICB9Cn0=";
-const MORT_SKIN_SIGNATURE: &str = "ihevlFAZ1u+xG/eeEnUzMRu1l8i+2j6pw1jIw0yxcsLn1x749GL+ToaVRyU56+13vDg9G6QjWRHQaA1DpPIkgmthhZsxQ067Q2A2SASywQiQIvIPJwmzjRmkP3eYHtKnJ7t4uZ31qjMazaONNq00Nq2t8s983u2TPfCFZJQlx8RqNWjRZjmGh7Gw+YXKbecwnlQmvpKZSiPolCcTgobPl0aZCr+benffxA0bcAohkr5Kp8U2VZW73wF0P7FGkANIhLYOtokLTemaYOMPWe4q/SU3D5yZswM6/SQ63g0mAvZJfQW/Vb+lAGzlm3zXia7T6tAJjFYuV1kg5yVcODbYOb2fgLJK3OQvUjnf9xlXXyDcESOILsPhft5SYVbBQuDkuLitG7YecJMV9cbCqldnvv4Z4XKs3jaCzZqYDRql4MVx8rYd+7hLaGXuprfrwBYL1xzzgMFSTFUCkIm942L5B7/6tZJGT5GT7g4DN1vrJpnZz4+gxdebcbcUEfP313/gHFU/U3phfN89TBbbNAfi0t5uQ5SRCGXdCz+YbO56zTKjzeUg57u49XOZaKwNZyF6hmv2IdO9CJctYw9cvljEkALOkMjMShaP95QYHsahc3mFLavJbseY7x5/vlexjRvPxdnxQCDG+Fkf9eBwUjyCqUjQozYYM6euDHFqib7uBHM=";
+// Mort skin constants. Slim (Alex) model - the base skin renders correctly with the classic
+// (Steve, wide-arm) model at rest, but the wide arm model overlaps the sleeve overlay layer's
+// slim-authored geometry, producing a visible black bar alongside the arms (a common MC skin
+// issue: any skin actually authored for the slim arm width shows this when forced onto the
+// classic model). Re-signed via mineskin.org's `/v2/generate` with `variant: "slim"` against the
+// same underlying texture hash (`9b56895...` - same image, just re-tagged and re-signed by
+// Mojang) rather than hand-editing the property, since a forged/mismatched signature on a
+// player-model NPC silently falls back to the default Steve skin instead of rendering at all.
+const MORT_SKIN_VALUE: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYxODc4MTA4Mzk0NywKICAicHJvZmlsZUlkIiA6ICJhNzdkNmQ2YmFjOWE0NzY3YTFhNzU1NjYxOTllYmY5MiIsCiAgInByb2ZpbGVOYW1lIiA6ICIwOEJFRDUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWI1Njg5NWI5NjU5ODk2YWQ2NDdmNTg1OTkyMzhhZjUzMmQ0NmRiOWMxYjAzODliOGJiZWI3MDk5OWRhYjMzZCIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9";
+const MORT_SKIN_SIGNATURE: &str = "aNIhT2Tj20v1lONBOK3fIwBqJwWnjErq20h663Gb+PVmR9Iweh1h2ZEJ2pwDDnM4Af1XFDA5hS1Z9yOc8EdVTKyyi1yj9EIvMwQz/Q4N2sBsjWGZtCe8/Zy+X82iv0APB4cumE2gkgDbPjxCFNbpVKmV3U1WzwY/GKOMHofhWS1ULedQ1TszuMmDuHPLEzWaXigZ+xt5zChXvE8QoLTfBvgb8wtqVpyxAKf/o8xQduKiNE7t+de1CwOhLqbVTGh7DU0vLC5stDuqN+nC9dS7c2CG0ori6gFoGMvP4oIss6zm1nb0laMrZidJTgmuXk2Pv4NGDBXdYcAzhfWcSWGsBVMWrJfccgFheG+YcGYaYj6V2nBp0YTqqhN4wDt3ltyTNEMOr/JKyBTLzq/F7IL6rrdyMw+MbAgCa1FhfXxtzdQE2KsL55pbr2DZ8J4DYf+/OC1pWCJ4vvA/A1qGHyi3Zwtj9lCl1Jq5Qm2P9BgWxpk0ikJefRPMg4qWOEcYnjqwXuEp+IgTJi1xr+j/+g28aS1TsF8ijaJjSbEN4urrf3RYL+PZBcggzX9VaPB0NPdioOXznIotY+S6ZW7FnSh6UnrGAKadQBVLey5zmVWMfXlBUq9JMh0csuNd4dDQCLNK8oGORhMgksOMHhVaBie4otUgJ7ThR/WPjOAKiG2TNU0=";
 /// Fixed, deterministic UUID reused for the Mort NPC across every dungeon (both at boot and
 /// every `dungeon_switch::switch_dungeon` rebuild). Because it never changes, a client that
 /// already has a tab-list entry/hidden-nameplate team for this UUID from a *previous* Mort
@@ -167,6 +174,26 @@ impl EntityImpl for MortImpl {
     }
 }
 
+/// Maps this codebase's puzzle room names to OdinClient's `Puzzle` enum `displayName` strings
+/// (`DungeonEnums.kt`, confirmed from OdinClient's own source) - identical to the room name for
+/// every puzzle already scraped except "Blaze", which Odin's enum calls "Higher Or Lower".
+/// `None` for anything that isn't a recognized puzzle room.
+fn puzzle_odin_display_name(room_name: &str) -> Option<&'static str> {
+    match room_name {
+        "Blaze" => Some("Higher Or Lower"),
+        "Boulder" => Some("Boulder"),
+        "Creeper Beams" => Some("Creeper Beams"),
+        "Ice Fill" => Some("Ice Fill"),
+        "Ice Path" => Some("Ice Path"),
+        "Quiz" => Some("Quiz"),
+        "Teleport Maze" => Some("Teleport Maze"),
+        "Three Weirdos" => Some("Three Weirdos"),
+        "Tic Tac Toe" => Some("Tic Tac Toe"),
+        "Water Board" => Some("Water Board"),
+        _ => None,
+    }
+}
+
 /// Loads every room's blocks into the world, spawns Mort in the entrance room and sets the
 /// world spawn point, spawns locked chests, applies a handful of special per-room block
 /// tweaks, and loads every door's blocks. Assumes `server.dungeon` is already a freshly built
@@ -175,18 +202,15 @@ impl EntityImpl for MortImpl {
 pub fn populate_dungeon_world(server: &mut Server) -> anyhow::Result<()> {
     let dungeon = &mut server.dungeon;
 
-    for room in &mut dungeon.rooms {
+    for (room_index, room) in dungeon.rooms.iter_mut().enumerate() {
         // println!("Room: {:?} type={:?} rotation={:?} shape={:?} corner={:?}", room.segments, room.room_data.room_type, room.rotation, room.room_data.shape, room.get_corner_pos());
-        room.load_into_world(&mut server.world);
+        room.load_into_world(room_index, &mut server.world);
         // Mobs are spawned when a player actually enters the room (see Dungeon::tick /
         // Dungeon::start_dungeon), not eagerly here for the whole dungeon at once.
 
-        // Immediately scan crypts on world load for debug visibility
+        // Immediately scan crypts on world load
         if room.crypt_patterns.len() > 0 && !room.crypts_checked {
-            let count = room.detect_crypts(&server.world);
-            if count == 0 {
-                room.debug_crypt_mismatch(&server.world);
-            }
+            room.detect_crypts(&server.world);
         }
 
 
@@ -429,10 +453,10 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
 
-    let rooms_dir = include_dir!("src/room_data/");
+    let rooms_dir = include_dir!("src/room_data/rooms/");
 
     // Load secrets from bettermapRooms.json
-    let bettermap_rooms_json = include_str!("room_data/bettermapRooms.json");
+    let bettermap_rooms_json = include_str!("room_data/rooms/bettermapRooms.json");
     let bettermap_rooms: serde_json::Value = serde_json::from_str(bettermap_rooms_json).unwrap();
     let mut secrets_map: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
     
@@ -483,7 +507,7 @@ async fn main() -> Result<()> {
         .collect();
 
     // Load lever data - using include_str for now since the directory name has spaces
-    let _lever_json_data = include_str!("room_data/lever shi/lever.json");
+    let _lever_json_data = include_str!("room_data/misc/lever.json");
 
     // Might be a good idea to make a new format for storing doors so that indexes etc don't need to be hard coded.
     // But this works for now...
@@ -781,14 +805,18 @@ async fn main() -> Result<()> {
             let deaths = score.deaths;
             let opened_rooms = server.dungeon.rooms.iter().filter(|room| room.entered).count();
 
+            // Indices 1/5/9/13/17 are reserved for Skytils' Catlas below - Odin doesn't care
+            // which fake tab-list row its stats land on (it matches by stripped text against its
+            // own regexes, not position), so these were moved off that range rather than fight
+            // over it. Anything clear of {1,5,9,13,17} works; 20-27 was just picked for headroom.
             let tab_stat_line = |text: String| ChatComponentTextBuilder::new(text).color(MCColors::Gray).build();
-            server.world.player_info.set_line(1, tab_stat_line(format!(" Time: {odin_time}")));
-            server.world.player_info.set_line(2, tab_stat_line(format!("Cleared: {clear_percent}% ({cleared_rooms})")));
-            server.world.player_info.set_line(3, tab_stat_line(format!(" Completed Rooms: {cleared_rooms}")));
-            server.world.player_info.set_line(4, tab_stat_line(format!(" Opened Rooms: {opened_rooms}")));
-            server.world.player_info.set_line(5, tab_stat_line(format!(" Secrets Found: {secrets_percent:.2}%")));
-            server.world.player_info.set_line(6, tab_stat_line(format!(" Crypts: {crypts}")));
-            server.world.player_info.set_line(7, tab_stat_line(format!("Team Deaths: {deaths}")));
+            server.world.player_info.set_line(20, tab_stat_line(format!(" Time: {odin_time}")));
+            server.world.player_info.set_line(21, tab_stat_line(format!("Cleared: {clear_percent}% ({cleared_rooms})")));
+            server.world.player_info.set_line(22, tab_stat_line(format!(" Completed Rooms: {cleared_rooms}")));
+            server.world.player_info.set_line(23, tab_stat_line(format!(" Opened Rooms: {opened_rooms}")));
+            server.world.player_info.set_line(24, tab_stat_line(format!(" Secrets Found: {secrets_percent:.2}%")));
+            server.world.player_info.set_line(25, tab_stat_line(format!(" Crypts: {crypts}")));
+            server.world.player_info.set_line(26, tab_stat_line(format!("Team Deaths: {deaths}")));
             // MapInfo's actual secrets calculation (`MapInfo$compactSecrets$2`, traced directly)
             // needs BOTH `DungeonStats.secretsFound` (this raw-count line, `secretCountRegex` =
             // `^ Secrets Found: (\d+)$`) AND `secretsPercent` (the line above, `secretPercentRegex`
@@ -796,7 +824,56 @@ async fn main() -> Result<()> {
             // `secretsFound / (secretsPercent / 100)`, so with secretsFound stuck at its default
             // 0 (no raw-count line ever sent before), the result was always 0 regardless of the
             // percent line - confirmed in bytecode, not assumed this time.
-            server.world.player_info.set_line(8, tab_stat_line(format!(" Secrets Found: {}", score.secrets_found)));
+            server.world.player_info.set_line(27, tab_stat_line(format!(" Secrets Found: {}", score.secrets_found)));
+
+            // Minimal stub so Skytils' Catlas can find real players at all: `DungeonListener`
+            // (see `onPacket`'s `S38PacketPlayerListItem` branch, confirmed from Skytils' own
+            // source) only recognizes a tab row as a real player if its position is one of the 5
+            // it hardcodes (`playerEntryNames`: "!A-b"->1, "!A-f"->5, "!A-j"->9, "!A-n"->13,
+            // "!A-r"->17 - matching `generate_default_lines`' fake-profile naming) AND its display
+            // text matches `classPattern`, which requires a `(<Class> <Level>)` suffix - this
+            // project has no real dungeon-class system, so every player gets a fixed placeholder
+            // ("Archer I") purely to satisfy that parser; nothing about class selection or
+            // leveling is real yet. Without at least this, Catlas's `team` map never gets an
+            // entry for anyone - not even the local player - so no map pointer renders at all,
+            // solo or otherwise. Sorted by player id for a stable slot assignment tick to tick.
+            const CLASS_TAB_SLOTS: [usize; 5] = [1, 5, 9, 13, 17];
+            let mut player_ids: Vec<u32> = server.world.players.keys().copied().collect();
+            player_ids.sort_unstable();
+            for (&slot, player_id) in CLASS_TAB_SLOTS.iter().zip(player_ids.iter()) {
+                if let Some(player) = server.world.players.get(player_id) {
+                    let username = &player.profile.username;
+                    let text = format!("\u{a7}r\u{a7}7{username} \u{a7}r\u{a7}f(\u{a7}r\u{a7}dArcher I\u{a7}r\u{a7}f)\u{a7}r");
+                    server.world.player_info.set_line(slot, ChatComponentTextBuilder::new(text).build());
+                }
+            }
+
+            // Puzzle-done reporting, placeholder rule: a puzzle counts as solved (✔) the instant
+            // its room is entered - real per-puzzle-type solve/fail mechanics don't exist in this
+            // codebase yet (see `score.rs`'s own doc comment), this is just enough for
+            // OdinClient's `DungeonListener` to have something to read. It reads two things off
+            // the tab list (`getDungeonPuzzles`/`updateDungeonStats`, confirmed from OdinClient's
+            // own source): one line per puzzle, ` <PuzzleName>: [<status>]` (✦ discovered/
+            // incomplete, ✔ completed, ✖ failed - only ✔ is ever produced here, since a room is
+            // either not entered yet or "done" under this placeholder), matched by
+            // `puzzleRegex` against `Puzzle::displayName`; and a total count line, `Puzzles:
+            // (N)`, matched by `puzzleCountRegex`. `puzzle_odin_display_name` maps this
+            // codebase's room names to Odin's exact `Puzzle` enum display strings - identical for
+            // every puzzle room name already scraped except "Blaze", which Odin's enum calls
+            // "Higher Or Lower".
+            let puzzle_rooms: Vec<_> = server.dungeon.rooms.iter()
+                .filter(|room| room.room_data.room_type == RoomType::Puzzle)
+                .collect();
+            server.world.player_info.set_line(28, tab_stat_line(format!("Puzzles: ({})", puzzle_rooms.len())));
+            const PUZZLE_TAB_SLOTS: [usize; 6] = [29, 30, 31, 32, 33, 34];
+            for (&slot, room) in PUZZLE_TAB_SLOTS.iter().zip(puzzle_rooms.iter()) {
+                if !room.entered {
+                    continue;
+                }
+                if let Some(display_name) = puzzle_odin_display_name(&room.room_data.name) {
+                    server.world.player_info.set_line(slot, tab_stat_line(format!(" {display_name}: [\u{2714}]")));
+                }
+            }
         }
 
         let tab_list_packet = server.world.player_info.get_packet();
@@ -1151,19 +1228,30 @@ async fn main() -> Result<()> {
                             let seconds = seconds % 60;
                             format!("{}{}s", if seconds < 10 { "0" } else { "" }, seconds)
                         };
-                        // TODO: display correct keys, and cleared percentage
-                        // clear percentage is based on amount of tiles that are cleared.
+                        // TODO: display correct keys
+                        //
+                        // Cleared %/count feeds OdinClient's `DungeonListener.clearedRegex`
+                        // (`^Cleared: (\d+)% \(\d+\)$`) - it reads this off the scoreboard
+                        // sidebar via Team packets (`S3EPacketTeams` action 2, prefix+suffix),
+                        // not the tab list the other Odin stats come from (confirmed against
+                        // OdinClient's own source). Was hardcoded to 0/0 - same
+                        // cleared_rooms/total_rooms derivation the tab-list "Cleared: X%" line
+                        // already uses (see below), just fed into this line too.
+                        let score = &server.dungeon.score;
+                        let clear_percent = if score.total_rooms == 0 {
+                            0
+                        } else {
+                            (score.cleared_rooms * 100) / score.total_rooms
+                        };
+                        let cleared_rooms = score.cleared_rooms;
                         sidebar_lines.push(formatdoc! {r#"
                             Keys: §c■ §c✖ §8§8■ §a0x
                             Time elapsed: §a§a{time}
-                            Cleared: §c{clear_percent}% §8§8({score})
+                            Cleared: §c{clear_percent}% §8§8({cleared_rooms})
 
                             §3§lSolo
 
-                        "#,
-                        clear_percent = "0",
-                        score = "0",
-                        });
+                        "#});
                     }
                     DungeonState::Finished => {}
                 }

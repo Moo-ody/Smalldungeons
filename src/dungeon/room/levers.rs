@@ -26,7 +26,7 @@ struct LeverFile {
 
 /// Load lever data from the JSON file
 static LEVER_DATA: Lazy<LeverFile> = Lazy::new(|| {
-    let lever_json = include_str!("../../room_data/lever shi/lever.json");
+    let lever_json = include_str!("../../room_data/misc/lever.json");
     serde_json::from_str(lever_json).expect("Failed to parse lever.json")
 });
 

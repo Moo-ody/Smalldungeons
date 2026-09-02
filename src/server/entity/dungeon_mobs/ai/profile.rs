@@ -86,7 +86,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             vision_range: 32.0,
             requires_los: true,
             movement: MovementStyle::MaintainDistance { preferred: 15.0, tolerance: 2.0 },
-            attack: AttackModule::Ranged { speed_bps: 20.0, cooldown_ticks: 30 },
+            attack: AttackModule::Ranged { speed_bps: 20.0, cooldown_ticks: 30, range: 17.0 },
             ..AiProfile::defaults()
         },
 
@@ -94,11 +94,13 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         // return-to-origin controller (Phase 4) is built.
         Sniper => AiProfile { vision_range: 128.0, ..AiProfile::placeholder() },
 
-        // Crypt Dreadlord: purely melee (iron sword) - approaches and swings like a basic
-        // zombie, just on the player-model NPC path (see `spawn_as_npc`).
+        // Crypt Dreadlord: purely melee (iron sword) - approaches like a basic zombie, but once
+        // within striking range circle-strafes around the player instead of just standing/
+        // pushing in, per the documented "strafes while keeping aim locked on" behavior. Still
+        // on the player-model NPC path (see `spawn_as_npc`).
         CryptDreadlord => AiProfile {
             vision_range: 16.0,
-            movement: MovementStyle::Approach,
+            movement: MovementStyle::CircleStrafe { melee_range: 2.5 },
             attack: AttackModule::Melee { range: 2.5 },
             ..AiProfile::defaults()
         },
@@ -109,7 +111,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         CryptSouleater => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::HybridMeleeRanged { melee_range: 5.0, ranged_preferred: 10.0, ranged_tolerance: 6.0 },
-            attack: AttackModule::HybridMeleeRanged { melee_range: 5.0, ranged_speed_bps: 20.0, ranged_cooldown_ticks: 20 },
+            attack: AttackModule::HybridMeleeRanged { melee_range: 5.0, ranged_speed_bps: 20.0, ranged_cooldown_ticks: 20, ranged_range: 16.0 },
             ..AiProfile::defaults()
         },
 
@@ -132,6 +134,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::Approach,
             attack: AttackModule::Melee { range: 2.5 },
+            speed_multiplier: 1.5,
             ..AiProfile::defaults()
         },
 
@@ -147,14 +150,13 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             ..AiProfile::defaults()
         },
 
-        // Zombie Commander: its real "fishing rod cast every 10 ticks, hold ~6 blocks"
-        // distance-control/strafe controller is Phase 4 and not implemented yet - approximate
-        // with the same maintain-distance ranged shape as the skeletons for now rather than
-        // leaving it completely inert.
+        // Zombie Commander: casts a fishing hook and reels the player in on contact rather than
+        // firing arrows, per the documented "fishing rod cast every 10 ticks, hold ~6 blocks"
+        // behavior - see `AttackModule::FishingRod`/`ai::projectile::fire_fishing_hook_at_player`.
         ZombieCommander => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::MaintainDistance { preferred: 6.0, tolerance: 1.0 },
-            attack: AttackModule::Ranged { speed_bps: 20.0, cooldown_ticks: 20 },
+            attack: AttackModule::FishingRod { cast_speed_bps: 20.0, cooldown_ticks: 20, range: 7.0 },
             ..AiProfile::defaults()
         },
 
@@ -166,7 +168,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         LostAdventurer | AngryArchaeologist | FrozenAdventurer => AiProfile {
             vision_range: 24.0,
             movement: MovementStyle::MaintainDistance { preferred: 10.0, tolerance: 2.0 },
-            attack: AttackModule::Ranged { speed_bps: 24.0, cooldown_ticks: 25 },
+            attack: AttackModule::Ranged { speed_bps: 24.0, cooldown_ticks: 25, range: 12.0 },
             ..AiProfile::defaults()
         },
 

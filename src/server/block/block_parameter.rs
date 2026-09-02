@@ -281,6 +281,11 @@ impl Rotatable for StairDirection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ButtonDirection(Direction);
 
+impl ButtonDirection {
+    pub fn direction(&self) -> Direction {
+        self.0
+    }
+}
 
 // todo: fix rotation, its still broken even with fixed direction values
 impl Rotatable for ButtonDirection {

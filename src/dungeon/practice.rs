@@ -180,7 +180,7 @@ pub fn build_practice_dungeon(room_data: RoomData) -> anyhow::Result<(Dungeon, V
         // identically to a door position built here.
         let axis = if ((door_x - DUNGEON_ORIGIN.0) / 16) % 2 == 0 { Axis::Z } else { Axis::X };
 
-        doors.push(Door { x: door_x, z: door_z, direction: axis, door_type: DoorType::NORMAL, key_granted: false });
+        doors.push(Door { x: door_x, z: door_z, direction: axis, door_type: DoorType::NORMAL, key_granted: false, opened: false });
 
         door_spawns.push(PracticeDoorSpawn {
             label: direction_label(dir),

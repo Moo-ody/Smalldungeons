@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use crate::server::world::World;
 use crate::net::packets::packet_buffer::PacketBuffer;
 use crate::net::protocol::play::clientbound::{CollectItem, EntityEquipment, EntityTeleport, EntityVelocity, Particles, SoundEffect};
+use crate::server::utils::particles::ParticleTypes;
 use crate::net::var_int::VarInt;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
@@ -57,6 +58,24 @@ pub struct DungeonSecret {
     pub counted: bool, // Track if this secret has been counted in room's found_secrets
     pub bat_entity_id: Option<i32>, // Track bat entity for batsp/batdie
     pub bat_spawn_tick: Option<u64>, // Track when bat was spawned for batdie
+    /// `Some` only for the one chest that should also reveal a "blessing" on open - a floating
+    /// skull wearing this base64 texture, plus the ascending `note.harp` sequence (see the
+    /// `Chest` interact handler in `block_interact_action.rs`). `None` for every ordinary secret
+    /// chest, which just does the normal open.
+    pub blessing_texture: Option<&'static str>,
+    /// `Some` only for a chest whose *own opening* is a puzzle's actual win condition (unlike,
+    /// say, Creeper Beams, which completes the instant its last correct pair locks in, with no
+    /// further interaction needed) - the Teleport Maze reward chest, confirmed: reaching it just
+    /// reveals the chest, opening it is what actually solves the puzzle. When set, the `Chest`
+    /// interact handler marks this room index `puzzle_completed` and broadcasts the solved
+    /// message the first time this chest is opened, instead of any of that happening earlier.
+    pub puzzle_room_index: Option<usize>,
+    /// Whether opening this chest increments the room's `found_secrets` count (see the `Chest`
+    /// interact handler in `block_interact_action.rs`). `true` for every ordinary secret chest;
+    /// `false` for a chest that's purely a bonus reward and isn't one of the room's actual
+    /// counted secrets - e.g. Tic Tac Toe's reward chest (`tic_tac_toe.rs::reveal_reward_chest`),
+    /// which already counts the puzzle itself as solved and shouldn't also bump the secret tally.
+    pub counts_as_secret: bool,
 }
 
 // when this is integrated into rooms, remove this and just inline the spawning stuff
@@ -130,9 +149,36 @@ impl DungeonSecret {
             counted: false,
             bat_entity_id: None,
             bat_spawn_tick: None,
+            blessing_texture: None,
+            puzzle_room_index: None,
+            counts_as_secret: true,
         }
     }
     
+    /// Single flame particle floating just above a chest that just spawned into the world -
+    /// same effect/placement as the Three Weirdos puzzle's correct-chest tell
+    /// (`three_weirdos::WeirdoImpl::interact`), applied here to every ordinary chest secret
+    /// instead. `+1.0` on Y clears the chest's own (well-under-a-full-block) model so the
+    /// particle floats visibly in open air above the lid, rather than landing inside the solid
+    /// block mesh where it'd be hidden from the camera's point of view.
+    fn spawn_chest_flame(world: &mut World, block_pos: BlockPos) {
+        let particles = Particles {
+            particle_id: ParticleTypes::Flame.get_id(),
+            long_distance: true,
+            x: block_pos.x as f32 + 0.5,
+            y: block_pos.y as f32 + 1.0,
+            z: block_pos.z as f32 + 0.5,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            offset_z: 0.0,
+            speed: 0.0,
+            count: 1,
+        };
+        for player in world.players.values_mut() {
+            player.write_packet(&particles);
+        }
+    }
+
     pub fn spawn_into_world(
         secret_rc: &Rc<RefCell<DungeonSecret>>,
         mut secret: RefMut<DungeonSecret>,
@@ -188,6 +234,7 @@ impl DungeonSecret {
                 world.interactable_blocks.insert(secret.block_pos, BlockInteractAction::Chest {
                     secret: secret_rc.clone()
                 });
+                Self::spawn_chest_flame(world, secret.block_pos);
             }
             SecretType::Item { item } => {
                 world.spawn_entity(
@@ -209,6 +256,7 @@ impl DungeonSecret {
                 world.interactable_blocks.insert(secret.block_pos, BlockInteractAction::Chest {
                     secret: secret_rc.clone()
                 });
+                Self::spawn_chest_flame(world, secret.block_pos);
             }
             SecretType::RegularEssence => {
                 world.set_block_at(
@@ -305,6 +353,7 @@ impl DungeonSecret {
                 world.interactable_blocks.insert(secret.block_pos, BlockInteractAction::Chest {
                     secret: secret_rc.clone()
                 });
+                Self::spawn_chest_flame(world, secret.block_pos);
             }
             SecretType::SecretEssence => {
                 world.set_block_at(
@@ -512,37 +561,42 @@ impl EntityImpl for SecretItemEntityImpl {
 //     
 // }
 // 
-/// Entity implementation for wither essence animation
-/// Creates a floating skull that rotates and plays particles/sounds
-pub struct EssenceEntityImpl;
+/// Base64 skull texture `Value` the wither essence float animation's armor stand wears -
+/// extracted here so it can be passed to `EssenceEntityImpl` like any other texture (see
+/// `EssenceEntityImpl::texture`'s doc comment for why that struct is parameterized instead of
+/// hardcoding this).
+pub const WITHER_ESSENCE_TEXTURE: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==";
+
+/// Entity implementation for a floating, spinning skull with particles - used for both the wither
+/// essence pickup animation and (reusing this exact same effect, per this file's own left-behind
+/// note next to the real captured `note.harp` sound sequence - see the `Chest` interact handler)
+/// a "blessing" chest's reveal. `texture` is whichever base64 skull `Value` the armor stand's head
+/// should show - `WITHER_ESSENCE_TEXTURE` for the original use, a real captured player skin for a
+/// blessing.
+pub struct EssenceEntityImpl {
+    pub texture: &'static str,
+    /// Tick (relative to spawn) this despawns at - 20 (1s) for the original wither essence use,
+    /// 300 (15s) for a blessing, matching however long that particular use is meant to hover.
+    /// A floating nametag, if wanted, is set on the entity's own `EntityMetadata` (`custom_name`/
+    /// `custom_name_visible`) at the call site before `spawn_entity` instead of being a field
+    /// here - metadata like that is already baked into the spawn packet by the time
+    /// `EntityImpl::spawn` runs, so there's nothing for this struct itself to do with it.
+    pub lifetime_ticks: u32,
+}
 
 impl EntityImpl for EssenceEntityImpl {
     fn spawn(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
-        use std::collections::HashMap;
-        
-        // Create the skull item
-        let skull_item = ItemStack {
+        // Same unsigned-skull convention as `PickupKind::equipped_item` (Wither/Blood key heads) -
+        // no `Signature` needed for a custom texture to render, only for Mojang session-server
+        // verification, which a private server doesn't do.
+        let mut skull_item = ItemStack {
             item: 397, // Player head
             stack_size: 1,
             metadata: 3,
-            tag_compound: Some(NBT::with_nodes(vec![
-                NBT::compound("SkullOwner", vec![
-                    NBT::string("Name", ""),
-                    NBT::string("Id", "e0f3e929-869e-3dca-9504-54c666ee6f23"),
-                    NBT::compound("Properties", vec![
-                        NBT::list("textures", TAG_COMPOUND_ID, vec![
-                            NBTNode::Compound({
-                                let mut map = HashMap::new();
-                                map.insert("Value".into(), NBTNode::String("ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==".to_string()));
-                                map.insert("Signature".into(), NBTNode::String("Mnf7PDLe+FPiO+wQ2St6XNRiiIXtZ3GuPTcLlM7pNQ6d6MXuzI7xXG24qaAMFuVwMB+F3dLYcaFlc+bWyi3Qm9msSq2mMUXdvzTamAslZHcdcTFNpppkYgdvkOhWK7W/amQyd2Q+pLDECe8Mg6gxBY17+xfaWlIynzEWEmHR+ye+hTC44kgiTZaYiRg7gpU002deY8WpX875cc5zJIroxVR52qHIV+suIMPwq47mpCp520J9R1HuYvvP/V3+PwL7skMlC1F/HHkG5A13fvSKMqq9XMsdqXR8qvWlcL5IQTS7ijtD9TZo8jcmhz/7HCXuJ912I1GqJp4hZ0Lqa0NB0TuI/giHr2i4yNzORe6oan47bpMXLoZWIrYZIOsF6wSObhwniF1jM/zUEkum9XswRImIvYYlmyLH+Kkh5uQJm244rOLPXmOZEid6PW5bhaSRpMOMpxboeOtjLbGC56Ev+DwoI37SrAYY6/LC7HwjVhvkcsLd/9BrF+Wl10bdLdsJEbd+TII59/45MM1x7+xgeAFU/ip0TjkMPfRLdNmfxOGssMFZOaM55iOb+8t4tOvXxnqeXpFCByDgPnqKV5zPXS1XMF2+5qEAv7ZKrqK8BLAHbWsKHHOMt1hJ8K+EgYfRDKq72YvN01ST288ysUv8b5stRu8O5uC+KvZXtnlGrKc=".to_string()));
-                                map
-                            })
-                        ])
-                    ])
-                ]),
-            ])),
+            tag_compound: None,
         };
-        
+        skull_item.set_skull_owner(self.texture);
+
         // Send equipment packet through buffer (for players in chunk)
         buffer.write_packet(&EntityEquipment {
             entity_id: VarInt(entity.id),
@@ -562,8 +616,13 @@ impl EntityImpl for EssenceEntityImpl {
     }
     
     fn tick(&mut self, entity: &mut Entity, buffer: &mut PacketBuffer) {
-        // Make entity float up and rotate
-        entity.position.y += 0.04;
+        // Rise for the first 20 ticks only (matches the original 1s wither-essence animation's
+        // total rise, ~0.8 blocks) - for a 15s blessing (`lifetime_ticks` 300), continuing this
+        // same per-tick rise for the *entire* duration would carry it ~12 blocks up through the
+        // ceiling. It just hovers in place (still rotating) for whatever's left after that.
+        if entity.ticks_existed < 20 {
+            entity.position.y += 0.04;
+        }
         entity.yaw += 15.0;
         
         // Send position/rotation updates so the client sees the movement
@@ -604,8 +663,8 @@ impl EntityImpl for EssenceEntityImpl {
             }
         }
         
-        if entity.ticks_existed == 20 {
-            // After 20 ticks, play orb sound twice and despawn
+        if entity.ticks_existed == self.lifetime_ticks {
+            // After `lifetime_ticks`, play orb sound twice and despawn
             let sound_packet = SoundEffect {
                 sound: "random.orb",
                 pos_x: entity.position.x,
@@ -659,15 +718,25 @@ impl PickupKind {
 
     /// Personal follow-up lines sent only to the picker, not broadcast - empty for TNT, which
     /// doesn't need "how to use this" instructions.
+    ///
+    /// Each kind is a single combined string, not two - Skytils' `DungeonListener.keyPickupRegex`
+    /// (`§r§e§lRIGHT CLICK §r§7on §r§7.+?§r§7 to open it\. This key can only be used to open
+    /// §r§a(?<num>\d+)§r§7 door!§r`, confirmed from Skytils' own source) matches against one
+    /// packet's `formattedText` as a whole - this used to be sent as two separate
+    /// `player.send_message` calls (two packets), so neither one alone ever contained the full
+    /// "RIGHT CLICK...to open it. This key can...door!" span the regex needs, and Skytils'
+    /// `DungeonInfo.keys` counter (which drives the "you have a key, door outline turns green"
+    /// state) never incremented. Also needed the `§r` reset codes the regex requires at each
+    /// style change - real Hypixel's message is built from styled chat-component siblings, which
+    /// the client's `getFormattedText()` auto-inserts `§r` between; a flat legacy-code string has
+    /// to add those explicitly to reproduce the exact same text.
     fn extra_messages(self) -> &'static [&'static str] {
         match self {
             PickupKind::Wither => &[
-                "\u{a7}eRIGHT CLICK \u{a7}7on a \u{a7}8Wither Door \u{a7}7to open it. This key can",
-                "\u{a7}7only be used to open \u{a7}a1 door\u{a7}7!",
+                "\u{a7}r\u{a7}e\u{a7}lRIGHT CLICK \u{a7}r\u{a7}7on \u{a7}r\u{a7}7a \u{a7}8Wither Door\u{a7}r\u{a7}7 to open it. This key can only be used to open \u{a7}r\u{a7}a1\u{a7}r\u{a7}7 door!\u{a7}r",
             ],
             PickupKind::Blood => &[
-                "\u{a7}eRIGHT CLICK \u{a7}7on the \u{a7}cBLOOD DOOR \u{a7}7to open it. This key can",
-                "\u{a7}7only be used to open \u{a7}c1 door\u{a7}7!",
+                "\u{a7}r\u{a7}e\u{a7}lRIGHT CLICK \u{a7}r\u{a7}7on \u{a7}r\u{a7}7the \u{a7}cBLOOD DOOR\u{a7}r\u{a7}7 to open it. This key can only be used to open \u{a7}r\u{a7}a1\u{a7}r\u{a7}7 door!\u{a7}r",
             ],
             PickupKind::Tnt => &[],
         }
