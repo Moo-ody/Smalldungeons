@@ -1,4 +1,4 @@
-use crate::net::protocol::play::clientbound::{PositionLook, SoundEffect};
+use crate::net::protocol::play::clientbound::SoundEffect;
 use crate::server::player::player::ClientId;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
@@ -13,6 +13,12 @@ pub struct TacticalInsertionMarker {
     pub damage_echo_window_ticks: u64,
     pub yaw: f32,
     pub pitch: f32,
+    /// `true` only for a mushroom secret's own round trip (`block_interact_action.rs`'s
+    /// `MushroomBottom` handler) - `false` for the real Tactical Insertion item, which reuses
+    /// this exact same marker/queue for its own unrelated return trip. Gates the mushroom-only
+    /// Nausea+portal-effect clearing on automatic timeout below, so a real Tactical Insertion
+    /// return never gets mushroom effects applied to it just because it shares this struct.
+    pub is_mushroom_secret: bool,
 }
 
 /// Scheduled sound to play at specific tick
@@ -78,18 +84,18 @@ pub fn process(world: &mut World) -> anyhow::Result<()> {
         // Handle return teleport once
         if marker.return_tick <= now {
             if let Some(player) = world.players.get_mut(&marker.client_id) {
-                // Send position look packet to teleport player back
-                let pos_packet = PositionLook {
-                    x: marker.origin.x,
-                    y: marker.origin.y,
-                    z: marker.origin.z,
-                    yaw: marker.yaw,
-                    pitch: marker.pitch,
-                    flags: 0, // Try 0 first, might be absolute positioning
-                };
-                // Use player's write_packet method
-                player.write_packet(&pos_packet);
-                
+                // `server_teleport` (not a raw `PositionLook` write) - every other server-
+                // initiated teleport in this codebase goes through it specifically because it
+                // updates the server's own authoritative `position` synchronously and arms
+                // `pending_teleport` so a stale client report can't roll it back (see its own doc
+                // comment). Writing the packet directly here left `player.position` stuck at
+                // wherever the teleport-out landed until the client's next ordinary movement
+                // packet happened to correct it - a real desync window, not present anywhere else
+                // a teleport fires in this project.
+                player.server_teleport(marker.origin, marker.yaw, marker.pitch, 0);
+                if marker.is_mushroom_secret {
+                    crate::dungeon::room::mushroom::clear_mushroom_up_effects(player, marker.origin);
+                }
             }
             // Do not re-schedule after return
         } else {

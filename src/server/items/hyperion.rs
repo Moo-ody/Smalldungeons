@@ -1,4 +1,4 @@
-use crate::net::protocol::play::clientbound::{SoundEffect, PositionLook, Particles};
+use crate::net::protocol::play::clientbound::{SoundEffect, Particles};
 use crate::server::player::player::Player;
 use crate::server::utils::sounds::Sounds;
 use crate::server::utils::dvec3::DVec3;
@@ -23,7 +23,7 @@ pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
     // Use the exact same teleport logic as ether transmission, but with 10 blocks
     let server = &mut player.server_mut();
     let teleport_result = handle_hyperion_teleport(player, &server.network_tx);
-    
+
     // Only play sounds if teleport was successful
     if let Ok(Some(dest_pos)) = teleport_result {
         // Always play endermen portal sound on right-click
@@ -45,7 +45,7 @@ pub fn on_right_click(player: &mut Player) -> anyhow::Result<()> {
 
 pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Server, explosion_pos: DVec3) {
     const EXPLOSION_RADIUS: f64 = 7.0; // 7 block radius = 13x13x13 area
-    
+
     // Create explosion AABB (13x13x13 centered at explosion_pos)
     let explosion_aabb = AABB {
         min: DVec3::new(
@@ -59,7 +59,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
             explosion_pos.z + EXPLOSION_RADIUS,
         ),
     };
-    
+
     // Play explosion particles and sound for all players
     let explosion_particle = Particles {
         particle_id: 1, // largeexplode
@@ -73,7 +73,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
         speed: 0.0,
         count: 0,
     };
-    
+
     for (_, player) in &mut server.world.players {
         player.write_packet(&explosion_particle);
         player.write_packet(&SoundEffect {
@@ -85,7 +85,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
             pos_z: explosion_pos.z,
         });
     }
-    
+
     // Check for secret bats and dungeon mobs (zombies with combat state) in explosion range.
     // Spirit Sceptre bats are a separate entity variant and should not be affected.
     let mut bats_to_kill = Vec::new();
@@ -123,7 +123,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
             dungeon_mobs_to_kill.push(*entity_id);
         }
     }
-    
+
     // Kill bats and mark associated secrets as obtained
     let mut rooms_to_update_map: Vec<usize> = Vec::new();
     for bat_id in bats_to_kill {
@@ -141,7 +141,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
                                 // Increment room's found_secrets count
                                 let old_count = room.found_secrets;
                                 room.found_secrets = room.found_secrets.saturating_add(1);
-                                
+
                                 // Track room for map update if secret count changed and room is entered
                                 if old_count != room.found_secrets && room.entered {
                                     rooms_to_update_map.push(room_index);
@@ -154,7 +154,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
                 }
             }
         }
-        
+
         // Play bat death sound
         if let Some((bat_entity, _)) = server.world.entities.get(&bat_id) {
             let bat_pos = bat_entity.position;
@@ -169,11 +169,11 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
                 });
             }
         }
-        
+
         // Despawn the bat
         server.world.despawn_entity(bat_id);
     }
-    
+
     // Kill dungeon mobs (zombie commanders etc.) in explosion range - death animation +
     // species-appropriate sound (not always zombie) + despawn, shared with the direct
     // lethal-weapon hit path. King Midas is the one exception: this AOE counts as one weapon
@@ -184,7 +184,7 @@ pub(crate) fn handle_hyperion_explosion(server: &mut crate::server::server::Serv
             crate::server::entity::dungeon_mobs::ai::combat::kill_mob(&mut server.world, mob_id);
         }
     }
-    
+
     // Update map for rooms that had secrets found
     for room_index in rooms_to_update_map {
         server.dungeon.update_map_for_room(room_index);
@@ -196,7 +196,7 @@ fn handle_hyperion_teleport(
     _network_tx: &UnboundedSender<NetworkThreadMessage>,
 ) -> anyhow::Result<Option<DVec3>> {
     const MAX_DISTANCE: f64 = 10.0; // Hyperion has 10 block range
-    
+
     // Start from eye position
     let mut start = player.position;
     start.y += 1.62;
@@ -242,18 +242,10 @@ fn handle_hyperion_teleport(
         let dest_y = by as f64; // feet at block base; client packet uses absolute feet
         let dest_z = bz as f64 + 0.5;
 
-        player.write_packet(&PositionLook {
-            x: dest_x,
-            y: dest_y,
-            z: dest_z,
-            yaw: 0.0,
-            pitch: 0.0,
-            flags: 24,
-        });
-        
-        // Update player position immediately for explosion calculation
-        player.position = DVec3::new(dest_x, dest_y, dest_z);
-        
+        // `server_teleport` updates `player.position` immediately (needed for the explosion
+        // calculation below) and guards against stale pre-teleport position reports.
+        player.server_teleport(DVec3::new(dest_x, dest_y, dest_z), 0.0, 0.0, 24);
+
         // Return destination position for explosion
         return Ok(Some(DVec3::new(dest_x, dest_y, dest_z)));
     }

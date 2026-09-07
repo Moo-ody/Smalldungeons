@@ -133,4 +133,63 @@ pub fn get_room_mushrooms(room_name: &str, rotation: Direction, corner_pos: &Blo
     out
 }
 
+/// Vanilla's Nausea/Confusion status effect id.
+const NAUSEA_EFFECT_ID: u8 = 9;
+/// "Max nausea" per explicit request - vanilla Nausea doesn't have a dramatically different look
+/// per level the way most effects do, but this is as high as makes sense to call "max".
+const NAUSEA_AMPLIFIER: i8 = 4;
+/// Upper-bound safety net matching the round trip's own 100-tick (5s) return timer exactly -
+/// `clear_mushroom_up_effects` below always removes the effect explicitly the moment either
+/// return path (top click or the automatic timeout) actually fires, so this duration should
+/// never actually run out on its own; it's just insurance against some future path that
+/// teleports the player back without going through the shared removal helper.
+const NAUSEA_DURATION_TICKS: i32 = 100;
 
+/// Per explicit request: going up through the mushroom shaft should feel like stepping through a
+/// portal - max Nausea for the duration of the trip, plus the same real portal sound/particle
+/// combo `teleport_maze.rs`'s own pad landings already use, played at the destination.
+pub fn apply_mushroom_up_effects(player: &mut crate::server::player::player::Player, pos: crate::server::utils::dvec3::DVec3) {
+    player.write_packet(&crate::net::protocol::play::clientbound::AddEffect {
+        entity_id: crate::net::var_int::VarInt(player.entity_id),
+        effect_id: NAUSEA_EFFECT_ID,
+        amplifier: NAUSEA_AMPLIFIER,
+        duration: crate::net::var_int::VarInt(NAUSEA_DURATION_TICKS),
+        hide_particles: false,
+    });
+    play_mushroom_portal_effect(player, pos);
+}
+
+/// Ends the trip's Nausea early and plays the same portal sound/particles at the return spot -
+/// called from both return paths (`MushroomTop`'s click handler and `tactical_insertion`'s
+/// automatic-timeout path) so the effect always goes away exactly when the player actually
+/// arrives back, regardless of which of the two ways they got there.
+pub fn clear_mushroom_up_effects(player: &mut crate::server::player::player::Player, pos: crate::server::utils::dvec3::DVec3) {
+    player.write_packet(&crate::net::protocol::play::clientbound::RemoveEffect {
+        entity_id: crate::net::var_int::VarInt(player.entity_id),
+        effect_id: NAUSEA_EFFECT_ID,
+    });
+    play_mushroom_portal_effect(player, pos);
+}
+
+fn play_mushroom_portal_effect(player: &mut crate::server::player::player::Player, pos: crate::server::utils::dvec3::DVec3) {
+    player.write_packet(&crate::net::protocol::play::clientbound::SoundEffect {
+        sound: crate::server::utils::sounds::Sounds::EndermenPortal.id(),
+        pos_x: pos.x,
+        pos_y: pos.y,
+        pos_z: pos.z,
+        volume: 1.0,
+        pitch: 1.0,
+    });
+    player.write_packet(&crate::net::protocol::play::clientbound::Particles {
+        particle_id: crate::server::utils::particles::ParticleTypes::Portal.get_id(),
+        long_distance: true,
+        x: pos.x as f32,
+        y: pos.y as f32 + 0.5,
+        z: pos.z as f32,
+        offset_x: 0.3,
+        offset_y: 0.5,
+        offset_z: 0.3,
+        speed: 0.0,
+        count: 20,
+    });
+}

@@ -199,7 +199,15 @@ pub fn get_random_data_with_type(
         .filter(|data| {
             data.1.room_type == room_type &&
                 data.1.shape == room_shape &&
-                !current_rooms.iter().any(|room| room.room_data == *data.1) // No duplicate rooms
+                !current_rooms.iter().any(|room| {
+                    room.room_data == *data.1
+                        // Higher/Lower Blaze are two separate `RoomData` entries (distinguished
+                        // only by `bottom`, see blaze.rs's module doc comment) that share the same
+                        // `name` "Blaze" - a real dungeon never has both at once, it's one puzzle
+                        // or the other, so puzzle rooms also exclude same-name candidates, not just
+                        // exact-data duplicates.
+                        || (room_type == RoomType::Puzzle && room.room_data.name == data.1.name)
+                })
         })
         .map(|x| x.1)
         .choose(&mut seeded_rng())

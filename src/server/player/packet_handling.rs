@@ -67,7 +67,10 @@ impl ProcessPacket for PlayerUpdate {}
 
 impl ProcessPacket for PlayerPosition {
     fn process_with_player(&self, player: &mut Player) {
-        player.set_position(self.x, self.y, self.z)
+        // Routed through the teleport-reconciliation system - see
+        // `Player::reconcile_bare_position_report`'s doc comment for why a bare position report
+        // is rejected outright while a server teleport is still pending.
+        player.reconcile_bare_position_report(self.x, self.y, self.z)
     }
 }
 
@@ -80,9 +83,11 @@ impl ProcessPacket for PlayerLook {
 
 impl ProcessPacket for PlayerPositionLook {
     fn process_with_player(&self, player: &mut Player) {
-        player.set_position(self.x, self.y, self.z);
-        player.yaw = self.yaw;
-        player.pitch = self.pitch;
+        // Routed through the teleport-reconciliation system - see
+        // `Player::reconcile_position_look_report`'s doc comment. Rotation always applies;
+        // position only applies (and clears any pending server teleport) once it exactly matches
+        // the newest destination this server issued.
+        player.reconcile_position_look_report(self.x, self.y, self.z, self.yaw, self.pitch);
     }
 }
 
@@ -275,6 +280,11 @@ impl ProcessPacket for PlayerBlockPlacement {
                 // had drifted to by then. Special-case them here (like Spirit Sceptre already was)
                 // so they always fire immediately on click, regardless of what's in reach, while
                 // still preferring a genuinely interactable block (chest/door/lever) if aimed at one.
+                // Per explicit correction, this direct-right-click path is fine for the Terminator
+                // too - a deliberate right-click on a secret chest/essence/lever should still open
+                // it same as any other item. It's only the Terminator's own ARROW landing on one
+                // mid-flight that must be restricted to Creeper Beams' lantern - see
+                // `ai::projectile`'s `SweepHit::Block` handling for that half of the fix.
                 if !self.position.is_invalid() {
                     let world = player.world_mut();
                     if world.interactable_blocks.contains_key(&self.position) {
@@ -305,7 +315,22 @@ impl ProcessPacket for PlayerBlockPlacement {
                     });
                 }
 
-                // Fire the item's ability (air click OR non-interactable block)
+                // Fire the item's ability (air click OR non-interactable block). Real vanilla
+                // sends *two* `PlayerBlockPlacement` packets for one physical right-click
+                // whenever a block is within reach but the held item has no server-registered
+                // "use on block" behavior (none of these items do) - one targeting the real
+                // block, then a fallback packet - so without this dedup the ability fires twice
+                // per click, each hop computed from where the other had just landed. Same shape
+                // as `UseEntity`'s own two-packets-per-click quirk above, guarded by
+                // `last_entity_interact_tick` - this is that same fix for this different packet
+                // type. Confirmed live: `server_teleport` firing twice in the same world tick for
+                // a single Etherwarp/Instant Transmission click, landing one extra tile past the
+                // real target every time.
+                let tick = player.world_mut().tick_count;
+                if player.last_block_ability_tick == tick {
+                    return;
+                }
+                player.last_block_ability_tick = tick;
                 player.handle_right_click();
                 return;
             }

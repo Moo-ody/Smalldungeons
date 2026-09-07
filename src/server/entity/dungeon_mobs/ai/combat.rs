@@ -89,12 +89,17 @@ pub fn apply_king_midas_weapon_hit(world: &mut World, entity_id: EntityId) -> bo
     }
 
     for player in world.players.values_mut() {
+        // `entity.item.break`, not an anvil - per explicit correction: golden armor snapping off
+        // sounds like a broken item/tool, not an anvil falling apart. Volume raised above the
+        // normal 1.0 per explicit follow-up request ("make it louder") - Minecraft's sound volume
+        // also extends how far the sound carries before falloff, not just perceived loudness up
+        // close.
         player.write_packet(&SoundEffect {
-            sound: Sounds::AnvilBreak.id(),
+            sound: Sounds::ItemBreak.id(),
             pos_x: pos.x,
             pos_y: pos.y,
             pos_z: pos.z,
-            volume: 1.0,
+            volume: 3.0,
             pitch: 1.0,
         });
     }
@@ -164,21 +169,23 @@ fn strip_next_king_midas_armor_piece(world: &mut World, entity_id: EntityId, hit
 pub fn kill_mob(world: &mut World, entity_id: EntityId) {
     let Some((entity, _)) = world.entities.get(&entity_id) else { return };
     let pos = entity.position;
-    let sound = death_sound_for(&entity.metadata.variant);
+    let sounds = death_sounds_for(&entity.metadata.variant);
 
     for player in world.players.values_mut() {
         player.write_packet(&EntityStatus {
             entity_id,
             logic_op_code: ENTITY_DEATH_STATUS,
         });
-        player.write_packet(&SoundEffect {
-            sound: sound.id(),
-            pos_x: pos.x,
-            pos_y: pos.y,
-            pos_z: pos.z,
-            volume: 1.0,
-            pitch: 1.0,
-        });
+        for death_sound in &sounds {
+            player.write_packet(&SoundEffect {
+                sound: death_sound.sound.id(),
+                pos_x: pos.x,
+                pos_y: pos.y,
+                pos_z: pos.z,
+                volume: death_sound.volume,
+                pitch: death_sound.pitch,
+            });
+        }
     }
 
     let is_mimic = world.entity_mob_ai.get(&entity_id).is_some_and(|state| state.archetype == DungeonMobType::Mimic);
@@ -204,8 +211,13 @@ pub fn kill_mob(world: &mut World, entity_id: EntityId) {
             room.starred_mobs_remaining = room.starred_mobs_remaining.saturating_sub(1);
             if room.starred_mobs_remaining == 0 {
                 dungeon.update_map_for_room(room_index);
-                dungeon.maybe_grant_door_key(room_index, Some(pos), crate::dungeon::room::secrets::PickupKind::Wither);
-                dungeon.maybe_grant_door_key(room_index, Some(pos), crate::dungeon::room::secrets::PickupKind::Blood);
+                let granted_wither = dungeon.maybe_grant_door_key(room_index, Some(pos), crate::dungeon::room::secrets::PickupKind::Wither);
+                let granted_blood = dungeon.maybe_grant_door_key(room_index, Some(pos), crate::dungeon::room::secrets::PickupKind::Blood);
+                // Unconditional (not gated on a Wither/Blood door existing) - see its own doc
+                // comment. `granted_wither || granted_blood` tells it whether a key room's own
+                // companion TNT already dropped here, so it doesn't also drop a redundant
+                // second one.
+                dungeon.grant_room_clear_rewards(room_index, pos, granted_wither || granted_blood);
             }
         }
     }
@@ -256,12 +268,30 @@ fn spawn_mimic_kill_decoy(world: &mut World, pos: DVec3) {
     world.despawn_entity(decoy_id);
 }
 
-fn death_sound_for(variant: &EntityVariant) -> Sounds {
-    match variant {
-        EntityVariant::Skeleton { .. } => Sounds::SkeletonDeath,
-        EntityVariant::Enderman { .. } => Sounds::EndermenDeath,
-        // Player-model dungeon NPCs use the zombie death sound too, per explicit request,
-        // rather than a "real" player hurt/death sound.
-        _ => Sounds::ZombieDeath,
-    }
+/// One sound to play at a dungeon mob's death position - `kill_mob` plays every entry in the
+/// `Vec` `death_sounds_for` returns, in order, all at that same position.
+struct DeathSound {
+    sound: Sounds,
+    volume: f32,
+    pitch: f32,
+}
+
+/// Per explicit correction: there is no zombie death sound anywhere in real dungeon mob deaths,
+/// and the double "orb pickup" ding plays for EVERY dungeon mob death, minibosses included - not
+/// just the mundane `EntityVariant::Zombie` grunts/soldiers/etc. `EntityVariant::Player` (Zombie
+/// Commander, Crypt Dreadlord, King Midas, every other human-skinned miniboss - see `spawner.rs`'s
+/// `MobBaseKind::Player`) additionally sounds like an actual player dying, and Skeleton/Enderman/
+/// Blaze minibosses (Skeleton Master/Lord, Sniper, Fels, etc.) additionally keep their own real
+/// vanilla death sound - both layered on top of the universal orb pair, never instead of it.
+fn death_sounds_for(variant: &EntityVariant) -> Vec<DeathSound> {
+    let mut sounds = match variant {
+        EntityVariant::Skeleton { .. } => vec![DeathSound { sound: Sounds::SkeletonDeath, volume: 1.0, pitch: 1.0 }],
+        EntityVariant::Enderman { .. } => vec![DeathSound { sound: Sounds::EndermenDeath, volume: 1.0, pitch: 1.0 }],
+        EntityVariant::Blaze => vec![DeathSound { sound: Sounds::BlazeDeath, volume: 1.0, pitch: 1.0 }],
+        EntityVariant::Player => vec![DeathSound { sound: Sounds::PlayerDeath, volume: 1.0, pitch: 1.0 }],
+        _ => Vec::new(),
+    };
+    sounds.push(DeathSound { sound: Sounds::Orb, volume: 1.0, pitch: 1.492 });
+    sounds.push(DeathSound { sound: Sounds::Orb, volume: 0.5, pitch: 1.73 });
+    sounds
 }

@@ -88,6 +88,14 @@ pub enum EntityVariant {
         /// rotated.
         rotation: u8,
     },
+    /// Ice Path puzzle's mob - a real silverfish, punched by players to slide it across the
+    /// ice floor (see `dungeon::room::ice_path`). No extra metadata bits beyond the base
+    /// Insentient flags every variant already gets (invisible/ai-disabled/etc.), same as `Squid`.
+    Silverfish,
+    /// Higher or Lower puzzle's mob (real room names "Lower Blaze"/"Higher Blaze", internal
+    /// `room_data.name` "Blaze" - see `dungeon::room::blaze`). Stationary/passive, killed in the
+    /// order its own nametag's HP dictates.
+    Blaze,
 }
 
 impl EntityVariant {
@@ -126,6 +134,10 @@ impl EntityVariant {
             EntityVariant::Squid => 94,
             // Item Frame object type id (Spawn Object space, 1.8).
             EntityVariant::ItemFrame { .. } => 71,
+            // Silverfish mob type id (Spawn Mob space, 1.8).
+            EntityVariant::Silverfish => 60,
+            // Blaze mob type id (Spawn Mob space, 1.8).
+            EntityVariant::Blaze => 61,
         }
     }
 

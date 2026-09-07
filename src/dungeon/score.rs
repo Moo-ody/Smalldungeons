@@ -1,4 +1,4 @@
-//! Hypixel SkyBlock Catacombs F7 score tracking + threshold chat announcements.
+//! Hypixel SkyBlock Catacombs F7 score tracking.
 //!
 //! The four category formulas (`skill_score`/`exploration_score`/`speed_score`/`bonus_score`)
 //! are plain functions with no dependency on `Dungeon`/`World` - easy to unit-test/tune in
@@ -10,12 +10,11 @@
 //! `deaths`/`failed_puzzles`/`mimic_killed`/`paul_ezpz` have no real trigger in this codebase
 //! yet (no player damage/death system, no puzzle minigames, no mimic entity) - they're plain
 //! fields with public setters (see `Dungeon::record_death` etc in `dungeon.rs`) ready to be
-//! wired up once those systems exist, plus a `/dscore` debug command so the announcement logic
+//! wired up once those systems exist, plus a `/dscore` debug command so the score breakdown
 //! itself can be exercised without them.
 
 use crate::dungeon::room::room::Room;
 use crate::dungeon::room::room_data::RoomType;
-use crate::server::world::World;
 
 const F7_FULL_SPEED_TICKS: u64 = 14 * 60 * 20;
 
@@ -86,9 +85,6 @@ pub struct DungeonScoreState {
     pub crypts: u32,
     pub mimic_killed: bool,
     pub paul_ezpz: bool,
-
-    pub announced_s: bool,
-    pub announced_s_plus: bool,
 }
 
 impl DungeonScoreState {
@@ -142,38 +138,5 @@ impl DungeonScoreState {
         self.total_rooms = total_rooms;
         self.secrets_found = secrets_found;
         self.total_secrets = total_secrets;
-    }
-
-    /// Checks the current total against the S/S+ thresholds and announces the first time each
-    /// is crossed. Safe to call every tick (score can only go up between calls in practice, but
-    /// even if it dropped, `announced_s`/`announced_s_plus` are never reset mid-run, so a
-    /// death-induced dip never causes a duplicate or "un-announce").
-    pub fn check_score_announcements(&mut self, world: &mut World) {
-        let score = self.total();
-
-        if !self.announced_s && score >= 270 {
-            self.announced_s = true;
-            broadcast(world, &format!("\u{a7}aS Score reached: \u{a7}f{score}"));
-        }
-
-        if !self.announced_s_plus && score >= 300 {
-            self.announced_s_plus = true;
-            broadcast(world, &format!("\u{a7}6S+ Score reached: \u{a7}f{score}"));
-        }
-    }
-
-    /// Sends both announcement messages unconditionally, ignoring the real score entirely -
-    /// pure chat-pipeline test for `/dscore force` so "is the message even reaching the
-    /// player" can be checked independent of whether the score arithmetic actually hits
-    /// 270/300. Does not touch `announced_s`/`announced_s_plus`, so it can't affect a real run.
-    pub fn force_announce_for_test(world: &mut World) {
-        broadcast(world, "\u{a7}aS Score reached: \u{a7}f(forced test - ignore score)");
-        broadcast(world, "\u{a7}6S+ Score reached: \u{a7}f(forced test - ignore score)");
-    }
-}
-
-fn broadcast(world: &mut World, msg: &str) {
-    for player in world.players.values_mut() {
-        player.send_message(msg);
     }
 }

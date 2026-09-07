@@ -26,8 +26,38 @@ use uuid::Uuid;
 
 pub mod tactical_insertion;
 pub use tactical_insertion::{TacticalInsertionMarker, ScheduledSound, ScheduledFixedSound};
+pub mod fluid;
 
 pub const VIEW_DISTANCE: u8 = 6;
+
+/// Cell size (blocks) for `World::mob_spatial_grid` - see that field's own doc comment. Coarser
+/// than the 0.6-block push radius `ai::physics::separation_push` actually cares about, so a
+/// mob's own cell plus its 8 neighbors always covers every mob that could possibly push it,
+/// while still keeping each cell's mob count low even under a dense stress-test-style cluster.
+pub const MOB_GRID_CELL_SIZE: f64 = 2.0;
+
+/// Which spatial-grid cell `position` falls into - shared by `rebuild_mob_spatial_grid` (which
+/// mob goes in which cell) and `ai::physics::separation_push` (which cells to look up), so the
+/// two can never disagree about the mapping.
+pub fn mob_grid_cell(position: DVec3) -> (i32, i32) {
+    (
+        (position.x / MOB_GRID_CELL_SIZE).floor() as i32,
+        (position.z / MOB_GRID_CELL_SIZE).floor() as i32,
+    )
+}
+
+/// Rebuilds `world.mob_spatial_grid` from every currently-tracked dungeon mob's position - see
+/// that field's own doc comment. O(mobs), run once per tick before the main entity-tick loop,
+/// so every mob's own `separation_push` lookup that tick sees a fully up-to-date grid.
+fn rebuild_mob_spatial_grid(world: &mut World) {
+    world.mob_spatial_grid.clear();
+    for (&entity_id, (entity, _)) in &world.entities {
+        if !world.entity_mob_ai.contains_key(&entity_id) {
+            continue;
+        }
+        world.mob_spatial_grid.entry(mob_grid_cell(entity.position)).or_default().push(entity_id);
+    }
+}
 
 /// Writes an entity's spawn packets into `buffer` in the correct order for its variant.
 ///
@@ -115,6 +145,15 @@ pub struct World {
 
     pub entities_for_removal: Vec<EntityId>,
 
+    /// Coarse spatial index of dungeon-mob positions, keyed by `(floor(x / MOB_GRID_CELL_SIZE),
+    /// floor(z / MOB_GRID_CELL_SIZE))` - rebuilt from scratch once per tick, right before the
+    /// main entity-tick loop (see `World::tick`). Exists purely so
+    /// `ai::physics::separation_push` can look up only the handful of mobs actually near a given
+    /// one instead of scanning every entity in the world - at dungeon-mob-count scale (hundreds
+    /// to low thousands, e.g. a packed stress-test spawn), the naive scan is an O(mobs^2)
+    /// per-tick cost that dominates everything else combined.
+    pub mob_spatial_grid: HashMap<(i32, i32), Vec<EntityId>>,
+
     // pub commands: Vec<Command>
     
     // pub player_info: PlayerList,
@@ -170,6 +209,7 @@ impl World {
             entity_crypt_room: HashMap::new(),
             entity_king_midas_hits: HashMap::new(),
             entities_for_removal: Vec::new(),
+            mob_spatial_grid: HashMap::new(),
 
             spawn_point: DVec3::ZERO,
             spawn_yaw: 0.0,
@@ -336,9 +376,11 @@ impl World {
         
         // Process AI suspension system (prevents immediate attack on spawn)
         self.process_ai_suspension_system();
-        
+
         // Process combat state system (manages arm pose and attack cooldowns)
         self.process_combat_state_system();
+
+        rebuild_mob_spatial_grid(self);
 
         for (entity, entity_impl) in self.entities.values_mut() {
             let packet_buffer = if let Some(chunk) = entity.chunk_mut() {

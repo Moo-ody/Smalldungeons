@@ -25,7 +25,7 @@ use crate::dungeon::dungeon::{Dungeon, DUNGEON_ORIGIN};
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room::{Room, RoomSegment};
 use crate::dungeon::room::room_data::{RoomData, RoomShape, RoomType};
-use crate::net::protocol::play::clientbound::{DestroyEntites, PositionLook};
+use crate::net::protocol::play::clientbound::DestroyEntites;
 use crate::net::var_int::VarInt;
 use crate::server::block::block_parameter::Axis;
 use crate::server::dungeon_switch::{discard_chunk_packet_noise, full_dungeon_chunk_bounds, resync_chunk_range, wipe_chunk_range};
@@ -57,17 +57,63 @@ fn supported_shape(shape: &RoomShape) -> bool {
 /// Chat commands split on whitespace, so a room whose real name has a space in it (e.g. "Quartz
 /// Knight") can never be typed as a single argument - these are listed (and matched, see
 /// `find_room_data`) with spaces replaced by underscores instead (`quartz_knight`).
+///
+/// "Blaze" is excluded from this generic listing and replaced with `higher_blaze`/`lower_blaze`
+/// instead (see `find_room_data`'s own doc comment for why) - the plain `blaze` name would be
+/// genuinely ambiguous (this project's own data model gives both physical rooms the identical
+/// `room_data.name` "Blaze", only distinguishable by `bottom`), so surfacing it unqualified would
+/// silently pick whichever of the two happens to iterate first.
 pub fn supported_room_names(server: &Server) -> Vec<String> {
     let mut names: Vec<String> = server.room_data_storage.values()
-        .filter(|data| data.room_type != RoomType::Boss && supported_shape(&data.shape))
+        .filter(|data| data.room_type != RoomType::Boss && supported_shape(&data.shape) && data.name != "Blaze")
         .map(|data| data.name.replace(' ', "_"))
         .collect();
+    names.push("higher_blaze".to_string());
+    names.push("lower_blaze".to_string());
+    // `water_board_0`..`water_board_3` - see `find_room_data`'s own special case: each picks one
+    // specific real captured pattern (`RoomData::id` `water_board_pattern_N`) out of the 5 real
+    // "Water Board" room variants, deliberately, instead of plain `water_board`'s arbitrary pick.
+    for pattern in 0..4 {
+        names.push(format!("water_board_{pattern}"));
+    }
     names.sort();
     names.dedup();
     names
 }
 
+/// `higher_blaze`/`lower_blaze` are special-cased ahead of the generic name match - both physical
+/// Blaze rooms share the identical `room_data.name` "Blaze" (this project's own data model doesn't
+/// split them into two named rooms the way Odin does - see `blaze.rs`'s own module doc comment),
+/// so `bottom` (15 vs 65, `blaze::HIGHER_BLAZE_BOTTOM`/`LOWER_BLAZE_BOTTOM`) is the only field that
+/// actually tells them apart. Without this, `/practice blaze` could only ever reach whichever of
+/// the two happened to iterate first out of `room_data_storage` - no way to deliberately pick the
+/// other one to test.
 fn find_room_data(server: &Server, room_name: &str) -> Option<RoomData> {
+    let lower = room_name.to_ascii_lowercase();
+    if lower == "higher_blaze" || lower == "lower_blaze" {
+        let want_bottom = if lower == "higher_blaze" { crate::dungeon::room::blaze::HIGHER_BLAZE_BOTTOM } else { crate::dungeon::room::blaze::LOWER_BLAZE_BOTTOM };
+        return server.room_data_storage.values()
+            .find(|data| data.name == "Blaze" && data.bottom == want_bottom)
+            .cloned();
+    }
+
+    // `water_board_0`..`water_board_3` - Water Board's real maze pattern is purely internal
+    // variety (exactly ONE real `room_data_storage` entry, see `waterboard::pick_pattern`'s own
+    // doc comment for why - NOT 4 separate storage entries, unlike Blaze's real Higher/Lower
+    // split just above), normally rolled fresh at real dungeon-generation time. This deterministic
+    // variant (`waterboard::apply_pattern`, the same swap-and-tag logic `pick_pattern` itself
+    // uses, just caller-picked instead of rolled) lets `/practice` deliberately test one specific
+    // real pattern instead of whatever `pick_pattern` would have randomly chosen.
+    if let Some(pattern) = lower.strip_prefix("water_board_").and_then(|rest| rest.parse::<u8>().ok()) {
+        if pattern < 4 {
+            let mut data = server.room_data_storage.values()
+                .find(|data| data.name == "Water Board")?
+                .clone();
+            crate::dungeon::room::waterboard::apply_pattern(&mut data, pattern);
+            return Some(data);
+        }
+    }
+
     let normalized = room_name.replace('_', " ");
     server.room_data_storage.values()
         .find(|data| data.room_type != RoomType::Boss
@@ -257,6 +303,13 @@ fn apply_practice_dungeon(server: &mut Server, mut new_dungeon: Dungeon) -> anyh
 /// visible/interactable the instant the room loads rather than popping in as you walk near it.
 /// Marks the room `entered` and `room_entry_secrets_spawned` too, so `Dungeon::tick`'s normal
 /// entry-secret pass (which already checks `has_spawned`) doesn't redundantly re-spawn anything.
+///
+/// Forcing `entered = true` here also means `Dungeon::tick`'s own room-entry hook (the one that
+/// normally rolls Water Board's gates - see `waterboard_spawned`) never gets a chance to fire on
+/// its own for a practice room, since by the time a player's next tick runs the room already
+/// reports itself as already-entered. So this replicates that hook directly, the same way it
+/// already replicates the entry-secrets pass above - otherwise `/rs` on a Water Board practice
+/// room would keep whatever gates the room happened to load with instead of re-randomizing them.
 fn spawn_all_secrets(server: &mut Server) {
     let Some(room) = server.dungeon.rooms.get(0) else { return };
     let secrets = room.json_secrets.clone();
@@ -270,21 +323,47 @@ fn spawn_all_secrets(server: &mut Server) {
         crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(&secret_rc, secret, &mut server.world);
     }
 
+    let mut just_entered_waterboard = false;
     if let Some(room) = server.dungeon.rooms.get_mut(0) {
         room.entered = true;
         room.room_entry_secrets_spawned = true;
+
+        if room.room_data.name == "Water Board" && !room.waterboard_spawned {
+            room.waterboard_spawned = true;
+            just_entered_waterboard = true;
+        }
+    }
+
+    if just_entered_waterboard {
+        if let Some(room) = server.dungeon.rooms.get_mut(0) {
+            crate::dungeon::room::waterboard::setup(room, 0, &mut server.world);
+        }
     }
 }
 
 fn teleport_player(player: &mut crate::server::player::player::Player, pos: DVec3, yaw: f32, pitch: f32) {
-    player.position = pos;
-    player.last_position = pos;
+    // Yaw/pitch aren't part of the position-reconciliation race `server_teleport` guards
+    // against (see `PendingTeleport`'s doc comment) - flags 0 means fully absolute look too, so
+    // set them directly here the same way this always has.
     player.yaw = yaw;
     player.last_yaw = yaw;
     player.pitch = pitch;
     player.last_pitch = pitch;
     player.practice_last_spawn = Some((pos, yaw, pitch));
-    player.write_packet(&PositionLook { x: pos.x, y: pos.y, z: pos.z, yaw, pitch, flags: 0 });
+
+    // `server_teleport` leaves `last_position` alone (see its own doc comment), so the normal
+    // per-tick "you moved, resync newly-visible chunks" diff already fires correctly for this
+    // jump on its own - that covers any chunk the client has genuinely never been told about.
+    // `flush_all_pending_chunk_sync` below is for a separate, narrower race: chunks that WERE
+    // already queued as part of the original join snapshot (see `server::sync_player_view`'s
+    // staggering) but might not have finished sending yet if `/practice` fires soon enough after
+    // joining - that queue is independent of the per-tick diff mechanism, so it needs its own
+    // explicit flush. See `server::flush_all_pending_chunk_sync`'s doc comment for the full story
+    // (this is what was silently breaking Odin's one-shot room-identification for
+    // `/practice`-teleported rooms, Blaze most of all).
+    player.server_teleport(pos, yaw, pitch, 0);
+    crate::server::server::flush_all_pending_chunk_sync(player);
+
     player.flush_packets();
 }
 

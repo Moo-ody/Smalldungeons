@@ -15,7 +15,7 @@
 
 use crate::dungeon::dungeon::{Dungeon, DUNGEON_ORIGIN};
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{CloseWindow, DestroyEntites, Maps, PlayerListItem, PositionLook, Teams};
+use crate::net::protocol::play::clientbound::{CloseWindow, DestroyEntites, Maps, PlayerListItem, Teams};
 use crate::net::var_int::VarInt;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::entity::entity::EntityId;
@@ -252,20 +252,14 @@ pub fn switch_dungeon(server: &mut Server) -> anyhow::Result<()> {
             map_data: vec![0u8; 128 * 128],
         });
 
-        player.position = teleport_position;
-        player.last_position = teleport_position;
         player.yaw = spawn_yaw;
         player.last_yaw = spawn_yaw;
         player.pitch = spawn_pitch;
         player.last_pitch = spawn_pitch;
-        player.write_packet(&PositionLook {
-            x: teleport_position.x,
-            y: teleport_position.y,
-            z: teleport_position.z,
-            yaw: spawn_yaw,
-            pitch: spawn_pitch,
-            flags: 0,
-        });
+        // Repositions players in place without a full client respawn/relogin, so a pre-switch
+        // position report can genuinely still be in flight - `server_teleport` guards against it
+        // the same as any other mid-session teleport (see `PendingTeleport`'s doc comment).
+        player.server_teleport(teleport_position, spawn_yaw, spawn_pitch, 0);
 
         // Anything scoped to the old run specifically, not the player's session as a whole.
         player.current_room_index = None;

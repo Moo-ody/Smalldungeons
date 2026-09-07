@@ -1,5 +1,5 @@
 use crate::net::internal_packets::NetworkThreadMessage;
-use crate::net::protocol::play::clientbound::{Particles, PositionLook, SoundEffect};
+use crate::net::protocol::play::clientbound::{Particles, SoundEffect};
 use crate::server::block::blocks::Blocks;
 use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
@@ -61,17 +61,11 @@ pub fn handle_ether_warp(
             speed: 0.0,
             count: 25,
         });
-        player.write_packet(&PositionLook {
-            x: x as f64 + 0.5,
-            y: y as f64 + 1.05,
-            z: z as f64 + 0.5,
-            yaw: 0.0,
-            pitch: 0.0,
-            // these flags make xyz absolute meaning they set directly
-            // while keeping yaw and pitch relative (meaning it is added to players yaw)
-            // since yaw and pitch provided is 0, it doesn't rotate the player causing head snapping
-            flags: 24,
-        });
+        // flags 24: xyz absolute, yaw/pitch relative-with-zero-delta (keeps current look, no
+        // head-snap). `server_teleport` keeps the server's own `position` authoritative and
+        // rejects any client position report until it exactly echoes this destination back -
+        // see `Player::server_teleport`'s doc comment.
+        player.server_teleport(DVec3::new(x as f64 + 0.5, y as f64 + 1.05, z as f64 + 0.5), 0.0, 0.0, 24);
         player.write_packet(&SoundEffect {
             sound: "mob.enderdragon.hit",
             volume: 1.0,
@@ -175,11 +169,18 @@ pub fn handle_teleport(
     let mut last_safe_block: Option<(i32, i32, i32)> = None;
     let mut current = start;
 
-    for _ in 0..steps {
+    for step_index in 0..steps {
         current = DVec3::new(current.x + step.x, current.y + step.y, current.z + step.z);
         let bx = current.x.floor() as i32;
         let by = current.y.floor() as i32;
         let bz = current.z.floor() as i32;
+
+        // Per explicit request: ignore the first block raycast, but only if that first block is
+        // Iron Bars - every other first-sample block still goes through the normal check below.
+        if step_index == 0 && matches!(block_at(player, bx, by, bz), Blocks::IronBars) {
+            last_safe_block = Some((bx, by, bz));
+            continue;
+        }
 
         // We want to stand in this cell: require feet and head passable
         if is_passable_for_transmission(block_at(player, bx, by, bz))
@@ -197,14 +198,7 @@ pub fn handle_teleport(
         let dest_y = by as f64; // feet at block base; client packet uses absolute feet
         let dest_z = bz as f64 + 0.5;
 
-        player.write_packet(&PositionLook {
-            x: dest_x,
-            y: dest_y,
-            z: dest_z,
-            yaw: 0.0,
-            pitch: 0.0,
-            flags: 24,
-        });
+        player.server_teleport(DVec3::new(dest_x, dest_y, dest_z), 0.0, 0.0, 24);
     }
 
     Ok(())

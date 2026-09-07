@@ -91,6 +91,7 @@ impl Item {
                     damage_echo_window_ticks: 60,
                     yaw: player.yaw,
                     pitch: player.pitch,
+                    is_mushroom_secret: false,
                 };
                 
                 // Schedule sounds to play before return (exact timing from Hypixel test)
@@ -271,6 +272,12 @@ impl Item {
                     ]),
                     NBT::compound("ExtraAttributes", vec![
                         NBT::string("id", "ASPECT_OF_THE_VOID"),
+                        // Real Hypixel's flag for "the Etherwarp perk is unlocked on this item" -
+                        // without it, client mods (confirmed against OdinClient's own
+                        // `ItemStack.isEtherwarpItem()`: `customData.getInt("ethermerge") == 1 ||
+                        // itemId == "ETHERWARP_CONDUIT"`) never recognize this as an etherwarp-
+                        // capable item at all, so their Etherwarp helper/render never activates.
+                        NBT::int("ethermerge", 1),
                     ]),
                 ])),
             },

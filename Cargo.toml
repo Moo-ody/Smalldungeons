@@ -20,6 +20,18 @@ base64 = "0.22.1"
 once_cell = "1.21.3"
 bitflags = "2.5"
 
+[profile.dev]
+# `[profile.dev.package."*"]` below only ever optimized dependencies - the actual RustClear crate
+# itself (world tick, pathfinding, etherwarp/entity physics, dungeon rebuild on /rs, etc. - most of
+# what actually runs every tick) stayed at the default dev opt-level 0, unoptimized. That's the
+# real source of broad, cross-system lag in a debug build, not any one bug. opt-level 3 here brings
+# the crate's own code up to the same optimization release uses; `debug = true` (dev's own default)
+# and incremental compilation stay on, so panics/backtraces still work and iterative rebuilds after
+# a small change stay fast - full `lto`/`codegen-units = 1` (release's own settings) are
+# deliberately NOT mirrored here, since those mostly help final binary performance at a steep
+# rebuild-time cost, not the kind of thing worth paying on every edit-test cycle.
+opt-level = 3
+
 [profile.dev.package."*"]
 opt-level = 3
 

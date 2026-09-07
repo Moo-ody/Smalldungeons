@@ -67,6 +67,24 @@ pub enum BlockInteractAction {
         state: Rc<RefCell<crate::dungeon::room::tic_tac_toe::TicTacToeState>>,
         index: usize,
     },
+    QuizButton {
+        state: Rc<RefCell<crate::dungeon::room::quiz::QuizState>>,
+        answer_index: usize,
+    },
+    /// A button or qualifying face-center sign on one face of a Boulder puzzle box - see
+    /// `dungeon::room::boulder`. Pushing it moves the box at `(grid_x, grid_z)` one grid cell in
+    /// `direction`.
+    BoulderTrigger {
+        state: Rc<RefCell<crate::dungeon::room::boulder::BoulderState>>,
+        grid_x: i32,
+        grid_z: i32,
+        direction: crate::server::utils::direction::Direction,
+    },
+    /// One of the Water Board puzzle's 7 real levers - see `dungeon::room::waterboard`.
+    WaterboardLever {
+        state: Rc<RefCell<crate::dungeon::room::waterboard::WaterboardState>>,
+        lever: crate::dungeon::room::waterboard::LeverKind,
+    },
     // mainly for quick debug,
     Callback(fn(&Player, &BlockPos)),
 }
@@ -116,7 +134,7 @@ impl BlockInteractAction {
                     }
 
                     // Send message to all players when WITHER door is opened
-                    let message = format!("§b{} §aopened a §8§lWITHER §adoor!", player.profile.username);
+                    let message = format!("§a{} §aopened a §8§lWITHER §adoor!", player.profile.username);
                     for (_, other_player) in &mut player.server_mut().world.players {
                         let _ = other_player.send_message(&message);
                     }
@@ -252,18 +270,32 @@ impl BlockInteractAction {
                     // its own) marks that room done and broadcasts the solved message right here,
                     // not any earlier.
                     if let Some(puzzle_room_index) = secret.puzzle_room_index {
-                        let room_name = player.server_mut().dungeon.rooms.get(puzzle_room_index)
-                            .map(|r| r.room_data.name.clone())
-                            .unwrap_or_default();
-                        if let Some(room) = player.server_mut().dungeon.rooms.get_mut(puzzle_room_index) {
-                            room.puzzle_completed = true;
+                        // A single-chest puzzle (`puzzle_chest_group: None`) completes right away,
+                        // same as before. A grouped puzzle (Ice Fill's two blessing chests) only
+                        // completes once every chest in the group has been opened - this chest's
+                        // own open just counts down the group's shared counter.
+                        let ready = match &secret.puzzle_chest_group {
+                            Some(counter) => {
+                                let remaining = counter.get().saturating_sub(1);
+                                counter.set(remaining);
+                                remaining == 0
+                            }
+                            None => true,
+                        };
+                        if ready {
+                            let room_name = player.server_mut().dungeon.rooms.get(puzzle_room_index)
+                                .map(|r| r.room_data.name.clone())
+                                .unwrap_or_default();
+                            if let Some(room) = player.server_mut().dungeon.rooms.get_mut(puzzle_room_index) {
+                                room.puzzle_completed = true;
+                            }
+                            let username = player.profile.username.clone();
+                            let message = format!("\u{a7}a\u{a7}lPUZZLE SOLVED! \u{a7}a{username} \u{a7}esolved the {room_name} puzzle!");
+                            for other_player in player.server_mut().world.players.values_mut() {
+                                other_player.send_message(&message);
+                            }
+                            player.server_mut().dungeon.update_map_for_room(puzzle_room_index);
                         }
-                        let username = player.profile.username.clone();
-                        let message = format!("\u{a7}a\u{a7}lPUZZLE SOLVED! \u{a7}7{username} \u{a7}esolved the {room_name} puzzle!");
-                        for other_player in player.server_mut().world.players.values_mut() {
-                            other_player.send_message(&message);
-                        }
-                        player.server_mut().dungeon.update_map_for_room(puzzle_room_index);
                     }
 
                     // A "blessing" chest also gets the same real captured effect
@@ -288,13 +320,18 @@ impl BlockInteractAction {
                             });
                         }
 
+                        use crate::dungeon::blessings::BlessingKind;
                         use crate::dungeon::room::secrets::EssenceEntityImpl;
                         // One of the 4 real Catacombs blessing types, picked fresh each time this
-                        // specific chest is opened.
-                        const BLESSING_TYPES: [&str; 4] = ["Power", "Stone", "Wisdom", "Life"];
+                        // specific chest is opened. The level (and the actual "DUNGEON BUFF!"
+                        // chat announcement) isn't decided here - it's computed fresh, from the
+                        // dungeon's own persistent per-type level tracker, right when the
+                        // essence despawns (`EssenceEntityImpl::tick`'s despawn branch) - matches
+                        // real Hypixel blessings being a shared, run-persistent level, not a
+                        // fresh roll each pickup.
                         use rand::Rng;
-                        let blessing_type = BLESSING_TYPES[rand::rng().random_range(0..BLESSING_TYPES.len())];
-                        let nametag = format!("\u{a7}dBlessing of {blessing_type}");
+                        let blessing_type = BlessingKind::ALL[rand::rng().random_range(0..BlessingKind::ALL.len())];
+                        let nametag = format!("\u{a7}dBlessing of {}", blessing_type.display_name());
 
                         // Same offset `WitherEssence` uses for this exact effect - the armor
                         // stand's own body height means the equipped head only lines up with
@@ -311,7 +348,7 @@ impl BlockInteractAction {
                             // 15s, confirmed - long enough to actually read the nametag and grab
                             // the buff, unlike the original 1s wither-essence animation this
                             // reuses.
-                            EssenceEntityImpl { texture, lifetime_ticks: 300 },
+                            EssenceEntityImpl { texture, lifetime_ticks: 300, blessing: Some(blessing_type) },
                         );
                     }
                 }
@@ -324,9 +361,16 @@ impl BlockInteractAction {
 
                 // Spawn at the chest's own position (feet-level, matching where the block
                 // was) - the AI's gravity/physics settles it onto the floor the same as any
-                // other mob spawn.
+                // other mob spawn. Needs the room it's in (same lookup the secret-count code
+                // below already does, just moved up so both share one call) so `MobAiState`
+                // knows which room's `entered` flag gates its own dormant/active state - not
+                // that it matters in practice here, since interacting with the chest already
+                // means the player is standing in this exact room, hence already entered.
                 let spawn_pos = DVec3::new(block_pos.x as f64 + 0.5, block_pos.y as f64, block_pos.z as f64 + 0.5);
-                let _ = crate::server::entity::dungeon_mobs::spawner::spawn_mimic(world, spawn_pos, 0.0);
+                if let Some(room_index) = player.server_mut().dungeon.get_room_at(block_pos.x, block_pos.z) {
+                    let world = &mut player.server_mut().world;
+                    let _ = crate::server::entity::dungeon_mobs::spawner::spawn_mimic(world, spawn_pos, 0.0, room_index);
+                }
 
                 // Finding the mimic counts as a secret too (real Hypixel behaviour), same
                 // found_secrets/update_map_for_room mechanism as a normal `Self::Chest` open -
@@ -361,22 +405,36 @@ impl BlockInteractAction {
                 let pitch = player.pitch;
 
                 // Teleport immediately to the corresponding UP point (center) by resolving within the player's current room
+                let mut consumed_positions: Vec<BlockPos> = Vec::new();
                 {
                     let dungeon = &mut player.server_mut().dungeon;
                     if let Some(room_index) = dungeon.get_player_room(player) {
                         let room_ref = &dungeon.rooms[room_index];
                         if let Some(set) = room_ref.mushroom_sets.iter().find(|s| s.bottom.iter().any(|bp| bp == block_pos)) {
                             if let Some(dest) = set.up.get(0) {
-                                player.write_packet(&crate::net::protocol::play::clientbound::PositionLook {
-                                    x: dest.x as f64 + 0.5,
-                                    y: dest.y as f64,
-                                    z: dest.z as f64 + 0.5,
-                                    yaw,
-                                    pitch,
-                                    flags: 0,
-                                });
+                                let pos = crate::server::utils::dvec3::DVec3::new(dest.x as f64 + 0.5, dest.y as f64, dest.z as f64 + 0.5);
+                                player.server_teleport(pos, yaw, pitch, 0);
+                                // Per explicit request: feels like stepping through a portal -
+                                // max Nausea plus the same portal sound/particle combo teleport
+                                // pads already use, cleared again the moment either return path
+                                // (top click or the automatic timeout) fires - see
+                                // `mushroom::apply_mushroom_up_effects`'s own doc comment.
+                                crate::dungeon::room::mushroom::apply_mushroom_up_effects(player, pos);
+                                // Per explicit correction: bottom and top are consumed
+                                // independently, not together - clicking ANY bottom mushroom
+                                // immediately retires every bottom mushroom in this set (so none
+                                // of them can start a fresh trip again), but leaves the top
+                                // mushroom(s) alone; a top click (below) does the mirror image.
+                                consumed_positions.extend(set.bottom.iter().copied());
                             }
                         }
+                    }
+                }
+
+                if !consumed_positions.is_empty() {
+                    let world = player.world_mut();
+                    for pos in consumed_positions {
+                        world.interactable_blocks.remove(&pos);
                     }
                 }
 
@@ -388,25 +446,42 @@ impl BlockInteractAction {
                     damage_echo_window_ticks: 0,
                     yaw,
                     pitch,
+                    is_mushroom_secret: true,
                 };
                 // Optional cooldown sound pattern could be added to Vec
                 player.world_mut().tactical_insertions.push((marker, Vec::<ScheduledSound>::new()));
             }
 
             Self::MushroomTop => {
-                // Only valid if active
+                // Per explicit correction: consumed independently of the bottom mushroom(s) -
+                // clicking ANY top mushroom immediately retires every top mushroom in this set,
+                // leaving the bottom mushroom(s) alone (mirrors `MushroomBottom`'s own half above).
+                let mut consumed_positions: Vec<BlockPos> = Vec::new();
+                {
+                    let dungeon = &mut player.server_mut().dungeon;
+                    if let Some(room_index) = dungeon.get_player_room(player) {
+                        let room_ref = &dungeon.rooms[room_index];
+                        if let Some(set) = room_ref.mushroom_sets.iter().find(|s| s.top.iter().any(|bp| bp == block_pos)) {
+                            consumed_positions.extend(set.top.iter().copied());
+                        }
+                    }
+                }
+                if !consumed_positions.is_empty() {
+                    let world = player.world_mut();
+                    for pos in consumed_positions {
+                        world.interactable_blocks.remove(&pos);
+                    }
+                }
+
+                // Only valid if active - specifically a mushroom trip's own marker, not some
+                // unrelated active Tactical Insertion (the real item shares this same queue) a
+                // player might also happen to have going.
                 let world = player.world_mut();
-                if let Some(idx) = world.tactical_insertions.iter().position(|(m, _)| m.client_id == player.client_id) {
+                if let Some(idx) = world.tactical_insertions.iter().position(|(m, _)| m.client_id == player.client_id && m.is_mushroom_secret) {
                     let (marker, _) = world.tactical_insertions.remove(idx);
                     // Teleport immediately to origin and keep yaw/pitch
-                    player.write_packet(&crate::net::protocol::play::clientbound::PositionLook {
-                        x: marker.origin.x,
-                        y: marker.origin.y,
-                        z: marker.origin.z,
-                        yaw: marker.yaw,
-                        pitch: marker.pitch,
-                        flags: 0,
-                    });
+                    player.server_teleport(marker.origin, marker.yaw, marker.pitch, 0);
+                    crate::dungeon::room::mushroom::clear_mushroom_up_effects(player, marker.origin);
                 }
             }
 
@@ -474,7 +549,7 @@ impl BlockInteractAction {
                             metadata.is_invisible = true;
                             metadata
                         },
-                        EssenceEntityImpl { texture: WITHER_ESSENCE_TEXTURE, lifetime_ticks: 20 },
+                        EssenceEntityImpl { texture: WITHER_ESSENCE_TEXTURE, lifetime_ticks: 20, blessing: None },
                     ).unwrap();
 
                     secret.obtained = true;
@@ -787,6 +862,18 @@ impl BlockInteractAction {
 
             Self::TicTacToeButton { state, index } => {
                 crate::dungeon::room::tic_tac_toe::interact_cell(player, *index, state);
+            }
+
+            Self::QuizButton { state, answer_index } => {
+                crate::dungeon::room::quiz::interact_button(player, block_pos, *answer_index, state);
+            }
+
+            Self::BoulderTrigger { state, grid_x, grid_z, direction } => {
+                crate::dungeon::room::boulder::handle_push(player, state, *grid_x, *grid_z, *direction);
+            }
+
+            Self::WaterboardLever { state, lever } => {
+                crate::dungeon::room::waterboard::handle_lever(player, state, *lever);
             }
 
             Self::Callback(func) => {

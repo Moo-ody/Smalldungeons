@@ -70,6 +70,14 @@ pub struct DungeonSecret {
     /// interact handler marks this room index `puzzle_completed` and broadcasts the solved
     /// message the first time this chest is opened, instead of any of that happening earlier.
     pub puzzle_room_index: Option<usize>,
+    /// Shared countdown for a puzzle whose win condition is opening *multiple* specific chests
+    /// (Ice Fill's two blessing chests, confirmed: opening both is the actual win condition, not
+    /// just reaching/opening either one) rather than any single chest completing it outright.
+    /// `Some`, pointing at the same counter, on every secret in the group - `puzzle_room_index`
+    /// above only actually completes the room once this counter reaches 0 (decremented on each
+    /// open in the `Chest` interact handler). `None` keeps today's behavior: `puzzle_room_index`
+    /// completes the instant that one chest opens (Teleport Maze's single reward chest).
+    pub puzzle_chest_group: Option<Rc<std::cell::Cell<u8>>>,
     /// Whether opening this chest increments the room's `found_secrets` count (see the `Chest`
     /// interact handler in `block_interact_action.rs`). `true` for every ordinary secret chest;
     /// `false` for a chest that's purely a bonus reward and isn't one of the room's actual
@@ -151,6 +159,7 @@ impl DungeonSecret {
             bat_spawn_tick: None,
             blessing_texture: None,
             puzzle_room_index: None,
+            puzzle_chest_group: None,
             counts_as_secret: true,
         }
     }
@@ -582,6 +591,13 @@ pub struct EssenceEntityImpl {
     /// here - metadata like that is already baked into the spawn packet by the time
     /// `EntityImpl::spawn` runs, so there's nothing for this struct itself to do with it.
     pub lifetime_ticks: u32,
+    /// `Some` only for a real blessing chest's reveal (not the original wither-essence use) -
+    /// which of the 4 blessing types this is, so the despawn-time "DUNGEON BUFF!" chat
+    /// announcement (see `dungeon::blessings::format_pickup_message`) knows what to say. The
+    /// floating nametag shown for the full 15s hover doesn't include a level (matches the
+    /// pre-existing, unchanged behavior at the call site) - only the chat message does, computed
+    /// fresh right when it's actually granted.
+    pub blessing: Option<crate::dungeon::blessings::BlessingKind>,
 }
 
 impl EntityImpl for EssenceEntityImpl {
@@ -675,6 +691,17 @@ impl EntityImpl for EssenceEntityImpl {
             };
 
             let world = entity.world_mut();
+
+            // The blessing is actually granted/announced right here, at a fixed level (no
+            // per-run level tracking - see `dungeon::blessings`'s own doc comment).
+            if let Some(kind) = self.blessing {
+                let lines = crate::dungeon::blessings::format_pickup_message(kind, crate::dungeon::blessings::FIXED_LEVEL);
+                for player in world.players.values_mut() {
+                    player.send_message(&lines[0]);
+                    player.send_message(&lines[1]);
+                }
+            }
+
             for player in world.players.values_mut() {
                 // Send twice (as per Hypixel behavior)
                 player.write_packet(&sound_packet);
@@ -686,38 +713,46 @@ impl EntityImpl for EssenceEntityImpl {
 }
 
 /// What a `PickupEntityImpl` gives the player: a Wither/Blood Door key (a boolean flag, not a
-/// real inventory item) or Superboom TNT (a real stackable inventory item). Wither/Blood also
-/// double as which `DoorType` they gate - TNT isn't tied to any door, it just always spawns
-/// alongside whichever key is being granted (see `Dungeon::maybe_grant_door_key`).
+/// real inventory item), Superboom TNT (a real stackable inventory item), or a random Dungeon
+/// Blessing (see `dungeon::blessings`). Wither/Blood also double as which `DoorType` they gate -
+/// the rest aren't tied to any door.
+///
+/// `Blessing` is granted on room clear alongside a guaranteed `Tnt` (see
+/// `Dungeon::grant_room_clear_rewards`) - "like how wither keys drop on last mob" - reusing this
+/// same walk-up-and-touch pickup mechanism rather than the timer-based `EssenceEntityImpl` a
+/// blessing chest's own reveal uses, since that's specifically what was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickupKind {
     Wither,
     Blood,
     Tnt,
+    Blessing(crate::dungeon::blessings::BlessingKind),
 }
 
 impl PickupKind {
-    /// `None` for `Tnt` - it has no door of its own, see the type-level doc comment.
+    /// `None` for everything except the two real door keys - see the type-level doc comment.
     pub fn door_type(self) -> Option<crate::dungeon::door::DoorType> {
         match self {
             PickupKind::Wither => Some(crate::dungeon::door::DoorType::WITHER),
             PickupKind::Blood => Some(crate::dungeon::door::DoorType::BLOOD),
-            PickupKind::Tnt => None,
+            PickupKind::Tnt | PickupKind::Blessing(_) => None,
         }
     }
 
     /// Floating nametag text, and also what's used mid-sentence in the "has obtained" message
-    /// below (both happen to want the same colored name).
-    pub fn colored_name(self) -> &'static str {
+    /// below (both happen to want the same colored name). Owned rather than `&'static str`
+    /// only because `Blessing`'s name depends on which of the 4 types it randomly picked.
+    pub fn colored_name(self) -> String {
         match self {
-            PickupKind::Wither => "\u{a7}8Wither Key",
-            PickupKind::Blood => "\u{a7}cBlood Key",
-            PickupKind::Tnt => "\u{a7}9Superboom TNT",
+            PickupKind::Wither => "\u{a7}8Wither Key".to_string(),
+            PickupKind::Blood => "\u{a7}cBlood Key".to_string(),
+            PickupKind::Tnt => "\u{a7}9Superboom TNT".to_string(),
+            PickupKind::Blessing(kind) => format!("\u{a7}dBlessing of {}", kind.display_name()),
         }
     }
 
-    /// Personal follow-up lines sent only to the picker, not broadcast - empty for TNT, which
-    /// doesn't need "how to use this" instructions.
+    /// Personal follow-up lines sent only to the picker, not broadcast - empty for anything that
+    /// doesn't need "how to use this" instructions (only the two real keys do).
     ///
     /// Each kind is a single combined string, not two - Skytils' `DungeonListener.keyPickupRegex`
     /// (`§r§e§lRIGHT CLICK §r§7on §r§7.+?§r§7 to open it\. This key can only be used to open
@@ -738,17 +773,23 @@ impl PickupKind {
             PickupKind::Blood => &[
                 "\u{a7}r\u{a7}e\u{a7}lRIGHT CLICK \u{a7}r\u{a7}7on \u{a7}r\u{a7}7the \u{a7}cBLOOD DOOR\u{a7}r\u{a7}7 to open it. This key can only be used to open \u{a7}r\u{a7}a1\u{a7}r\u{a7}7 door!\u{a7}r",
             ],
-            PickupKind::Tnt => &[],
+            PickupKind::Tnt | PickupKind::Blessing(_) => &[],
         }
     }
 
     /// Bare base64 `Value` (no `Signature`) for `ItemStack::set_skull_owner` - same unsigned-skull
-    /// convention already used for the Mimic/Sniper/Fels heads in `spawner.rs`. Only meaningful
-    /// for the two key kinds - `equipped_item` below never calls this for `Tnt`.
+    /// convention already used for the Mimic/Sniper/Fels heads in `spawner.rs`. Never called for
+    /// `Tnt`, which has no skull at all - see `equipped_item` below.
     fn skull_texture(self) -> &'static str {
         match self {
             PickupKind::Wither => "ewogICJ0aW1lc3RhbXAiIDogMTYwMzYxMDQ0MzU4MywKICAicHJvZmlsZUlkIiA6ICIzM2ViZDMyYmIzMzk0YWQ5YWM2NzBjOTZjNTQ5YmE3ZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJEYW5ub0JhbmFubm9YRCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9lNDllYzdkODJiMTQxNWFjYWUyMDU5Zjc4Y2QxZDE3NTRiOWRlOWIxOGNhNTlmNjA5MDI0YzRhZjg0M2Q0ZDI0IgogICAgfQogIH0KfQ==",
             PickupKind::Blood => "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNmU1Y2Y3ZjJlMGY2YjE2N2IwYjZmZDBjNGFjMTZjYTcwZTRjNWM4MTFiOGQ1YWQwZWVkMmUzYWE2ZGQyYjcifX19",
+            // Same shared texture the blessing-chest reveal itself uses for all 4 types
+            // (`REWARD_BLESSING_TEXTURE` in `boulder.rs`/`ice_fill.rs`/`tic_tac_toe.rs`/
+            // `ice_path.rs`/`teleport_maze.rs`, each keeping its own copy rather than importing a
+            // shared one - following that same convention here) - only the nametag varies per
+            // type, not the skin.
+            PickupKind::Blessing(_) => "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTkzZTIwNjg2MTc4NzJjNTQyZWNkYTFkMjdkZjRlY2U5MWM2OTk5MDdiZjMyN2M0ZGRiODUzMDk0MTJkMzkzOSJ9fX0=",
             PickupKind::Tnt => unreachable!("Tnt has no skull texture"),
         }
     }
@@ -756,7 +797,7 @@ impl PickupKind {
     /// What the floating armor stand wears in its helmet slot.
     fn equipped_item(self) -> ItemStack {
         match self {
-            PickupKind::Wither | PickupKind::Blood => {
+            PickupKind::Wither | PickupKind::Blood | PickupKind::Blessing(_) => {
                 let mut skull = ItemStack {
                     item: 397, // Player head
                     stack_size: 1,
@@ -775,13 +816,16 @@ impl PickupKind {
         }
     }
 
-    /// Applies the actual effect to `player` - a boolean flag for either key. TNT is purely
-    /// cosmetic (a floating prop next to the key, nothing more) and gets no effect at all.
+    /// Applies the actual effect to `player` - a boolean flag for either key. TNT and Blessing
+    /// are both purely cosmetic props with no direct player-state effect: TNT has nothing to
+    /// grant at all, and a blessing's real "effect" is the DUNGEON BUFF! chat announcement (this
+    /// project has no stat system to actually apply a buff to), handled as a special case in
+    /// `PickupEntityImpl::tick` instead of here.
     fn apply(self, player: &mut Player) {
         match self {
             PickupKind::Wither => player.has_wither_key = true,
             PickupKind::Blood => player.has_blood_key = true,
-            PickupKind::Tnt => {}
+            PickupKind::Tnt | PickupKind::Blessing(_) => {}
         }
     }
 }
@@ -879,27 +923,36 @@ impl EntityImpl for PickupEntityImpl {
 
         self.kind.apply(player);
 
-        player.write_packet(&CollectItem {
-            item_entity_id: VarInt(entity.id),
-            entity_id: VarInt(player.entity_id),
-        });
-        // The standard vanilla item-pickup "plop" - same sound/pitch `SecretItemEntityImpl` uses.
-        // TNT keeps this too even though it's purely cosmetic - some feedback that it "went away"
-        // when touched, without implying anything was actually granted.
+        // No `CollectItem` packet here, per explicit correction - that packet is what makes the
+        // vanilla client animate the item visibly flying to the player over the next few ticks;
+        // a wither/blood key, TNT, or blessing pickup is a real, instant grab with no such flight,
+        // confirmed real. `entity.item.pickup`'s legacy equivalent, at the real captured
+        // volume/pitch (not `SecretItemEntityImpl`'s quieter/higher-pitched "plop" - that one's
+        // unrelated and untouched).
         player.write_packet(&SoundEffect {
             sound: "random.pop",
             pos_x: player.position.x,
             pos_y: player.position.y,
             pos_z: player.position.z,
-            volume: 0.2,
-            pitch: 1.7619047,
+            volume: 1.0,
+            pitch: 1.0,
         });
 
         let kind = self.kind;
-        if kind != PickupKind::Tnt {
+        if let PickupKind::Blessing(blessing_kind) = kind {
+            // Its own real "DUNGEON BUFF!" 2-line announcement, not the generic "has obtained"
+            // line every other kind uses - see `dungeon::blessings::format_pickup_message`.
+            let lines = crate::dungeon::blessings::format_pickup_message(blessing_kind, crate::dungeon::blessings::FIXED_LEVEL);
+            for other_player in world.players.values_mut() {
+                other_player.send_message(&lines[0]);
+                other_player.send_message(&lines[1]);
+            }
+        } else {
+            // Per explicit correction: Superboom TNT gets the same "has obtained" message as
+            // every other non-Blessing pickup - it isn't silent just because it's cosmetic.
             let username = player.profile.username.clone();
             for other_player in world.players.values_mut() {
-                other_player.send_message(&format!("\u{a7}b{} \u{a7}ehas obtained {}\u{a7}e!", username, kind.colored_name()));
+                other_player.send_message(&format!("\u{a7}a{} \u{a7}ehas obtained {}\u{a7}e!", username, kind.colored_name()));
             }
 
             if let Some(player) = world.players.get_mut(&player_id) {

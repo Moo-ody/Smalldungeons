@@ -1,4 +1,5 @@
 pub mod room;
+pub mod blessings;
 pub mod door;
 pub mod crushers;
 pub mod dungeon_state;

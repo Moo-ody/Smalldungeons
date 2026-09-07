@@ -93,7 +93,7 @@ impl UI {
                     metadata: 3,
                     tag_compound: Some(NBT::with_nodes(vec![
                         NBT::compound("display", vec![
-                            NBT::string("Name", &format!("§7{}", player.profile.username)),
+                            NBT::string("Name", &format!("§a{}", player.profile.username)),
                             NBT::list_from_string("Lore", &item_name.to_string())
                         ]),
                         NBT::string("SkullOwner", &player.profile.username),

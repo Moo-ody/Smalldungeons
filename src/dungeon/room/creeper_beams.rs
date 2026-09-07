@@ -378,18 +378,20 @@ fn complete_puzzle(player: &mut Player, data: &mut CreeperBeamsState) {
 
     let dungeon = &mut player.server_mut().dungeon;
     let chest_world_pos = dungeon.rooms.get(room_index)
-        .map(|room| room.get_world_block_pos(&CHEST_REVEAL_POS));
+        .map(|room| (room.get_world_block_pos(&CHEST_REVEAL_POS), room.rotation));
 
     let world = &mut player.server_mut().world;
     if let Some(creeper_id) = data.creeper_entity_id {
         world.despawn_entity(creeper_id);
     }
 
-    if let Some(chest_pos) = chest_world_pos {
-        world.set_block_at(Blocks::Chest { direction: crate::server::utils::direction::Direction::North }, chest_pos.x, chest_pos.y, chest_pos.z);
+    if let Some((chest_pos, rotation)) = chest_world_pos {
+        let mut chest_block = Blocks::Chest { direction: crate::server::utils::direction::Direction::North };
+        chest_block.rotate(rotation);
+        world.set_block_at(chest_block, chest_pos.x, chest_pos.y, chest_pos.z);
     }
 
-    let message = format!("§a§lPUZZLE SOLVED! §7{} §esolved the Creeper Beams puzzle!", player.profile.username);
+    let message = format!("§a§lPUZZLE SOLVED! §a{} §esolved the Creeper Beams puzzle!", player.profile.username);
     for other in world.players.values_mut() {
         other.write_packet(&particles);
         other.write_packet(&SoundEffect {
@@ -401,7 +403,7 @@ fn complete_puzzle(player: &mut Player, data: &mut CreeperBeamsState) {
             pitch: 1.0,
         });
         other.send_message(&message);
-        if let Some(chest_pos) = chest_world_pos {
+        if let Some((chest_pos, _)) = chest_world_pos {
             other.write_packet(&BlockAction {
                 block_pos: chest_pos,
                 event_id: 1,

@@ -31,6 +31,12 @@ const GRAY: u8 = 21 * 4 + 1;
 /// (`DungeonMapColorParser.scanTile`); this used to reuse a `WHITE`/58 constant that isn't a
 /// value Catlas recognizes at all, so this intermediate state was never visible.
 const CLEARED: u8 = 8 * 4 + 2;
+/// Failed-puzzle color (vanilla map color id 18) - real Hypixel's own dungeon map, confirmed
+/// directly from Skytils' `DungeonMapColorParser.kt` (`scanTile`): `centerColor == 18` maps to
+/// `RoomState.FAILED`, but only for `RoomType.PUZZLE` (the same 18 means something unrelated -
+/// `DISCOVERED` - for a Blood room, so this is deliberately puzzle-only, not a generic "18 always
+/// means failed" reading). Distinct from `GREEN`/30 and `CLEARED`/34, which both mean solved.
+const FAILED: u8 = 18;
 /// Unopened-Wither-door/room placeholder (vanilla map color id 119) - same `UNOPENED` meaning to
 /// Catlas as `GRAY`/85, but also specifically what `DoorType.fromMapColor` reads as `WITHER`, so
 /// it doubles as a "this locked door ahead is a wither door" hint. Reused below for the "?"
@@ -47,6 +53,24 @@ const CHECKMARK_POSITIONS: [(usize, usize); 30] = [
     (7, 0), (8, 0), (6, 1), (7, 1), (8, 1), (5, 2), (6, 2), (7, 2), (4, 3), (5, 3),
     (6, 3), (0, 4), (1, 4), (3, 4), (4, 4), (5, 4), (0, 5), (1, 5), (2, 5), (3, 5),
     (4, 5), (0, 6), (1, 6), (2, 6), (3, 6), (1, 7), (2, 7), (3, 7), (1, 8), (2, 8),
+];
+
+/// Failed-puzzle X glyph, drawn in place of `CHECKMARK_POSITIONS` (same 9x9 footprint/origin, so
+/// it lands on the same room-center pixel Skytils' `scanTile` samples for `FAILED`/color-18
+/// detection). Unlike the checkmark shape above - reverse-engineered from an actual captured real
+/// map - no real captured X glyph exists to copy pixel-for-pixel, so this is a plain 2px-thick
+/// diagonal cross built to the same size/weight instead of a guessed-at "authentic" shape. The
+/// color (`FAILED`/18) is the part that's actually verified real, not this exact pixel art.
+const X_MARK_POSITIONS: [(usize, usize); 33] = [
+    (0, 0), (1, 0), (7, 0), (8, 0),
+    (0, 1), (1, 1), (7, 1), (8, 1),
+    (1, 2), (2, 2), (6, 2), (7, 2),
+    (2, 3), (3, 3), (5, 3), (6, 3),
+    (3, 4), (4, 4), (5, 4),
+    (2, 5), (3, 5), (5, 5), (6, 5),
+    (1, 6), (2, 6), (6, 6), (7, 6),
+    (0, 7), (1, 7), (7, 7), (8, 7),
+    (0, 8), (8, 8),
 ];
 
 pub struct DirtyMapRegion {
@@ -324,14 +348,24 @@ impl DungeonMap {
                 let x = room.segments[0].x * 20 + 4;
                 let y = room.segments[0].z * 20 + 4;
 
-                let checkmark_color = if room.room_data.secrets == 0 || room.found_secrets >= room.room_data.secrets {
-                    GREEN
+                // A failed puzzle gets the real red-X glyph/color instead of the checkmark -
+                // every other "cleared" room (including a puzzle that was *solved*) keeps the
+                // checkmark. `puzzle_failed` is only ever set on `Puzzle`-type rooms (see its
+                // own doc comment), so no extra room-type check is needed here.
+                if room.puzzle_failed {
+                    for (cx, cy) in X_MARK_POSITIONS {
+                        self.set_px(x + cx, y + cy, FAILED)
+                    }
                 } else {
-                    CLEARED
-                };
+                    let checkmark_color = if room.room_data.secrets == 0 || room.found_secrets >= room.room_data.secrets {
+                        GREEN
+                    } else {
+                        CLEARED
+                    };
 
-                for (cx, cy) in CHECKMARK_POSITIONS {
-                    self.set_px(x + cx, y + cy, checkmark_color)
+                    for (cx, cy) in CHECKMARK_POSITIONS {
+                        self.set_px(x + cx, y + cy, checkmark_color)
+                    }
                 }
             }
         }

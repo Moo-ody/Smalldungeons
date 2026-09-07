@@ -239,7 +239,7 @@ pub(crate) fn spawn_active_mob(
     }
 
     if let Some(archetype) = archetype {
-        world.entity_mob_ai.insert(entity_id, MobAiState::new(archetype, world_pos, yaw));
+        world.entity_mob_ai.insert(entity_id, MobAiState::new(archetype, world_pos, yaw, room_index));
 
         // Melee archetypes drive their swing/arm-pose through the existing
         // CombatState/AttackCooldown system (already ticked globally by
@@ -420,7 +420,7 @@ fn mimic_equipment() -> Equipment {
 /// boots/leggings/chestplate) to all be empty - this mimic doesn't satisfy that, since it's
 /// equipped to match real Hypixel's actual appearance instead of staying bare for that one
 /// mod's detection. Confirmed trade-off, not an oversight.
-pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32) -> anyhow::Result<EntityId> {
+pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32, room_index: usize) -> anyhow::Result<EntityId> {
     let metadata = EntityMetadata::new(EntityVariant::Zombie {
         is_child: true,
         is_villager: false,
@@ -434,7 +434,7 @@ pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32) -> anyhow::Resu
         entity.yaw = yaw;
     }
 
-    world.entity_mob_ai.insert(entity_id, MobAiState::new(DungeonMobType::Mimic, position, yaw));
+    world.entity_mob_ai.insert(entity_id, MobAiState::new(DungeonMobType::Mimic, position, yaw, room_index));
     world.set_combat_state(entity_id, CombatState { aggressive: false, swing_ticks: 0 });
     world.set_attack_cooldown(entity_id, AttackCooldown { ticks: 0 });
     world.set_ai_suspended(entity_id, AISuspended { ticks_left: 10 });

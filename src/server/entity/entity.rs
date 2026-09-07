@@ -4,7 +4,7 @@ use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::entity::entity_metadata::EntityMetadata;
-use crate::server::player::player::Player;
+use crate::server::player::player::{ClientId, Player};
 use crate::server::utils::dvec3::DVec3;
 use crate::server::world::World;
 use uuid::Uuid;
@@ -13,20 +13,43 @@ pub type EntityId = i32;
 
 /// provides functionality to an entity
 pub trait EntityImpl {
-    
+
     fn spawn(&mut self, _: &mut Entity, _: &mut PacketBuffer) {}
-    
+
     fn despawn(&mut self, _: &mut Entity, _: &mut PacketBuffer) {}
 
     /// runs when an entity is ticked
     /// used to add custom functionality to an entity
     fn tick(&mut self, entity: &mut Entity, packet_buffer: &mut PacketBuffer);
-    
+
     /// Returns `true` if this entity fully handled the interaction (e.g. Mort's dialogue, an
     /// armor stand terminal) - the caller uses this to decide whether the player's held item
     /// should also fire its right-click ability, so a plain mob with no special interaction
     /// still lets pearls/etherwarp/hyperion/etc. fire when clicked.
     fn interact(&mut self, _: &mut Entity, _: &mut Player, _: &EntityInteractionType) -> bool { false }
+
+    /// Called when a player-fired projectile (currently only the Terminator - see
+    /// `ai::projectile::MobProjectileImpl`'s `on_block_hit` doc comment for why mob-fired shots
+    /// are excluded) hits this entity mid-flight. `velocity` is the projectile's own velocity at
+    /// the moment of impact, not the shooter's current look angle - important for an arced shot,
+    /// whose real flight direction has curved away from wherever the shooter is aiming *now*.
+    /// Returns whether the projectile should stop here: `true` despawns it immediately (the Ice
+    /// Path silverfish's own behavior, and the default - matches every implementor before this
+    /// could pierce at all); `false` lets it keep flying and potentially hit more entities the
+    /// same tick (the Higher or Lower puzzle's blazes - the Terminator should pierce through one
+    /// to reach another standing behind it, per explicit request).
+    fn on_projectile_hit(&mut self, _: &mut Entity, _velocity: DVec3, _shooter_id: ClientId) -> bool { true }
+
+    /// Whether `ai::projectile::sweep_hit` should even consider this entity a possible target for
+    /// a player-fired shot in the first place. `false` by default - most entities in this codebase
+    /// are either decorative puzzle machinery nobody should be able to redirect by shooting it
+    /// (Creeper Beams' visible Creeper prop, its invisible Guardian/Squid beam-trick pair) or a
+    /// real mob with no `on_projectile_hit` behavior to trigger anyway. An earlier, broader
+    /// "skip only invisible/dropped-item entities" heuristic here let a Terminator shot hit the
+    /// Creeper Beams Creeper prop instead of the sea lantern behind it whenever the two lined up,
+    /// silently eating shots meant for the lantern - this explicit opt-in can't regress the same
+    /// way for some future visible entity that isn't a shootable target either.
+    fn wants_projectile_hits(&self) -> bool { false }
 }
 
 /// represents an entity, its position, rotation, and its variant

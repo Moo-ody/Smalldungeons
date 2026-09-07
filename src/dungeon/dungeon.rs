@@ -39,7 +39,7 @@ pub(crate) fn spawn_pickup(world: &mut world::World, pos: DVec3, kind: PickupKin
         let _ = crate::server::entity::spawn_equipped::spawn_following_nametag(
             world,
             entity_id,
-            kind.colored_name(),
+            &kind.colored_name(),
             1.5,
             EntityVariant::ArmorStand,
         );
@@ -123,9 +123,6 @@ pub struct Dungeon {
     /// whenever a run starts (see the `Started` transition below).
     pub score: DungeonScoreState,
 
-    // Temporary per-player mapping of mushroom set index -> up destination (world BlockPos)
-    pub temp_player_mushroom_up: HashMap<u32, Vec<BlockPos>>,
-    
     // Locked chest system
     // Maps chest world position to its locked state and associated lever
     pub locked_chests: HashMap<BlockPos, LockedChestState>,
@@ -248,7 +245,6 @@ impl Dungeon {
             practice_route_flash_ticks: 0,
             practice_timer_text: None,
             score: DungeonScoreState::default(),
-            temp_player_mushroom_up: HashMap::new(),
             locked_chests: HashMap::new(),
             lever_to_chests: HashMap::new(),
             secrets_always_spawn: false,
@@ -670,12 +666,15 @@ impl Dungeon {
     /// actually died, not at the door - and from the room-discovery loop below for rooms that
     /// start at 0 starred mobs (nothing died, so `death_pos` is `None` and the key spawns in the
     /// room instead, the only position that makes sense when there was nothing to kill).
-    pub fn maybe_grant_door_key(&mut self, room_index: usize, death_pos: Option<DVec3>, kind: PickupKind) {
-        let Some(room) = self.rooms.get(room_index) else { return; };
+    /// Returns whether a key (and its companion TNT) was actually spawned - `false` for any
+    /// early-out (room not cleared, no matching un-granted door). `Dungeon::grant_room_clear_rewards`
+    /// uses this to avoid dropping a *second*, redundant TNT on top of a key room's own one.
+    pub fn maybe_grant_door_key(&mut self, room_index: usize, death_pos: Option<DVec3>, kind: PickupKind) -> bool {
+        let Some(room) = self.rooms.get(room_index) else { return false; };
         if room.starred_mobs_remaining != 0 {
-            return;
+            return false;
         }
-        let Some(wanted_door_type) = kind.door_type() else { return; };
+        let Some(wanted_door_type) = kind.door_type() else { return false; };
 
         // Also remembers which segment matched, not just the door - a spawn position built from
         // the door's own coordinates lands literally inside the door frame (confirmed by
@@ -693,7 +692,7 @@ impl Dungeon {
             }
         }
 
-        let Some((door_index, segment_x, segment_z)) = matched_door else { return; };
+        let Some((door_index, segment_x, segment_z)) = matched_door else { return false; };
         self.doors[door_index].key_granted = true;
         let mut spawn_pos = death_pos.unwrap_or_else(|| {
             // Center of the matched 32x32 room segment - same grid math `main.rs`/`dungeon.rs`
@@ -713,6 +712,48 @@ impl Dungeon {
         // room-shape awareness.
         let tnt_pos = DVec3::new(spawn_pos.x + 1.0, spawn_pos.y, spawn_pos.z);
         spawn_pickup(&mut server.world, tnt_pos, PickupKind::Tnt);
+        true
+    }
+
+    /// Called once per room, right alongside `maybe_grant_door_key`, at the same "room just
+    /// cleared" moment (`combat.rs::kill_mob`, the instant `starred_mobs_remaining` reaches 0) -
+    /// but unconditional, not gated on a Wither/Blood door existing. Real Hypixel behavior:
+    /// clearing a room always drops at least a Superboom TNT on the last mob, with a real chance
+    /// of a random Dungeon Blessing dropping alongside it. The two rolls are independent, so
+    /// either, both, or neither can happen on top of the always-guaranteed TNT.
+    ///
+    /// `key_tnt_already_dropped` - `maybe_grant_door_key` already drops its own companion TNT
+    /// right next to a granted Wither/Blood key, at the exact same "room cleared" moment this
+    /// runs at. Without this, a key room ended up with *two* TNTs (one from each function) -
+    /// pass `true` (from `granted_wither || granted_blood`, whichever `maybe_grant_door_key`
+    /// call actually succeeded) to skip this function's own guaranteed one in that case; the
+    /// blessing roll below still rolls independently either way, real Hypixel doesn't tie that to
+    /// whether the room happens to have a key door. Its spawn offset is on the Z axis specifically
+    /// (not X, like the key/its own TNT use) so it can never land on top of either of those even
+    /// when both this function's TNT and a key's are skipped/present in the same room.
+    pub fn grant_room_clear_rewards(&mut self, room_index: usize, death_pos: DVec3, key_tnt_already_dropped: bool) {
+        let Some(room) = self.rooms.get(room_index) else { return; };
+        if room.starred_mobs_remaining != 0 {
+            return;
+        }
+
+        let mut spawn_pos = death_pos;
+        spawn_pos.y -= 1.0;
+
+        let server = self.server_mut();
+        if !key_tnt_already_dropped {
+            spawn_pickup(&mut server.world, spawn_pos, PickupKind::Tnt);
+        }
+
+        let mut rng = rand::rng();
+        use rand::Rng;
+
+        // 50/50, independent of the TNT and the roll below.
+        if rng.random_bool(0.5) {
+            let blessing_kind = crate::dungeon::blessings::BlessingKind::ALL[rng.random_range(0..crate::dungeon::blessings::BlessingKind::ALL.len())];
+            let blessing_pos = DVec3::new(spawn_pos.x, spawn_pos.y, spawn_pos.z + 1.0);
+            spawn_pickup(&mut server.world, blessing_pos, PickupKind::Blessing(blessing_kind));
+        }
     }
 
     // /// Check if a player is inside the boss room
@@ -945,12 +986,9 @@ impl Dungeon {
 
                 // Score is re-derived from live room state every tick (covers room clears and
                 // secrets found - both already tracked authoritatively on `Room` - without a
-                // second, independently-incremented copy that could drift out of sync) and
-                // checked against the S/S+ thresholds; `check_score_announcements` itself is a
-                // one-shot latch so this is safe to call unconditionally every tick.
+                // second, independently-incremented copy that could drift out of sync).
                 self.score.elapsed_ticks = *current_ticks;
                 self.score.sync_exploration(&self.rooms);
-                self.score.check_score_announcements(&mut server.world);
 
                 // Practice-mode secret route timer: starts on the first tick any player's
                 // position has moved away from where they spawned into the room ("first
@@ -1115,14 +1153,53 @@ impl Dungeon {
                 // First, mark rooms as entered and collect entry secrets to spawn immediately (like locked chests)
                 let mut rooms_just_entered: std::collections::HashSet<usize> = std::collections::HashSet::new();
                 let mut entry_secrets_to_spawn: Vec<(std::rc::Rc<std::cell::RefCell<crate::dungeon::room::secrets::DungeonSecret>>, usize)> = Vec::new();
-                
+                let mut weirdos_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut quiz_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut ice_path_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut waterboard_rooms_to_spawn: Vec<usize> = Vec::new();
+
                 for (player_id, room_index_opt) in &player_room_indices {
                     if let Some(room_index) = room_index_opt {
                         let room = self.rooms.get_mut(*room_index).unwrap();
                         if !room.entered {
                             room.entered = true;
                             rooms_just_entered.insert(*room_index);
-                            
+
+                            // Three Weirdos' NPCs spawn on this exact transition (previous room
+                            // != Three Weirdos, current room == Three Weirdos) rather than at
+                            // room load - see `Room::weirdos_spawned`'s doc comment. Guarded
+                            // separately from `room.entered` (even though today they share the
+                            // same lifetime) so this stays correct if room-entry ever gets reset
+                            // independently of a full dungeon rebuild.
+                            if room.room_data.name == "Three Weirdos" && !room.weirdos_spawned {
+                                room.weirdos_spawned = true;
+                                weirdos_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // Quiz's intro speech starts on this exact same entry transition,
+                            // same reasoning as Three Weirdos above (Oruo shouldn't start
+                            // talking before a player has actually crossed into the room).
+                            if room.room_data.name == "Quiz" && !room.quiz_started {
+                                room.quiz_started = true;
+                                quiz_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // Ice Path's silverfish spawns on this exact same entry transition,
+                            // same reasoning as Three Weirdos/Quiz above.
+                            if room.room_data.name == "Ice Path" && !room.ice_path_spawned {
+                                room.ice_path_spawned = true;
+                                ice_path_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // Water Board's 3 randomly-chosen gates physically push shut (with a
+                            // real piston sound) on this exact same entry transition - per
+                            // explicit confirmation, they shouldn't already be closed and silent
+                            // before a player has actually walked in to see/hear it happen.
+                            if room.room_data.name == "Water Board" && !room.waterboard_spawned {
+                                room.waterboard_spawned = true;
+                                waterboard_rooms_to_spawn.push(*room_index);
+                            }
+
                             // Collect entry secrets (schest, sess) to spawn immediately when room is entered.
                             // With `secrets_always_spawn` on, every secret in the room spawns on entry
                             // instead of just schest/sess, bypassing the proximity gating below entirely.
@@ -1152,6 +1229,37 @@ impl Dungeon {
                     }
                 }
                 
+                // Any room not yet spawned gets its mobs pre-spawned in a DORMANT state (visible,
+                // but no idle movement/perception - see `run_mob_ai`'s own room-entered gate) the
+                // instant a player enters a DIFFERENT room connected to it by a door, even before
+                // actually walking into it - per explicit request. `mob_prespawn_queued` is this
+                // room's own one-shot latch (set the moment it's queued here, not when
+                // `spawn_room_mobs` actually runs - same timing role `entered` plays for
+                // `rooms_just_entered` above), so a player lingering for many ticks in the
+                // neighbouring room before the mob-spawn cycle fires doesn't push this same room
+                // index into `pending_mob_spawn_rooms` again every single tick. Explicitly skips
+                // anything already in `rooms_just_entered` this same tick - that path already
+                // queues it, and both firing together (a second player directly entering this
+                // room the very tick a first player enters one of its neighbours) would otherwise
+                // double-queue it for this one tick's flush.
+                let mut dormant_prespawn_rooms: Vec<usize> = Vec::new();
+                for (_, room_index_opt) in &player_room_indices {
+                    let Some(room_index) = room_index_opt else { continue };
+                    let Some(room) = self.rooms.get(*room_index) else { continue };
+                    let neighbours: Vec<usize> = room.neighbouring_room_indices().collect();
+                    for neighbour_index in neighbours {
+                        if rooms_just_entered.contains(&neighbour_index) {
+                            continue;
+                        }
+                        if let Some(neighbour) = self.rooms.get_mut(neighbour_index) {
+                            if !neighbour.mobs_spawned && !neighbour.mob_prespawn_queued {
+                                neighbour.mob_prespawn_queued = true;
+                                dormant_prespawn_rooms.push(neighbour_index);
+                            }
+                        }
+                    }
+                }
+
                 // Spawn entry secrets immediately (like locked chests)
                 for (secret_rc, _room_index) in entry_secrets_to_spawn {
                     let mut secret = secret_rc.borrow_mut();
@@ -1163,7 +1271,41 @@ impl Dungeon {
                         &mut server.world
                     );
                 }
-                
+
+                // Spawn the Three Weirdos NPCs (+ their chosen names/dialogue/chest wiring) for
+                // any room that was just entered for the first time this tick - see
+                // `weirdos_rooms_to_spawn`'s collection above.
+                for room_index in weirdos_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::three_weirdos::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Starts Oruo's intro speech for any Quiz room just entered this tick - see
+                // `quiz_rooms_to_spawn`'s collection above.
+                for room_index in quiz_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::quiz::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Spawns Ice Path's silverfish for any room just entered this tick - see
+                // `ice_path_rooms_to_spawn`'s collection above.
+                for room_index in ice_path_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::ice_path::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Closes Water Board's 3 randomly-chosen gates (with a real piston sound) for
+                // any room just entered this tick - see `waterboard_rooms_to_spawn`'s collection
+                // above.
+                for room_index in waterboard_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get_mut(room_index) {
+                        crate::dungeon::room::waterboard::setup(room, room_index, &mut server.world);
+                    }
+                }
+
                 // Rooms entered this tick queue behind the same mob-spawn cycle as any room
                 // already pending (e.g. the entrance room, queued in `start_dungeon`) - mobs
                 // only actually spawn on a tick where `current_ticks % MOB_SPAWN_CYCLE_TICKS ==
@@ -1174,14 +1316,41 @@ impl Dungeon {
                 let mut rooms_spawned_this_tick: Vec<usize> = Vec::new();
                 if !self.practice_room {
                     self.pending_mob_spawn_rooms.extend(rooms_just_entered.iter().copied());
+                    self.pending_mob_spawn_rooms.extend(dormant_prespawn_rooms.iter().copied());
                     if *current_ticks % MOB_SPAWN_CYCLE_TICKS == 0 {
                         rooms_spawned_this_tick = std::mem::take(&mut self.pending_mob_spawn_rooms);
                         for &room_index in &rooms_spawned_this_tick {
-                            if let Some(room) = self.rooms.get(room_index) {
-                                spawn_room_mobs(&mut server.world, room_index, room);
+                            // A room can reach this queue twice for two different reasons - once
+                            // via `dormant_prespawn_rooms` (a neighbour was entered) and later,
+                            // separately, via `rooms_just_entered` once the player actually walks
+                            // in (that transition queues unconditionally, with no awareness of
+                            // whether mobs already exist here from the dormant pre-spawn) - so
+                            // `mobs_spawned` itself is the real guard against spawning a second,
+                            // duplicate set of mobs on the real-entry tick. The redraw/key-grant
+                            // logic below still needs to run on that real-entry tick regardless
+                            // (that's the whole point of requeuing on entry), so only the actual
+                            // spawn call is skipped here, not the rest of this loop body.
+                            if !self.rooms.get(room_index).map(|r| r.mobs_spawned).unwrap_or(true) {
+                                if let Some(room) = self.rooms.get(room_index) {
+                                    spawn_room_mobs(&mut server.world, room_index, room);
+                                }
+                                if let Some(room) = self.rooms.get_mut(room_index) {
+                                    room.mobs_spawned = true;
+                                }
                             }
-                            if let Some(room) = self.rooms.get_mut(room_index) {
-                                room.mobs_spawned = true;
+
+                            // Skipped entirely for a room that's only DORMANT-pre-spawned (see
+                            // `dormant_prespawn_rooms` above) and hasn't actually been entered
+                            // yet - `DungeonMap::draw_room` unconditionally reveals a room's own
+                            // real shape/color the instant it's called for that room_index (it
+                            // has no separate "mobs exist" vs "actually entered" distinction of
+                            // its own), so calling it here for a still-unentered room would
+                            // reveal it on the map before a player has actually walked in. Its
+                            // own real reveal still happens right on schedule, at the
+                            // `did_mark_entered`-gated redraw below, the tick it's actually
+                            // entered.
+                            if !self.rooms.get(room_index).map(|r| r.entered).unwrap_or(false) {
+                                continue;
                             }
 
                             // Redraw now that `mobs_spawned` (and, for a room with no starred
@@ -1224,7 +1393,13 @@ impl Dungeon {
                 // have actually spawned into a just-entered room yet (still queued behind the
                 // cycle gate above), and `starred_mobs_remaining` would still misleadingly read 0
                 // for a room that does have starred mobs coming, wrongly granting the key early.
+                // Still explicitly skips any room that's only DORMANT-pre-spawned and hasn't
+                // actually been entered yet (same reasoning as the map-redraw skip above) - a key
+                // shouldn't drop into the world for a room a player hasn't walked into.
                 for &room_index in &rooms_spawned_this_tick {
+                    if !self.rooms.get(room_index).map(|r| r.entered).unwrap_or(false) {
+                        continue;
+                    }
                     for kind in [PickupKind::Wither, PickupKind::Blood] {
                         if let Some(room) = self.rooms.get(room_index) {
                             if room.starred_mobs_remaining == 0 {
@@ -1412,23 +1587,6 @@ impl Dungeon {
                             }
                         }
                         
-                        // Register mushroom secret interactables for this player
-                        let room_ref = &self.rooms[room_index];
-                        if !room_ref.mushroom_sets.is_empty() {
-                            // Store per-player up positions for set index resolution
-                            let up_list: Vec<BlockPos> = room_ref.mushroom_sets.iter().map(|s| s.up.get(0).cloned().unwrap_or(BlockPos::new(0,0,0))).collect();
-                            self.temp_player_mushroom_up.insert(player_id, up_list);
-
-                            for (idx, set) in room_ref.mushroom_sets.iter().enumerate() {
-                                for bp in &set.bottom {
-                                    server.world.interactable_blocks.insert(*bp, BlockInteractAction::MushroomBottom { set_index: idx });
-                                }
-                                for bp in &set.top {
-                                    server.world.interactable_blocks.insert(*bp, BlockInteractAction::MushroomTop);
-                                }
-                            }
-                        }
-
                         room_index_and_player_ids.push((room_index, player_id));
                 }
                 
@@ -1701,25 +1859,18 @@ impl Dungeon {
     // The four events below have no real trigger anywhere in this codebase yet - there's no
     // player damage/death system and no puzzle minigame implementation, so nothing calls
     // these automatically. They're exposed for whenever those systems exist (and for the
-    // `/dscore` debug command, so the score/announcement logic itself can be exercised without
-    // them).
+    // `/dscore` debug command, so the score breakdown itself can be exercised without them).
 
     pub fn record_death(&mut self) {
         self.score.deaths += 1;
-        let world = &mut self.server_mut().world;
-        self.score.check_score_announcements(world);
     }
 
     pub fn record_puzzle_failed(&mut self) {
         self.score.failed_puzzles += 1;
-        let world = &mut self.server_mut().world;
-        self.score.check_score_announcements(world);
     }
 
     pub fn record_mimic_killed(&mut self) {
         self.score.mimic_killed = true;
-        let world = &mut self.server_mut().world;
-        self.score.check_score_announcements(world);
     }
 
     /// Credits a crypt's bonus score (+1, capped at +5 - see `bonus_score`) once its Crypt
@@ -1728,14 +1879,10 @@ impl Dungeon {
     /// `ai/combat.rs::kill_mob` (which calls this on that mob's death).
     pub fn record_crypt_killed(&mut self) {
         self.score.crypts += 1;
-        let world = &mut self.server_mut().world;
-        self.score.check_score_announcements(world);
     }
 
     pub fn set_paul_ezpz(&mut self, enabled: bool) {
         self.score.paul_ezpz = enabled;
-        let world = &mut self.server_mut().world;
-        self.score.check_score_announcements(world);
     }
 }
 

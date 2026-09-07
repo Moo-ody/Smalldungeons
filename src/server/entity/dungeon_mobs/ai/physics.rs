@@ -5,6 +5,7 @@
 //! behavior choice.
 
 use crate::server::block::block_collision::{check_block_collisions, get_block_aabb, is_liquid};
+use crate::server::block::blocks::Blocks;
 use crate::server::entity::dungeon_mobs::mob_type::MobBaseKind;
 use crate::server::entity::entity::{Entity, EntityId};
 use crate::server::utils::aabb::AABB;
@@ -52,6 +53,15 @@ pub fn is_on_ground(world: &World, position: DVec3, width: f64) -> bool {
 pub fn is_in_liquid(world: &World, position: DVec3) -> bool {
     let block = world.get_block_at(position.x.floor() as i32, position.y.floor() as i32, position.z.floor() as i32);
     is_liquid(block)
+}
+
+/// Whether `position` (feet level) is inside lava specifically, not just any liquid - used to
+/// instantly kill a mob that falls into or touches it (e.g. Lava Ravine/Lava Pit's terrain
+/// hazard), unlike water, which `is_in_liquid`'s buoyancy handling already lets a mob float/swim
+/// back out of.
+pub fn is_in_lava(world: &World, position: DVec3) -> bool {
+    let block = world.get_block_at(position.x.floor() as i32, position.y.floor() as i32, position.z.floor() as i32);
+    matches!(block, Blocks::Lava { .. } | Blocks::FlowingLava { .. })
 }
 
 /// Whether a mob's box at `position` overlaps any currently connected player's hitbox.
@@ -218,23 +228,38 @@ fn is_blocked(world: &World, position: DVec3, width: f64, height: f64) -> bool {
 /// Soft separation impulse away from any other dungeon mob whose hitbox overlaps this one's -
 /// vanilla mobs continuously push each other apart rather than hard-blocking, so this returns
 /// a small horizontal nudge to apply via `move_horizontal` rather than a hard collision test.
+///
+/// Looks up candidates through `world.mob_spatial_grid` (rebuilt once per tick, see its own doc
+/// comment) instead of scanning every entity in the world - the push only ever matters within
+/// `width` (well under one block), so the 3x3 neighborhood of `MOB_GRID_CELL_SIZE`-sized cells
+/// around this mob's own position is guaranteed to contain every mob that could possibly push
+/// it. At dungeon-mob-count scale (hundreds to low thousands) the old global scan was an
+/// O(mobs^2) per-tick cost - by far the dominant one in a packed stress-test spawn - this makes
+/// it O(local density) per mob instead.
 pub fn separation_push(world: &World, entity_id: EntityId, position: DVec3, width: f64) -> (f64, f64) {
     let mut push_x = 0.0;
     let mut push_z = 0.0;
 
-    for (other_id, (other_entity, _)) in &world.entities {
-        if *other_id == entity_id || !world.entity_mob_ai.contains_key(other_id) {
-            continue;
-        }
+    let (cell_x, cell_z) = crate::server::world::mob_grid_cell(position);
+    for dx_cell in -1..=1 {
+        for dz_cell in -1..=1 {
+            let Some(candidates) = world.mob_spatial_grid.get(&(cell_x + dx_cell, cell_z + dz_cell)) else { continue };
+            for &other_id in candidates {
+                if other_id == entity_id {
+                    continue;
+                }
+                let Some((other_entity, _)) = world.entities.get(&other_id) else { continue };
 
-        let dx = position.x - other_entity.position.x;
-        let dz = position.z - other_entity.position.z;
-        let distance = (dx * dx + dz * dz).sqrt();
-        let min_distance = width;
-        if distance < min_distance && distance > 1e-4 {
-            let overlap = (min_distance - distance) * 0.5;
-            push_x += dx / distance * overlap;
-            push_z += dz / distance * overlap;
+                let dx = position.x - other_entity.position.x;
+                let dz = position.z - other_entity.position.z;
+                let distance = (dx * dx + dz * dz).sqrt();
+                let min_distance = width;
+                if distance < min_distance && distance > 1e-4 {
+                    let overlap = (min_distance - distance) * 0.5;
+                    push_x += dx / distance * overlap;
+                    push_z += dz / distance * overlap;
+                }
+            }
         }
     }
 

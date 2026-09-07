@@ -92,6 +92,17 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
     let entity_id = entity.id;
     let world = entity.world_mut();
 
+    // Touching lava (Lava Ravine/Lava Pit's terrain hazard, or falling into it) instantly kills
+    // a dungeon mob, per explicit request - a baseline environmental hazard, not a per-archetype
+    // behavior choice, so this runs unconditionally before anything else here (including the
+    // `!profile.implemented` early-return below - a mob with no real AI yet still dies in lava).
+    // Routed through the same `combat::kill_mob` every other death goes through, so it grants a
+    // door key / clears the room the same way a normal kill does if this was the last starred mob.
+    if physics::is_in_lava(world, entity.position) {
+        combat::kill_mob(world, entity_id);
+        return;
+    }
+
     let Some(mut state) = world.entity_mob_ai.get(&entity_id).copied() else { return };
     let (width, height) = physics::size_for(state.archetype.base_kind());
 
@@ -113,6 +124,14 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
 
     let mob_pos = entity.position;
 
+    // A mob pre-spawned dormant into a room the player hasn't actually entered yet (see
+    // `MobAiState::room_index`'s own doc comment / `Dungeon::tick`'s adjacent-room pre-spawn
+    // check) must stay fully asleep - visible, but no perception/idle-wander - regardless of how
+    // close a player standing in a NEIGHBOURING room happens to be to the shared door. Defaults
+    // to "entered" (normal distance-based behavior) if the room index somehow doesn't resolve,
+    // rather than a mob getting permanently stuck dormant over a lookup failure.
+    let room_entered = world.server_mut().dungeon.rooms.get(state.room_index).map(|room| room.entered).unwrap_or(true);
+
     // --- Activation: idle-activation range is distinct from (and larger than) combat vision ---
     let nearest_player_distance = world.players.values()
         .map(|player| player.position.distance_to(&mob_pos))
@@ -124,7 +143,7 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
     // trip (see the leashed_out movement branch below) and only starts looking for a target
     // again once it's actually back (`leash::tick_leash` clears `leashed_out` on arrival).
     if state.target.is_none() && !state.leashed_out {
-        if nearest_player_distance > IDLE_ACTIVATION_RANGE {
+        if !room_entered || nearest_player_distance > IDLE_ACTIVATION_RANGE {
             state.activation = ActivationState::Dormant;
             state.idle_wander_target = None;
         } else {

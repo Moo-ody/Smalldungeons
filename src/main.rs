@@ -1,12 +1,15 @@
 mod dungeon;
 mod net;
+#[cfg(test)]
+mod perf_bench;
 mod server;
 mod utils;
 
-use crate::dungeon::door::DoorType;
+use crate::dungeon::door::DoorType::{self, WITHER};
 use crate::dungeon::dungeon::Dungeon;
 use crate::dungeon::dungeon_state::DungeonState;
 use crate::dungeon::room::room_data::{RoomData, RoomType};
+use crate::dungeon::room::tic_tac_toe::CellState::X;
 // use crate::dungeon::room::room::Room;
 use crate::net::internal_packets::{MainThreadMessage, NetworkThreadMessage};
 use crate::net::packets::packet_buffer::PacketBuffer;
@@ -15,11 +18,15 @@ use crate::net::protocol::play::clientbound::{AddEffect, PlayerListItem, Teams};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::run_network::run_network_thread;
 use crate::net::var_int::VarInt;
+use crate::server::block::block_collision::get_block_aabb;
+use crate::server::block::block_parameter::Axis::Z;
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
 use crate::server::chunk::chunk::Chunk;
 use crate::server::chunk::chunk_grid::ChunkDiff;
+use crate::server::entity::dungeon_mobs::mob_type;
+use crate::server::entity::dungeon_mobs::mob_type::DungeonMobType::ZombieLord;
 use crate::server::entity::entity::{Entity, EntityImpl, NoEntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::entity::spawn_equipped::spawn_following_nametag;
@@ -31,13 +38,14 @@ use crate::server::player::scoreboard::{ScoreboardLines, CREATE_TEAM, ADD_PLAYER
 use crate::server::server::Server;
 use crate::server::utils::chat_component::chat_component_text::ChatComponentTextBuilder;
 use crate::server::utils::color::MCColors;
-use crate::server::utils::dvec3::DVec3;
+use crate::server::utils::dvec3::{self, DVec3};
 use crate::server::utils::sized_string::SizedString;
-use crate::server::world::VIEW_DISTANCE;
+use crate::server::world::{self, VIEW_DISTANCE, World};
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
 use crate::utils::seeded_rng::SeededRng;
 use anyhow::Result;
 use chrono::Local;
+use chrono::format::Pad::Zero;
 use include_dir::include_dir;
 use indoc::formatdoc;
 use rand::seq::IndexedRandom;
@@ -473,19 +481,25 @@ async fn main() -> Result<()> {
         }
     }
 
-    // roomdata first digit (the key) is just a list of numbers 0..etc. this could just be a vec with roomid lookups.
+    // The key here is just an opaque per-entry id - `get_random_data_with_type` (the only real
+    // consumer during dungeon generation) filters by `room_type`/`shape` and picks randomly, never
+    // by this key, so it doesn't need to mean anything. It used to be parsed from the file name's
+    // room-id prefix instead of a fresh index - that silently dropped any room with two physical
+    // variants sharing the same prefix (confirmed real: both "Blaze" room files, Higher/Lower,
+    // are "10,blaze,...json" - whichever loaded second silently overwrote the first in the map,
+    // so only one of the two ever actually existed at runtime). A sequential index can't collide.
     let room_data_storage: DeterministicHashMap<usize, RoomData> = rooms_dir
         .entries()
         .iter()
         .filter_map(|file| {
             let file = file.as_file()?;
             let file_name = file.path().file_name()?.to_str()?;
-            
+
             // Skip bettermapRooms.json - it's not a room file
             if file_name == "bettermapRooms.json" {
                 return None;
             }
-            
+
             let contents = file.contents_utf8()?;
             let mut room_data = RoomData::from_raw_json(contents);
 
@@ -499,11 +513,9 @@ async fn main() -> Result<()> {
                 room_data.secrets = 3;
             }
 
-            let name_parts: Vec<&str> = file_name.split(",").collect();
-            let room_id = name_parts.first()?.parse::<usize>().ok()?;
-
-            Some((room_id, room_data))
+            Some(room_data)
         })
+        .enumerate()
         .collect();
 
     // Load lever data - using include_str for now since the directory name has spaces
@@ -704,7 +716,7 @@ async fn main() -> Result<()> {
         )
         .append(
             ChatComponentTextBuilder::new("Catacombs")
-                .color(MCColors::Gray)
+                .color(MCColors::White)
                 .build(),
         )
         .build();
@@ -809,14 +821,21 @@ async fn main() -> Result<()> {
             // which fake tab-list row its stats land on (it matches by stripped text against its
             // own regexes, not position), so these were moved off that range rather than fight
             // over it. Anything clear of {1,5,9,13,17} works; 20-27 was just picked for headroom.
-            let tab_stat_line = |text: String| ChatComponentTextBuilder::new(text).color(MCColors::Gray).build();
-            server.world.player_info.set_line(20, tab_stat_line(format!(" Time: {odin_time}")));
-            server.world.player_info.set_line(21, tab_stat_line(format!("Cleared: {clear_percent}% ({cleared_rooms})")));
-            server.world.player_info.set_line(22, tab_stat_line(format!(" Completed Rooms: {cleared_rooms}")));
-            server.world.player_info.set_line(23, tab_stat_line(format!(" Opened Rooms: {opened_rooms}")));
-            server.world.player_info.set_line(24, tab_stat_line(format!(" Secrets Found: {secrets_percent:.2}%")));
-            server.world.player_info.set_line(25, tab_stat_line(format!(" Crypts: {crypts}")));
-            server.world.player_info.set_line(26, tab_stat_line(format!("Team Deaths: {deaths}")));
+            // Colors are embedded directly as legacy `§` codes (same convention every chat
+            // message in this codebase already uses via `send_message`) rather than a single
+            // blanket `.color()` - Odin strips color before matching these against its regexes
+            // (see the doc comment above), so embedding them here is safe. Per explicit color
+            // scheme: labels gray, plain informational values white, completion-progress values
+            // green, in-progress values yellow, deaths red, Secrets aqua, Crypts gold, and any
+            // parenthetical extra detail (a raw count alongside a percentage) dark gray.
+            let tab_stat_line = |text: String| ChatComponentTextBuilder::new(text).build();
+            server.world.player_info.set_line(20, tab_stat_line(format!("\u{a7}7 Time: \u{a7}f{odin_time}")));
+            server.world.player_info.set_line(21, tab_stat_line(format!("\u{a7}7Cleared: \u{a7}a{clear_percent}% \u{a7}8({cleared_rooms})")));
+            server.world.player_info.set_line(22, tab_stat_line(format!("\u{a7}7 Completed Rooms: \u{a7}a{cleared_rooms}")));
+            server.world.player_info.set_line(23, tab_stat_line(format!("\u{a7}7 Opened Rooms: \u{a7}e{opened_rooms}")));
+            server.world.player_info.set_line(24, tab_stat_line(format!("\u{a7}7 Secrets Found: \u{a7}b{secrets_percent:.2}%")));
+            server.world.player_info.set_line(25, tab_stat_line(format!("\u{a7}7 Crypts: \u{a7}6{crypts}")));
+            server.world.player_info.set_line(26, tab_stat_line(format!("\u{a7}7Team Deaths: \u{a7}c{deaths}")));
             // MapInfo's actual secrets calculation (`MapInfo$compactSecrets$2`, traced directly)
             // needs BOTH `DungeonStats.secretsFound` (this raw-count line, `secretCountRegex` =
             // `^ Secrets Found: (\d+)$`) AND `secretsPercent` (the line above, `secretPercentRegex`
@@ -824,7 +843,7 @@ async fn main() -> Result<()> {
             // `secretsFound / (secretsPercent / 100)`, so with secretsFound stuck at its default
             // 0 (no raw-count line ever sent before), the result was always 0 regardless of the
             // percent line - confirmed in bytecode, not assumed this time.
-            server.world.player_info.set_line(27, tab_stat_line(format!(" Secrets Found: {}", score.secrets_found)));
+            server.world.player_info.set_line(27, tab_stat_line(format!("\u{a7}7 Secrets Found: \u{a7}b{}", score.secrets_found)));
 
             // Minimal stub so Skytils' Catlas can find real players at all: `DungeonListener`
             // (see `onPacket`'s `S38PacketPlayerListItem` branch, confirmed from Skytils' own
@@ -833,17 +852,17 @@ async fn main() -> Result<()> {
             // "!A-r"->17 - matching `generate_default_lines`' fake-profile naming) AND its display
             // text matches `classPattern`, which requires a `(<Class> <Level>)` suffix - this
             // project has no real dungeon-class system, so every player gets a fixed placeholder
-            // ("Archer I") purely to satisfy that parser; nothing about class selection or
-            // leveling is real yet. Without at least this, Catlas's `team` map never gets an
-            // entry for anyone - not even the local player - so no map pointer renders at all,
-            // solo or otherwise. Sorted by player id for a stable slot assignment tick to tick.
+            // ("Mage L", per explicit request) purely to satisfy that parser; nothing about class
+            // selection or leveling is real yet. Without at least this, Catlas's `team` map never
+            // gets an entry for anyone - not even the local player - so no map pointer renders at
+            // all, solo or otherwise. Sorted by player id for a stable slot assignment tick to tick.
             const CLASS_TAB_SLOTS: [usize; 5] = [1, 5, 9, 13, 17];
             let mut player_ids: Vec<u32> = server.world.players.keys().copied().collect();
             player_ids.sort_unstable();
             for (&slot, player_id) in CLASS_TAB_SLOTS.iter().zip(player_ids.iter()) {
                 if let Some(player) = server.world.players.get(player_id) {
                     let username = &player.profile.username;
-                    let text = format!("\u{a7}r\u{a7}7{username} \u{a7}r\u{a7}f(\u{a7}r\u{a7}dArcher I\u{a7}r\u{a7}f)\u{a7}r");
+                    let text = format!("\u{a7}r\u{a7}a{username} \u{a7}r\u{a7}f(\u{a7}r\u{a7}dMage L\u{a7}r\u{a7}f)\u{a7}r");
                     server.world.player_info.set_line(slot, ChatComponentTextBuilder::new(text).build());
                 }
             }
@@ -864,14 +883,26 @@ async fn main() -> Result<()> {
             let puzzle_rooms: Vec<_> = server.dungeon.rooms.iter()
                 .filter(|room| room.room_data.room_type == RoomType::Puzzle)
                 .collect();
-            server.world.player_info.set_line(28, tab_stat_line(format!("Puzzles: ({})", puzzle_rooms.len())));
+            server.world.player_info.set_line(28, tab_stat_line(format!("\u{a7}d\u{a7}lPuzzles: \u{a7}8({})", puzzle_rooms.len())));
             const PUZZLE_TAB_SLOTS: [usize; 6] = [29, 30, 31, 32, 33, 34];
             for (&slot, room) in PUZZLE_TAB_SLOTS.iter().zip(puzzle_rooms.iter()) {
                 if !room.entered {
                     continue;
                 }
                 if let Some(display_name) = puzzle_odin_display_name(&room.room_data.name) {
-                    server.world.player_info.set_line(slot, tab_stat_line(format!(" {display_name}: [\u{2714}]")));
+                    // Odin's `puzzleRegex` (`DungeonListener.kt`) reads "✔" as Completed and
+                    // "✖" as Failed - two genuinely distinct outcomes there, unlike the in-game
+                    // map's checkmark (`DungeonMap::draw_room`), which shows the same glyph for
+                    // both since a failed puzzle still counts as an explored/done room on the
+                    // map. `room.entered` gating this whole block only tells us the room's been
+                    // walked into, not resolved - a puzzle that's been entered but not yet
+                    // solved or failed still shows the "done" glyph here, that placeholder gap
+                    // predates this change and isn't part of what was reported.
+                    // Colored per the explicit puzzle-status scheme: completed ✔ green, failed
+                    // ✖ red (the not-yet-produced incomplete ✦ state would be yellow - see the
+                    // doc comment above for why this placeholder never actually emits it).
+                    let (glyph, glyph_color) = if room.puzzle_failed { ('\u{2716}', "\u{a7}c") } else { ('\u{2714}', "\u{a7}a") };
+                    server.world.player_info.set_line(slot, tab_stat_line(format!("\u{a7}7 {display_name}: \u{a7}7[{glyph_color}{glyph}\u{a7}7]")));
                 }
             }
         }
@@ -882,7 +913,12 @@ async fn main() -> Result<()> {
         // also needs to actually be in a vanilla adjacent way.
         for player in server.world.players.values_mut() {
             player.ticks_existed += 1;
-            
+
+            // Trickle in any chunks still queued from a `sync_player_view` burst (join, or a
+            // dungeon resync) - see `Player::pending_chunk_sync`'s doc comment for why this
+            // isn't just sent all at once.
+            crate::server::server::drain_pending_chunk_sync(player);
+
             // Send action bar every 5 ticks
             if player.ticks_existed % 5 == 0 {
                 let stats = &player.dungeon_stats;
@@ -962,38 +998,29 @@ async fn main() -> Result<()> {
             let delta = (chunk_x - last_chunk_x, chunk_z - last_chunk_z);
 
             if delta.0 != 0 || delta.1 != 0 {
+                // Chunks newly in view are queued into the same staggered `pending_chunk_sync`
+                // system `sync_player_view` uses for the join-time burst, instead of being sent
+                // synchronously right here - see that field's doc comment for the full story.
+                // This diff fires for any position/chunk jump, including a big one-tick teleport
+                // (Etherwarp, a teleport pad, `/practice`, ...) - sending potentially dozens of
+                // chunks' worth of real block/light data in one synchronous burst, in one tick,
+                // is exactly what a "TPS dip right when I teleport" symptom looks like: it's real
+                // server-wide work blocking that tick for every player, not just this one.
+                // Unloading (`ChunkDiff::Old`) stays immediate - a blank chunk has no real block
+                // data to encode (`section_count` is 0), so it's cheap regardless of how many
+                // chunks fall out of view at once. `/practice`'s teleport doesn't rely on this
+                // staggering at all for its own destination - it calls
+                // `dungeon_switch::resync_chunk_range` directly for a guaranteed-synchronous,
+                // guaranteed-complete view (Odin's one-shot room scan needs real data the instant
+                // it looks, not up to a second later), independent of this general path.
+                let mut newly_visible: Vec<(i32, i32)> = Vec::new();
                 server.world.chunk_grid.for_each_diff(
                     (chunk_x, chunk_z),
                     (last_chunk_x, last_chunk_z),
                     VIEW_DISTANCE as i32,
                     |x, z, diff| match diff {
                         ChunkDiff::New => {
-                            if let Some(chunk) = player.world_mut().chunk_grid.get_chunk_mut(x, z) {
-                                player.write_packet(&chunk.get_chunk_data(x, z, true));
-                                // Collect valid entity IDs first
-                                let valid_entity_ids: Vec<_> = chunk.entities.iter()
-                                    .filter(|&&entity_id| server.world.entities.contains_key(&entity_id))
-                                    .copied()
-                                    .collect();
-                                
-                                // Process valid entities
-                                for &entity_id in &valid_entity_ids {
-                                    if let Some((entity, entity_impl)) = server.world.entities.get_mut(&entity_id) {
-                                        let buffer = &mut chunk.packet_buffer;
-                                        // Player-model entities (e.g. Mort) need their tab-list
-                                        // entry before SpawnPlayer or they render invisible - see
-                                        // `write_entity_spawn`.
-                                        crate::server::world::write_entity_spawn(entity, entity_impl.as_mut(), buffer);
-                                    }
-                                }
-                                
-                                // Update chunk entities to only contain valid ones
-                                chunk.entities.clear();
-                                chunk.entities.extend(valid_entity_ids);
-                            } else {
-                                let chunk_data = Chunk::new().get_chunk_data(x, z, true);
-                                player.write_packet(&chunk_data)
-                            };
+                            newly_visible.push((x, z));
                         }
                         ChunkDiff::Old => {
                             // Entities are only ever (re)announced to a client via the
@@ -1020,8 +1047,11 @@ async fn main() -> Result<()> {
                         }
                     },
                 );
-                
-                
+
+                // Nearest-first, same convention `sync_player_view` uses - the chunk right next
+                // to where the player now is matters more than the far edge of the new view.
+                newly_visible.sort_by_key(|&(x, z)| (x - chunk_x).abs().max((z - chunk_z).abs()));
+                player.pending_chunk_sync.extend(newly_visible);
             }
 
             {
@@ -1183,13 +1213,13 @@ async fn main() -> Result<()> {
                 match server.dungeon.state {
                     DungeonState::NotReady => {
                         for p in player.server_mut().world.players.values() {
-                            sidebar_lines.push(format!("§c[M] §7{}", p.profile.username))
+                            sidebar_lines.push(format!("§c[M] §a{}", p.profile.username))
                         }
                         sidebar_lines.new_line();
                     }
                     DungeonState::Starting { tick_countdown } => {
                         for p in player.server_mut().world.players.values() {
-                            sidebar_lines.push(format!("§a[M] §7{}", p.profile.username))
+                            sidebar_lines.push(format!("§a[M] §a{}", p.profile.username))
                         }
                         sidebar_lines.new_line();
                         sidebar_lines.push(format!("Starting in: §a0§a:0{}", (tick_countdown / 20) + 1));
@@ -1245,9 +1275,9 @@ async fn main() -> Result<()> {
                         };
                         let cleared_rooms = score.cleared_rooms;
                         sidebar_lines.push(formatdoc! {r#"
-                            Keys: §c■ §c✖ §8§8■ §a0x
-                            Time elapsed: §a§a{time}
-                            Cleared: §c{clear_percent}% §8§8({cleared_rooms})
+                            Keys: §c■ §c✖ §8■ §a0x
+                            Time Elapsed: §a{time}
+                            Cleared: §c{clear_percent}% §8({cleared_rooms})
 
                             §3§lSolo
 
@@ -1305,3 +1335,4 @@ async fn main() -> Result<()> {
         // println!("time elapsed {:?}", start.elapsed());
     }
 }
+

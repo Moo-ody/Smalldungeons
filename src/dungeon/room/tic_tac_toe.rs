@@ -97,8 +97,8 @@ fn make_blank_map() -> Vec<u8> {
 /// pulled from). `114` at the dead-center pixel (index `64*128+64`) is Odin's real `TTTSolver`
 /// X-detection byte (see `MAP_COLOR_RED`) - `REAL_X_MAP` hits it, `REAL_O_MAP` doesn't, exactly
 /// matching real X/O.
-const REAL_X_MAP: &[u8] = include_bytes!("../../room_data/misc/tictactoe/map_30876.bin");
-const REAL_O_MAP: &[u8] = include_bytes!("../../room_data/misc/tictactoe/map_30877.bin");
+const REAL_X_MAP: &[u8] = include_bytes!("../../room_data/misc/puzzles/map_30876.bin");
+const REAL_O_MAP: &[u8] = include_bytes!("../../room_data/misc/puzzles/map_30877.bin");
 
 /// The real captured X map - see `REAL_X_MAP`.
 fn make_x_map() -> Vec<u8> {
@@ -249,7 +249,27 @@ pub struct TicTacToeState {
     cell_states: [CellState; 9],
     /// Set once a winner or a tie is reached - `interact_cell` stops accepting clicks after.
     game_over: bool,
+    /// The bot's already-computed next move, waiting for its own real tick to actually fire (see
+    /// `BOT_MOVE_DELAY_TICKS`) - `None` whenever no move is pending (the common case). Computing
+    /// the move immediately (in `interact_cell`) but only *placing* it once `tick` sees this fire
+    /// keeps the bot's play perfect either way; only the reveal is delayed.
+    pending_bot_move: Option<PendingBotMove>,
 }
+
+/// See `TicTacToeState::pending_bot_move`. `username` is captured at the moment the player's own
+/// move is made (not looked up again later) so the eventual PUZZLE SOLVED/FAIL message can still
+/// credit them correctly from `tick`, which only ever has a `&mut World`, no specific `Player`.
+#[derive(Debug, Clone)]
+struct PendingBotMove {
+    index: usize,
+    fire_tick: u64,
+    username: String,
+}
+
+/// How long the bot waits after the player's own move before actually placing its response -
+/// per explicit request, always exactly 3 real seconds, not proportional to search time (the
+/// minimax search itself is instant - see `best_bot_move`'s own doc comment).
+const BOT_MOVE_DELAY_TICKS: u64 = 3 * 20;
 
 /// Prepares the Tic Tac Toe board for `room` if it actually is one - no-op for every other room.
 /// Called once from `Room::load_into_world`, **after** its block-placement loop has actually put
@@ -320,6 +340,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
         facing,
         cell_states: [CellState::Blank; 9],
         game_over: false,
+        pending_bot_move: None,
     }));
 
     for (index, &block_pos) in cell_block_positions.iter().enumerate() {
@@ -633,30 +654,52 @@ fn best_bot_move(board: &[CellState; 9]) -> usize {
 }
 
 /// `BlockInteractAction::TicTacToeButton`'s handler - a player clicked button `index`. Places
-/// their `O`, then (if the game isn't already decided) the bot immediately responds with its own
-/// `X` via `best_bot_move`. Ignored if the game is already over or `index` is already occupied -
-/// covers both a player clicking an already-played cell (its button no longer exists by then, so
-/// this only matters for the brief window before `set_cell` clears it) and a click landing after
-/// the game just ended.
+/// their `O`; if the game isn't already decided by that move, computes the bot's own `X` response
+/// immediately (`best_bot_move` - perfect play, cheap, no reason to delay the actual thinking) but
+/// only *schedules* placing it `BOT_MOVE_DELAY_TICKS` from now (see `tick`) rather than placing it
+/// this same tick - per explicit request, the bot should visibly take its time. Ignored if the
+/// game is already over, a bot move is already pending (per explicit request - the player can't
+/// get a second move in during the bot's own delay), or `index` is already occupied - covers both
+/// a player clicking an already-played cell (its button no longer exists by then, so this only
+/// matters for the brief window before `set_cell` clears it) and a click landing after the game
+/// just ended.
 pub fn interact_cell(player: &mut Player, index: usize, state: &Rc<RefCell<TicTacToeState>>) {
     let button_pos = {
         let data = state.borrow();
-        if data.game_over || data.cell_states[index] != CellState::Blank {
+        if data.game_over || data.pending_bot_move.is_some() || data.cell_states[index] != CellState::Blank {
             return;
         }
         data.cell_block_positions[index]
     };
 
+    let username = player.profile.username.clone();
     let world = player.world_mut();
     play_button_click_sound(world, button_pos);
     set_cell(state, world, index, CellState::O);
 
-    if !finish_if_over(player, state) {
+    if !finish_if_over(world, &username, state) {
         let bot_move = best_bot_move(&state.borrow().cell_states);
-        let world = player.world_mut();
-        set_cell(state, world, bot_move, CellState::X);
-        finish_if_over(player, state);
+        let fire_tick = world.tick_count + BOT_MOVE_DELAY_TICKS;
+        state.borrow_mut().pending_bot_move = Some(PendingBotMove { index: bot_move, fire_tick, username });
     }
+}
+
+/// Places the bot's already-computed pending move (see `interact_cell`) the instant its own
+/// delay actually elapses - a no-op for every room but the one with an active `tic_tac_toe_state`
+/// that currently has a move waiting. Called every tick from `Room::tick`, same pattern as every
+/// other puzzle's own per-tick hook (Teleport Maze/Ice Fill/Boulder/Blaze/Water Board).
+pub fn tick(room: &Room, world: &mut World) {
+    let Some(state_rc) = room.tic_tac_toe_state.clone() else { return };
+
+    let pending = state_rc.borrow().pending_bot_move.clone();
+    let Some(pending) = pending else { return };
+    if world.tick_count < pending.fire_tick {
+        return;
+    }
+
+    state_rc.borrow_mut().pending_bot_move = None;
+    set_cell(&state_rc, world, pending.index, CellState::X);
+    finish_if_over(world, &pending.username, &state_rc);
 }
 
 /// Checks `state` for a winner/tie after a move; if the game just ended, marks `game_over`,
@@ -665,7 +708,12 @@ pub fn interact_cell(player: &mut Player, index: usize, state: &Rc<RefCell<TicTa
 /// every other puzzle's resolve function uses, e.g. `three_weirdos.rs::interact_chest`), and
 /// records the
 /// puzzle failed with the dungeon's stats on a loss. Returns whether the game ended.
-fn finish_if_over(player: &mut Player, state: &Rc<RefCell<TicTacToeState>>) -> bool {
+///
+/// Takes `world`/`username` rather than a live `&mut Player` since the game can now end from
+/// either call site in `interact_cell` (a live `Player` right there) OR from `tick`'s delayed bot
+/// move (only ever has `&mut World` - see `PendingBotMove::username`'s own doc comment for why
+/// the credited name is captured ahead of time instead of looked up again here).
+fn finish_if_over(world: &mut World, username: &str, state: &Rc<RefCell<TicTacToeState>>) -> bool {
     let (result, room_index) = {
         let data = state.borrow();
         let result = winner(&data.cell_states).map(Ok).or_else(|| is_full(&data.cell_states).then_some(Err(())));
@@ -680,41 +728,45 @@ fn finish_if_over(player: &mut Player, state: &Rc<RefCell<TicTacToeState>>) -> b
         // tie (`Err`) is the realistic best case - both count as solved, matching the real
         // puzzle where only an outright loss fails it.
         Err(()) | Ok(CellState::O) => {
-            let message = format!("§a§lPUZZLE SOLVED! §7{} §esolved the Tic Tac Toe puzzle!", player.profile.username);
-            for other in player.server_mut().world.players.values_mut() {
+            let message = format!("§a§lPUZZLE SOLVED! §a{username} §esolved the Tic Tac Toe puzzle!");
+            for other in world.players.values_mut() {
                 other.send_message(&message);
             }
 
             let wall_positions = state.borrow().wall_block_positions;
-            drop_wall(player.world_mut(), &wall_positions);
-            play_puzzle_complete_sound(player.world_mut(), &wall_positions);
+            drop_wall(world, &wall_positions);
+            play_puzzle_complete_sound(world, &wall_positions);
 
             let reward_chest_pos = state.borrow().reward_chest_pos;
-            reveal_reward_chest(player.world_mut(), reward_chest_pos);
+            reveal_reward_chest(world, reward_chest_pos);
 
             // Clear the board's Item Frames (and the maps they're holding) along with the wall -
             // the game is over, nothing left to display. `cell_entities` only has entries for
             // cells actually played (see its own doc comment), so this is a no-op for any cell
             // still bare.
             let cell_entities = state.borrow().cell_entities;
-            let world = player.world_mut();
             for entity_id in cell_entities.into_iter().flatten() {
                 world.despawn_entity(entity_id);
             }
             state.borrow_mut().cell_entities = [None; 9];
         }
         Ok(_) => {
-            let message = format!("§c§lPUZZLE FAIL! §7{} §elost the Tic Tac Toe puzzle!", player.profile.username);
-            for other in player.server_mut().world.players.values_mut() {
+            let message = format!("§c§lPUZZLE FAIL! §a{username} §elost the Tic Tac Toe puzzle!");
+            for other in world.players.values_mut() {
                 other.send_message(&message);
             }
-            player.server_mut().dungeon.record_puzzle_failed();
+            world.server_mut().dungeon.record_puzzle_failed();
         }
     }
 
-    if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
+    // `Ok(_)` above is the only losing case (`Err(())` is a tie, `Ok(CellState::O)` a win - both
+    // handled in the solved arm) - matches it again here rather than threading a bool through,
+    // since `result` is still in scope and this stays next to the branch it describes.
+    let failed = matches!(result, Ok(CellState::X));
+    if let Some(room) = world.server_mut().dungeon.rooms.get_mut(room_index) {
         room.puzzle_completed = true;
+        room.puzzle_failed = failed;
     }
-    player.server_mut().dungeon.update_map_for_room(room_index);
+    world.server_mut().dungeon.update_map_for_room(room_index);
     true
 }

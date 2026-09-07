@@ -77,7 +77,7 @@
 
 use crate::dungeon::room::room::Room;
 use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
-use crate::net::protocol::play::clientbound::{Particles, PositionLook, SoundEffect};
+use crate::net::protocol::play::clientbound::{Particles, SoundEffect};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -183,19 +183,18 @@ pub struct TeleportMazeState {
     last_teleport_tick: HashMap<ClientId, u64>,
 }
 
-/// After force-teleporting a player, `packet_handling.rs`'s `PlayerPosition`/`PlayerPositionLook`/
-/// `PlayerLook` handlers unconditionally overwrite `player.position` from *any* incoming client
-/// packet (no staleness check at all) - there's no 1.8 teleport-confirmation packet to wait for
-/// either. A packet the client already had in flight *before* it received our teleport (still
-/// reporting its old, pre-teleport position) lands right after and silently snaps `player.position`
-/// straight back to the pad they just left, which the very next tick's edge-detection then reads
-/// as "stepped onto that old pad again," instantly re-firing its own teleport - the "insta
-/// teleports me back" bug. For a short window after any teleport, `tick_player` just skips its own
-/// pad re-check entirely, giving the client's in-flight stale packets time to flush - ~0.5s,
-/// comfortably longer than one round trip under normal latency, short enough a deliberate
-/// walk-off-and-back-on still feels immediate. The forced look direction, by contrast, is a real
-/// one-shot: set once at the moment of landing and never touched again - the player can freely
-/// look around immediately afterward, it doesn't fight their mouse or get re-imposed.
+/// Originally written because a stale, in-flight-before-the-teleport client position packet
+/// could silently snap `player.position` straight back to the pad just left, which the very next
+/// tick's edge-detection then read as "stepped onto that old pad again," instantly re-firing its
+/// own teleport - the "insta teleports me back" bug. That root cause is now fixed at the shared
+/// `Player::server_teleport`/`pending_teleport` level (see `PendingTeleport`'s doc comment) -
+/// stale reports are rejected there directly rather than relying on a timing window here. This
+/// grace period is kept anyway as harmless defense-in-depth (skipping the pad re-check for a
+/// moment after landing costs nothing a deliberate immediate walk-off-and-back-on would notice),
+/// not because it's still load-bearing for that bug specifically. The forced look direction, by
+/// contrast, is a real one-shot: set once at the moment of landing and never touched again - the
+/// player can freely look around immediately afterward, it doesn't fight their mouse or get
+/// re-imposed.
 const TELEPORT_GRACE_TICKS: u64 = 10;
 
 /// Spawns the Teleport Maze puzzle's pad graph for `room` if it actually is one - no-op for
@@ -448,13 +447,7 @@ fn tick_player(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &mut World, cli
 
         state_rc.borrow_mut().last_teleport_tick.insert(client_id, current_tick);
         let Some(player) = world.players.get_mut(&client_id) else { return };
-        player.position = landing_feet;
-        player.last_position = landing_feet;
-        player.yaw = yaw;
-        player.last_yaw = yaw;
-        player.pitch = pitch;
-        player.last_pitch = pitch;
-        player.write_packet(&PositionLook { x: landing_feet.x, y: landing_feet.y, z: landing_feet.z, yaw, pitch, flags: 0 });
+        player.server_teleport(landing_feet, yaw, pitch, 0);
         play_teleport_effects(player, landing_feet);
         return;
     }
@@ -498,14 +491,15 @@ fn tick_player(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &mut World, cli
     state_rc.borrow_mut().last_teleport_tick.insert(client_id, current_tick);
 
     let Some(player) = world.players.get_mut(&client_id) else { return };
-    player.write_packet(&PositionLook { x: odin_feet.x, y: odin_feet.y, z: odin_feet.z, yaw, pitch, flags: 0 });
-    player.position = landing_feet;
-    player.last_position = landing_feet;
-    player.yaw = yaw;
-    player.last_yaw = yaw;
-    player.pitch = pitch;
-    player.last_pitch = pitch;
-    player.write_packet(&PositionLook { x: landing_feet.x, y: landing_feet.y, z: landing_feet.z, yaw, pitch, flags: 0 });
+    // Two teleports back to back, deliberately: `odin_feet` first (purely for OdinClient's
+    // one-shot pad-landing detection, see the comment above), then immediately superseded by the
+    // real `landing_feet`. `server_teleport` handles this exactly right on its own - the second
+    // call simply replaces the first as the newest expected destination, so only `landing_feet`
+    // is ever actually waited on for acknowledgement; an echo for the throwaway `odin_feet` (if
+    // the client even sends one before receiving the second packet) just won't match it and gets
+    // harmlessly rejected.
+    player.server_teleport(odin_feet, yaw, pitch, 0);
+    player.server_teleport(landing_feet, yaw, pitch, 0);
     play_teleport_effects(player, landing_feet);
 }
 
@@ -553,13 +547,7 @@ fn teleport_to_reward_chest(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &m
     let (yaw, pitch) = look_at_direction(landing_feet, chest_pos);
 
     if let Some(player) = world.players.get_mut(&client_id) {
-        player.position = landing_feet;
-        player.last_position = landing_feet;
-        player.yaw = yaw;
-        player.last_yaw = yaw;
-        player.pitch = pitch;
-        player.last_pitch = pitch;
-        player.write_packet(&PositionLook { x: landing_feet.x, y: landing_feet.y, z: landing_feet.z, yaw, pitch, flags: 0 });
+        player.server_teleport(landing_feet, yaw, pitch, 0);
         play_teleport_effects(player, landing_feet);
     }
 
@@ -577,7 +565,8 @@ fn teleport_to_reward_chest(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &m
 /// win condition, not merely reaching it.
 fn reveal_reward_chest(world: &mut World, room_index: usize, chest_pos: BlockPos) {
     world.set_block_at(Blocks::Air, chest_pos.x, chest_pos.y, chest_pos.z);
-    let secret_rc = Rc::new(RefCell::new(DungeonSecret::new(SecretType::Chest { direction: Direction::North }, chest_pos, 0.0)));
+    let rotation = world.server_mut().dungeon.rooms[room_index].rotation;
+    let secret_rc = Rc::new(RefCell::new(DungeonSecret::new(SecretType::Chest { direction: Direction::North.rotate(rotation) }, chest_pos, 0.0)));
     {
         let mut secret = secret_rc.borrow_mut();
         secret.blessing_texture = Some(SOLVE_BLESSING_TEXTURE);

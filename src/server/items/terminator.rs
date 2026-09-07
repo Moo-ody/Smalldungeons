@@ -1,6 +1,8 @@
 //! The Terminator: real item lore (`Item::Terminator` in `mod.rs`) confirms the mechanically
-//! relevant stats - "Shoots 3 arrows at once", "Shot Cooldown: 0.5s", and the Shortbow reforge
-//! line "Instantly shoots!" (no bow-draw/charge delay - fires the instant you click). Its other
+//! relevant stats - "Shoots 3 arrows at once" and the Shortbow reforge line "Instantly shoots!"
+//! (no bow-draw/charge delay - fires the instant you click). The lore's own "Shot Cooldown: 0.5s"
+//! text doesn't match the real cooldown - per explicit correction, it's actually 0.25s (see
+//! `SHOT_COOLDOWN_TICKS`). Its other
 //! stats (Damage, Crit Chance, the Precise headshot bonus) and its Salvation ability (left-click,
 //! after landing 3 hits) have nothing to plug into - there's no player-vs-mob damage or
 //! hit-tracking system anywhere in this codebase yet, matching how every other damage-number
@@ -35,8 +37,9 @@ use crate::server::player::player::Player;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 
-/// "Shot Cooldown: 0.5s" @ 20 TPS.
-const SHOT_COOLDOWN_TICKS: u64 = 10;
+/// Real Shot Cooldown is 0.25s @ 20 TPS - per explicit correction, the item lore's "0.5s" this
+/// was originally read from doesn't match the real value.
+const SHOT_COOLDOWN_TICKS: u64 = 5;
 /// Real vanilla `EntityArrow`'s own fully-charged initial speed (3.0 blocks/tick @ 20 TPS) - not
 /// a made-up "fast and snappy" value. With gravity back on, matching the client's own real
 /// physics reference speed (not just the gravity/drag constants) matters for the same reason -

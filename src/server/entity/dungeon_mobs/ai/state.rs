@@ -37,6 +37,13 @@ pub struct MobAiState {
     pub archetype: DungeonMobType,
     pub spawn_origin: DVec3,
     pub spawn_yaw: f32,
+    /// The room this mob was spawned into - `ai/mod.rs::run_mob_ai` checks this room's own
+    /// `Room::entered` every tick and forces `ActivationState::Dormant` (skipping perception/
+    /// idle-wander entirely) regardless of distance until it's actually true. Lets a room's mobs
+    /// be pre-spawned - visible, but completely inactive - the instant a player enters a
+    /// DIFFERENT, door-connected room, without them acting alive before a player has actually
+    /// crossed into their own room (see `Dungeon::tick`'s adjacent-room pre-spawn check).
+    pub room_index: usize,
 
     pub activation: ActivationState,
 
@@ -83,11 +90,12 @@ pub struct MobAiState {
 }
 
 impl MobAiState {
-    pub fn new(archetype: DungeonMobType, spawn_origin: DVec3, spawn_yaw: f32) -> Self {
+    pub fn new(archetype: DungeonMobType, spawn_origin: DVec3, spawn_yaw: f32, room_index: usize) -> Self {
         Self {
             archetype,
             spawn_origin,
             spawn_yaw,
+            room_index,
             activation: ActivationState::Dormant,
             target: None,
             first_sight_pending: false,

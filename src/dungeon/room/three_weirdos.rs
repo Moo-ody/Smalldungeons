@@ -144,9 +144,13 @@ pub struct ThreeWeirdosState {
 }
 
 /// Sets up the Three Weirdos puzzle for `room` if it actually is one - spawns the 3 NPCs and
-/// registers the 3 chests as interactable. No-op for every other room. Called once from
-/// `Room::load_into_world`, same timing as `register_levers`/the other room-name special cases
-/// already there.
+/// registers the 3 chests as interactable. No-op for every other room (belt-and-suspenders check;
+/// the caller already filters by name and by `Room::weirdos_spawned` before calling this at all).
+/// Called once from `Dungeon::tick`'s room-entry hook, the first time a player actually crosses
+/// into the room - deliberately NOT at room load (`Room::load_into_world`) like most other
+/// puzzle setups, so the NPCs don't exist yet for a player peeking in from an adjacent room or a
+/// chunk simply being loaded. See `Room::weirdos_spawned`'s doc comment for why this can't
+/// double-fire.
 pub fn setup(room: &Room, room_index: usize, world: &mut World) {
     if room.room_data.name != "Three Weirdos" {
         return;
@@ -236,6 +240,19 @@ pub fn setup(room: &Room, room_index: usize, world: &mut World) {
             // (`WeirdosSolver.kt`'s `onNPCMessage`) - so without this armor stand, Odin's solver
             // would never find anything to highlight even though the chat/logic is correct.
             let _ = crate::server::entity::spawn_equipped::spawn_following_nametag(world, entity_id, names[index], 1.1, EntityVariant::ArmorStand);
+
+            // Second line directly beneath the name, same "stack two following-nametag armor
+            // stands 0.25 apart" convention `main.rs` already uses for Mort's own name+CLICK
+            // pair. `spawn_following_nametag` registers this under `entity_id` in
+            // `world.entity_following_nametag` alongside the name label above (a `Vec`, not a
+            // single slot - already proven to hold more than one child per host by Mort's own
+            // pair), so `world.despawn_entity(entity_id)` tears down both automatically; nothing
+            // extra to track here. It's a separate, invisible, hitbox-less-for-interaction-
+            // purposes armor stand (no `EntityImpl::interact` override, unlike `WeirdoImpl`
+            // below), positioned by `FollowingNametagImpl` every tick from `entity_id`'s own
+            // position - if the weirdo ever moved, this would move with it for free, though today
+            // it doesn't (see `tick` below - rotation only).
+            let _ = crate::server::entity::spawn_equipped::spawn_following_nametag(world, entity_id, "§e§lCLICK", 0.85, EntityVariant::ArmorStand);
         }
     }
 
@@ -254,6 +271,7 @@ pub fn interact_chest(player: &mut Player, block_pos: &BlockPos, chest_index: us
     if data.resolved {
         return;
     }
+    let mut failed = false;
 
     let talked_to_all = data.clicked_weirdos.get(&player.client_id).is_some_and(|clicked| clicked.iter().all(|c| *c));
     if !talked_to_all {
@@ -266,7 +284,7 @@ pub fn interact_chest(player: &mut Player, block_pos: &BlockPos, chest_index: us
 
     if chest_index == data.correct_index {
         let message = format!(
-            "§a§lPUZZLE SOLVED! §7{} §ewasn't fooled by §c{}§e! §4G§co§6o§ed §2j§bo§3b§5!",
+            "§a§lPUZZLE SOLVED! §a{} §ewasn't fooled by §c{}§e! §4G§co§6o§ed §2j§bo§3b§5!",
             player.profile.username, data.names[chest_index],
         );
         let block_action = BlockAction {
@@ -282,7 +300,7 @@ pub fn interact_chest(player: &mut Player, block_pos: &BlockPos, chest_index: us
     } else {
         player.send_message(&format!("§e[NPC] §c{}§f: You fool!", data.names[chest_index]));
         let message = format!(
-            "§c§lPUZZLE FAIL! §7{} §ewas fooled by §c{}§e! §4Y§ci§6k§ee§as§2!",
+            "§c§lPUZZLE FAIL! §a{} §ewas fooled by §c{}§e! §4Y§ci§6k§ee§as§2!",
             player.profile.username, data.names[chest_index],
         );
         // Also broadcasts a `BlockAction` (chest-open) for the wrong chest, same as the solved
@@ -319,10 +337,12 @@ pub fn interact_chest(player: &mut Player, block_pos: &BlockPos, chest_index: us
         }
 
         player.server_mut().dungeon.record_puzzle_failed();
+        failed = true;
     }
 
     if let Some(room) = player.server_mut().dungeon.rooms.get_mut(room_index) {
         room.puzzle_completed = true;
+        room.puzzle_failed = failed;
     }
     player.server_mut().dungeon.update_map_for_room(room_index);
 }

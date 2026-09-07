@@ -23,6 +23,21 @@ impl AABB {
         self.min.z <= other.max.z && self.max.z >= other.min.z
     }
 
+    pub fn contains(&self, point: DVec3) -> bool {
+        point.x >= self.min.x && point.x <= self.max.x &&
+        point.y >= self.min.y && point.y <= self.max.y &&
+        point.z >= self.min.z && point.z <= self.max.z
+    }
+
+    /// Grows this box by `amount` on every face - vanilla's real `EntityArrow` collision check
+    /// does exactly this (`getEntityBoundingBox().expand(0.3, 0.3, 0.3)`, straight from the
+    /// decompiled 1.8 server source) before testing an arrow's flight line against a candidate
+    /// entity, rather than testing its raw hitbox.
+    pub fn expand(self, amount: f64) -> AABB {
+        let pad = DVec3::new(amount, amount, amount);
+        AABB::new(self.min - pad, self.max + pad)
+    }
+
     /// Create an AABB centered at origin with given width/height.
     pub const fn from_height_width(height: f64, width: f64) -> Self {
         Self { 

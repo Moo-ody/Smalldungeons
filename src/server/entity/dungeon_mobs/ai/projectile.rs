@@ -24,6 +24,7 @@ use crate::server::block::block_position::BlockPos;
 use crate::server::entity::entity::{Entity, EntityId, EntityImpl};
 use crate::server::entity::entity_metadata::{EntityMetadata, EntityVariant};
 use crate::server::player::player::ClientId;
+use crate::server::utils::aabb::AABB;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
@@ -180,24 +181,66 @@ impl EntityImpl for MobProjectileImpl {
         entity.last_position = entity.position;
 
         let world = entity.world_mut();
-        if let Some(hit_pos) = sweep_block_hit(world, pre_pos, entity.position) {
-            if matches!(self.impact, ImpactEffect::Explode) {
-                explode(world, entity.position);
-            }
-            // Disjoint-field borrows of `world.interactable_blocks` and `world.players` at once -
-            // same aliasing this codebase's whole block-interact dispatch already relies on
-            // (every `BlockInteractAction::interact` implementation freely reaches back into
-            // `World`/`Dungeon` via the shooter `Player`'s own `server_mut()`/`world_mut()` while
-            // this `action` borrow is nominally still live, e.g. `RedstoneKeySkull`'s handler
-            // removing itself from this very map) - not introducing a new pattern, just reusing
-            // the existing one from a projectile hit instead of a direct player click.
-            if let Some(shooter_id) = self.on_block_hit {
-                if let (Some(action), Some(shooter)) = (world.interactable_blocks.get(&hit_pos), world.players.get_mut(&shooter_id)) {
-                    action.interact(shooter, &hit_pos);
+        // Entities are only swept for a player-fired shot (Terminator, via `on_block_hit`) - same
+        // "only a deliberate player shot, never a mob-fired one" gating `on_block_hit`'s own doc
+        // comment already establishes for block hits, reused here for entity hits (a stray
+        // skeleton arrow shouldn't be able to redirect the Ice Path silverfish either).
+        let check_entities = self.on_block_hit.is_some();
+        // Re-swept in a loop (not a single call) to support piercing - a hit whose own
+        // `on_projectile_hit` returns `false` (see that method's own doc comment) doesn't stop
+        // the projectile, so the *same* tick's flight can go on to hit more entities behind the
+        // first one (the Higher or Lower puzzle's blazes, per explicit request) before it's
+        // finally blocked or reaches its endpoint.
+        let mut pierced: Vec<EntityId> = Vec::new();
+        loop {
+            match sweep_hit(world, pre_pos, entity.position, entity.id, &pierced, check_entities) {
+                Some(SweepHit::Entity(hit_id)) => {
+                    // Guaranteed `Some` - `check_entities` (and therefore any `SweepHit::Entity`
+                    // result at all) only happens when `on_block_hit` is `Some`.
+                    let shooter_id = self.on_block_hit.unwrap();
+                    let velocity = self.velocity_per_tick;
+                    let stop = world.entities.get_mut(&hit_id)
+                        .map(|(other_entity, other_impl)| other_impl.on_projectile_hit(other_entity, velocity, shooter_id))
+                        .unwrap_or(true);
+                    if stop {
+                        world.despawn_entity(entity.id);
+                        return;
+                    }
+                    pierced.push(hit_id);
                 }
+                Some(SweepHit::Block(hit_pos)) => {
+                    if matches!(self.impact, ImpactEffect::Explode) {
+                        explode(world, entity.position);
+                    }
+                    // Disjoint-field borrows of `world.interactable_blocks` and `world.players` at
+                    // once - same aliasing this codebase's whole block-interact dispatch already
+                    // relies on (every `BlockInteractAction::interact` implementation freely reaches
+                    // back into `World`/`Dungeon` via the shooter `Player`'s own
+                    // `server_mut()`/`world_mut()` while this `action` borrow is nominally still
+                    // live, e.g. `RedstoneKeySkull`'s handler removing itself from this very map) -
+                    // not introducing a new pattern, just reusing the existing one from a projectile
+                    // hit instead of a direct player click.
+                    // `on_block_hit` is only ever `Some` for a Terminator arrow (`terminator.rs`
+                    // is the sole caller that passes it) - per explicit correction, the Terminator
+                    // is a Creeper Beams-specific bow trick shot, so this must never open/trigger
+                    // any OTHER puzzle's interactable (secret chests, essence, levers, doors,
+                    // etc.) just because an arrow happened to land on one, only that one lantern.
+                    if let Some(shooter_id) = self.on_block_hit {
+                        let is_creeper_beams_lantern = matches!(
+                            world.interactable_blocks.get(&hit_pos),
+                            Some(crate::server::block::block_interact_action::BlockInteractAction::CreeperBeamsLantern { .. })
+                        );
+                        if is_creeper_beams_lantern {
+                            if let (Some(action), Some(shooter)) = (world.interactable_blocks.get(&hit_pos), world.players.get_mut(&shooter_id)) {
+                                action.interact(shooter, &hit_pos);
+                            }
+                        }
+                    }
+                    world.despawn_entity(entity.id);
+                    return;
+                }
+                None => break,
             }
-            world.despawn_entity(entity.id);
-            return;
         }
 
         // No mob-vs-player damage system exists yet - despawning on proximity is the
@@ -248,32 +291,99 @@ fn tick_reel(entity: &mut Entity, reel: &mut ReelState) {
     face_velocity(entity, velocity);
 }
 
-/// Walks the straight segment `from -> to` in small steps, returning the position of the first
-/// non-passable block encountered along it (if any). Checking only a tick's *endpoint* position
-/// (the old approach) lets a projectile moving several blocks in one tick - the Terminator's
-/// arrows travel 3 blocks/tick at real vanilla arrow speed - tunnel straight through a
-/// single-block-thick target: a sea lantern's whole 1-block cross-section can fall entirely
-/// between two consecutive endpoint samples, with more ticks (and more chances to get skipped
-/// over on some tick) the farther away the target is - matching "can't shoot lanterns from far,
-/// registers weirdly." Step size is well under 1 block so the segment can't skip over any block
-/// it actually passes through.
-fn sweep_block_hit(world: &World, from: DVec3, to: DVec3) -> Option<BlockPos> {
+/// What `sweep_hit` found first along a tick's movement segment.
+enum SweepHit {
+    Block(BlockPos),
+    Entity(EntityId),
+}
+
+/// Real vanilla (width, height) collision box for a `wants_projectile_hits`-opted-in entity
+/// variant - only variants that actually opt in need an entry; anything else falls back to a
+/// generic mob-sized box rather than panicking, since a future opt-in shouldn't have to remember
+/// to update this too.
+fn hitbox_for(variant: &EntityVariant) -> (f64, f64) {
+    match variant {
+        EntityVariant::Blaze => (0.6, 1.8),
+        EntityVariant::Silverfish => (0.3, 0.7),
+        _ => (0.6, 1.95),
+    }
+}
+
+/// Real vanilla `EntityArrow` collision margin - straight from the decompiled 1.8 server source,
+/// which tests a candidate's `getEntityBoundingBox().expand(0.3, 0.3, 0.3)`, not its raw hitbox.
+/// Without this, a shot that clips just past a target's real edge (a graze real vanilla still
+/// registers as a hit) misses here instead - "the arrow hits the edge but doesn't count".
+const ARROW_COLLISION_EXPAND: f64 = 0.3;
+
+/// Walks the straight segment `from -> to` in small steps, returning whichever of (optionally) a
+/// live entity or a non-passable block the projectile reaches *first* along it, if either.
+/// Checking only a tick's *endpoint* position (the old approach) lets a projectile moving several
+/// blocks in one tick - the Terminator's arrows travel 3 blocks/tick at real vanilla arrow speed -
+/// tunnel straight through a single-block-thick target: a sea lantern's whole 1-block
+/// cross-section (or, for `check_entities`, the Ice Path silverfish's whole hit radius) can fall
+/// entirely between two consecutive endpoint samples, with more ticks (and more chances to get
+/// skipped over on some tick) the farther away the target is - matching "can't shoot lanterns
+/// from far, registers weirdly" (blocks) or "shooting the silverfish doesn't do anything" (the
+/// same bug, just for entities - which had no sweep at all before, only a same-tick endpoint
+/// check). Step size is well under 1 block so the segment can't skip over anything it actually
+/// passes through. Entities aren't checked at all unless `check_entities` is set (only a
+/// deliberate player shot should be able to redirect one - see the call site's doc comment) - a
+/// skipped scan there is a plain early `continue`, not a correctness issue, since a `false`
+/// `check_entities` caller never wants an `Entity` result regardless.
+///
+/// `already_hit` additionally excludes every entity this same tick's flight has already pierced
+/// through (see `EntityImpl::on_projectile_hit`'s own doc comment on piercing) - re-sweeping the
+/// same full remaining segment after a pierced hit would otherwise just find that same entity
+/// again and never progress.
+///
+/// Entity hits are tested against each candidate's own real hitbox (`hitbox_for`), expanded by
+/// `ARROW_COLLISION_EXPAND` exactly like real vanilla's `EntityArrow` does - not a flat
+/// `HIT_RADIUS`-sphere around its feet position. A uniform 1-block-radius sphere anchored at feet
+/// height was both too loose horizontally (a Higher or Lower shot at the correct next Blaze could
+/// also graze an unrelated, out-of-order Blaze standing nearby along the same vertical shaft,
+/// instantly failing a puzzle the player thought they'd just gotten right) and too tight
+/// vertically for anyone aiming at center-mass instead of the very base of a tall mob (a real
+/// Blaze is 1.8 blocks tall - aiming at its middle puts the arrow ~0.9 blocks above its
+/// feet-anchored position, already most of the way to falling outside a radius-1.0 sphere, which
+/// is exactly "doesn't hit most of the time"). The raw (unexpanded) hitbox alone still missed
+/// genuine edge grazes real vanilla counts as a hit - `expand` closes that last gap.
+fn sweep_hit(world: &World, from: DVec3, to: DVec3, exclude_id: EntityId, already_hit: &[EntityId], check_entities: bool) -> Option<SweepHit> {
     const STEP: f64 = 0.2;
     let delta = to - from;
     let dist = (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z).sqrt();
     let steps = ((dist / STEP).ceil() as i32).max(1);
 
-    let mut last_pos: Option<BlockPos> = None;
+    let mut last_block_pos: Option<BlockPos> = None;
     for i in 1..=steps {
         let t = i as f64 / steps as f64;
         let p = DVec3::new(from.x + delta.x * t, from.y + delta.y * t, from.z + delta.z * t);
+
+        if check_entities {
+            // Explicit opt-in (`EntityImpl::wants_projectile_hits`), not a heuristic - see that
+            // method's doc comment for why a broader "any visible, non-dropped-item entity"
+            // guess (tried first) was a real regression: it let a Terminator shot hit Creeper
+            // Beams' visible Creeper prop instead of the sea lantern behind it.
+            let hit = world.entities.iter()
+                .find(|&(&id, (other, impl_))| {
+                    if id == exclude_id || already_hit.contains(&id) || !impl_.wants_projectile_hits() {
+                        return false;
+                    }
+                    let (width, height) = hitbox_for(&other.metadata.variant);
+                    AABB::from_height_width(height, width).offset(other.position).expand(ARROW_COLLISION_EXPAND).contains(p)
+                })
+                .map(|(&id, _)| id);
+            if let Some(id) = hit {
+                return Some(SweepHit::Entity(id));
+            }
+        }
+
         let pos = BlockPos::new(p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32);
-        if Some(pos) == last_pos {
+        if Some(pos) == last_block_pos {
             continue;
         }
-        last_pos = Some(pos);
+        last_block_pos = Some(pos);
         if !is_block_passable(world.get_block_at(pos.x, pos.y, pos.z)) {
-            return Some(pos);
+            return Some(SweepHit::Block(pos));
         }
     }
     None

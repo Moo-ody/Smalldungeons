@@ -32,7 +32,6 @@ id_enum! {
         Portal("mob.portal"),  
         FireIgnite("fire.ignite"),
         ZombieRemedy("mob.zombie.remedy"),
-        ZombieDeath("mob.zombie.death"),
         RandomClick("random.click"),
         EnderDragonGrowl("mob.enderdragon.growl"),
         VillagerHaggle("mob.villager.haggle"),
@@ -51,13 +50,24 @@ id_enum! {
         BatDeath("mob.bat.death"),
         BatHurt("mob.bat.hurt"),
         PistonIn("tile.piston.in"),
+        PistonOut("tile.piston.out"),
         SkeletonDeath("mob.skeleton.death"),
         EndermenDeath("mob.endermen.death"),
+        BlazeDeath("mob.blaze.death"),
         CatMeow("mob.cat.meow"),
         CatPurr("mob.cat.purr"),
         CatPurreow("mob.cat.purreow"),
-        AnvilBreak("random.anvil_break"),
         DonkeyHit("mob.horse.donkey.hit"),
+        LevelUp("random.levelup"),
+        // Legacy 1.8 name for modern clients' `block.glass.break`.
+        GlassBreak("dig.glass"),
+        // Legacy 1.8 name for modern clients' `block.wool.break` - wool was "cloth" in the old
+        // flat sound registry.
+        ClothBreak("dig.cloth"),
+        // Legacy 1.8 name for modern clients' `entity.item.break` (a held item/tool breaking).
+        ItemBreak("random.break"),
+        // Legacy 1.8 name for modern clients' `entity.player.death`.
+        PlayerDeath("game.player.die"),
     }
 }
 

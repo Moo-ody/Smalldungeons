@@ -1,23 +1,21 @@
-//! Debug command for exercising F7 score/announcement logic (see `dungeon::score`).
+//! Debug command for exercising F7 score logic (see `dungeon::score`).
 //!
 //! `death`/`puzzlefail`/`mimic`/`paul` have no real in-game trigger yet - no player death
 //! system and no puzzle minigames exist in this codebase - so this is the only way to test
 //! those categories end-to-end until those systems are built. `show` prints the live
-//! breakdown without mutating anything. `force` ignores the real score entirely and just
-//! sends both announcement messages, to check the chat pipeline itself works in isolation.
+//! breakdown without mutating anything.
 //!
 //! NOTE: this command declares exactly one *required* argument (the framework in
 //! `commands/mod.rs` rejects anything with a different arg count *silently* - no feedback at
 //! all - so `/dscore` with zero args or a typo'd action will do nothing).
 
-use crate::dungeon::score::DungeonScoreState;
 use crate::server::commands::argument::Argument;
 use crate::server::commands::command::CommandMetadata;
 use crate::server::commands::outcome::Outcome;
 use crate::server::player::player::Player;
 use crate::server::world::World;
 
-const ACTIONS: &[&str] = &["show", "force", "death", "puzzlefail", "mimic", "paul"];
+const ACTIONS: &[&str] = &["show", "death", "puzzlefail", "mimic", "paul"];
 
 pub struct DScore;
 
@@ -26,11 +24,6 @@ impl CommandMetadata for DScore {
 
     fn run(world: &mut World, player: &mut Player, args: &[&str]) -> anyhow::Result<Outcome> {
         match args[0] {
-            "force" => {
-                player.send_message("\u{a7}7[dscore] Forcing both announcements now (ignoring real score)...");
-                DungeonScoreState::force_announce_for_test(world);
-                return Ok(Outcome::Success);
-            }
             "death" => world.server_mut().dungeon.record_death(),
             "puzzlefail" => world.server_mut().dungeon.record_puzzle_failed(),
             "mimic" => world.server_mut().dungeon.record_mimic_killed(),

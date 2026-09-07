@@ -52,6 +52,15 @@ pub struct Room {
     pub fallingblocks_checked: bool,
     pub fallingblocks_detected_count: usize,
     pub scheduled_falling_removals: Vec<(u64, Vec<crate::dungeon::room::fallingblocks::FallingBlock>)>, // (tick, blocks)
+    /// Indices into `fallingblock_patterns` that have been claimed by a scheduled drop - inserted
+    /// the moment a pattern is scheduled and never removed again (not even once it actually
+    /// drops), so it can never be found or scheduled a second time. Doubles as both "don't
+    /// re-arm while this is waiting on the shared 5-tick pulse" and, after it fires, "already
+    /// dropped" - replacing what used to be an actual removal from `fallingblock_patterns` at
+    /// trigger time, which isn't safe now that more than one pattern can be waiting on its own
+    /// scheduled tick simultaneously (removing by index would shift every other still-pending
+    /// index). See `check_fallingblocks_collision`'s doc comment for the timing rule itself.
+    pub pending_fallingblock_triggers: std::collections::HashSet<usize>,
     pub mushroom_sets: Vec<MushroomSets>,
     pub lever_data: Vec<LeverData>, // Store lever data for this room
     
@@ -73,6 +82,41 @@ pub struct Room {
     /// this, `DungeonMap::draw_room`'s checkmark logic couldn't tell those two 0s apart and drew
     /// a checkmark the instant the room was entered, before any of its mobs even existed.
     pub mobs_spawned: bool,
+
+    /// Whether this room has already been queued for a dormant pre-spawn (see
+    /// `Dungeon::tick`'s adjacent-room check) - a one-shot latch set the instant it's queued
+    /// (not when `spawn_room_mobs` actually runs, same timing `entered` itself already uses for
+    /// `rooms_just_entered`), so a player lingering in a neighbouring room for many ticks before
+    /// the mob-spawn cycle fires doesn't push this room's index into `pending_mob_spawn_rooms`
+    /// over and over. Also true once the room is entered directly (`mobs_spawned` covers that
+    /// case identically), so this only ever matters for the adjacent-room path.
+    pub mob_prespawn_queued: bool,
+
+    /// Whether `three_weirdos::setup` has already run for this room instance. The 3 NPCs used to
+    /// spawn unconditionally at room load (`load_into_world`) - now deferred to the same
+    /// room-entry hook `room_entry_secrets_spawned`/`mobs_spawned` use (`Dungeon::tick`'s
+    /// `rooms_just_entered` set), so a player never sees them pop in before actually crossing
+    /// into the room. This flag is what makes that idempotent - walking out and back in must not
+    /// re-roll the names or spawn duplicates.
+    pub weirdos_spawned: bool,
+
+    /// Whether `quiz::setup` has already run for this room instance - same idempotency role as
+    /// `weirdos_spawned`, guarding the room-entry hook (`Dungeon::tick`'s `rooms_just_entered`
+    /// set) against re-firing Oruo's intro speech if a player walks out and back in.
+    pub quiz_started: bool,
+
+    /// Whether `ice_path::setup` has already run for this room instance - same idempotency role
+    /// as `quiz_started`, guarding the room-entry hook against re-spawning the silverfish if a
+    /// player walks out and back in.
+    pub ice_path_spawned: bool,
+
+    /// Whether `waterboard::setup` has already run for this room instance - same idempotency
+    /// role as `ice_path_spawned`. Per explicit confirmation, the 3 randomly-closed gates'
+    /// pistons physically push shut (with a real piston sound) the moment a player actually
+    /// crosses into the room, not silently at dungeon generation before anyone's there to see or
+    /// hear it - same room-entry hook as Three Weirdos/Quiz/Ice Path above, guarded so walking
+    /// out and back in doesn't re-roll which gates are closed or re-register the levers.
+    pub waterboard_spawned: bool,
 
     /// World position of the one specific secret chest that marks a Trap room "cleared" - `None`
     /// for every room except the two known Trap layouts (see `trap_completion_secret_relative_pos`).
@@ -97,6 +141,16 @@ pub struct Room {
     /// would otherwise read true the instant the room is entered).
     pub puzzle_completed: bool,
 
+    /// Set alongside `puzzle_completed` whenever a puzzle resolves as a *failure* specifically
+    /// (out-of-order Blaze kill, wrong Three Weirdos chest, wrong Quiz answer, a Tic Tac Toe
+    /// loss, etc.) - `puzzle_completed` alone can't distinguish solved from failed (it's true
+    /// for both, matching real Hypixel's map checkmark - see that field's doc comment), but the
+    /// tab-list puzzle checklist Odin reads genuinely does distinguish the two outcomes with a
+    /// separate glyph (`DungeonListener.kt`'s `puzzleRegex`: "✔" -> Completed, "✖" -> Failed) -
+    /// this is what `main.rs`'s tab-list line generation checks to pick between them. `false`
+    /// for every non-`RoomType::Puzzle` room and for any puzzle that hasn't failed.
+    pub puzzle_failed: bool,
+
     /// `Some` only for the one room (if any) whose `room_data.name` is "Teleport Maze" - set by
     /// `teleport_maze::setup`. Lives directly on `Room` rather than in a `world.interactable_blocks`
     /// entry like `three_weirdos`/`creeper_beams`'s puzzle state, because a teleport pad triggers
@@ -111,6 +165,37 @@ pub struct Room {
     /// isn't wired up yet, but the state already lives here, same `Rc<RefCell<>>` pattern as
     /// every other puzzle, so that follow-up has something to reach into.
     pub tic_tac_toe_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::tic_tac_toe::TicTacToeState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Ice Fill" - set by
+    /// `ice_fill::setup`. Same reasoning/timing as `teleport_maze_state` - an ice tile triggers by
+    /// being walked onto (checked every tick in `ice_fill::tick`, called from `Room::tick` below),
+    /// not right-clicked.
+    pub ice_fill_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::ice_fill::IceFillState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Boulder" - set by
+    /// `boulder::setup`. A box's own trigger positions relocate on every push, so unlike a fixed-
+    /// position puzzle (Tic Tac Toe's buttons, Creeper Beams' lanterns) this needs its own state
+    /// reachable independent of any one `BlockInteractAction` - see `boulder::BoulderState`'s own
+    /// doc comment.
+    pub boulder_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::boulder::BoulderState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Water Board" - set by
+    /// `waterboard::setup`. Reachable independent of any one lever's own `BlockInteractAction` so
+    /// `waterboard::tick` (called from `Room::tick` below) can advance the room-scoped water flow
+    /// simulation every tick while the WATER lever is on, same reasoning `boulder_state` needed.
+    pub waterboard_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::waterboard::WaterboardState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Blaze" (real names "Lower
+    /// Blaze"/"Higher Blaze") - set by `blaze::setup`. Reachable by `room_index` from each
+    /// spawned Blaze's own `EntityImpl::interact` (an entity has no direct path back to its own
+    /// `Room`), the same reasoning `boulder_state` needed for its triggers.
+    pub blaze_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::blaze::BlazeState>>>,
+
+    /// `Some` only for the one room (if any) whose `room_data.name` is "Blaze" AND whose variant
+    /// (`bottom`) has a captured reward-chest shaft - set by `blaze::setup`. Reachable by
+    /// `room_index`/ticked every room tick the same way `boulder_state` is, since the chest's
+    /// animation runs on a tick timer, not directly off any one interact/kill event.
+    pub blaze_chest_state: Option<std::rc::Rc<std::cell::RefCell<crate::dungeon::room::blaze::ChestShaftState>>>,
 }
 
 /// Relative (pre-rotation) position of the specific secret chest whose pickup marks a Trap room
@@ -120,6 +205,22 @@ fn trap_completion_secret_relative_pos(room_name: &str) -> Option<BlockPos> {
     match room_name {
         "Old Trap" => Some(BlockPos { x: 4, y: 71, z: 9 }),
         "New Trap" => Some(BlockPos { x: 26, y: 90, z: 14 }),
+        _ => None,
+    }
+}
+
+/// Extra rotation to apply on top of `Room::get_rotation_from_segments`'s own computed value, for
+/// the rare room whose captured door doesn't actually sit on this project's usual canonical local
+/// side. Confirmed real (per explicit user report): "Dragon" (a 1x1 dead-end/`OneByOneEnd` room)
+/// was always ending up rotated 180° wrong - its door came out of the back of the room instead of
+/// the front, meaning its own captured `block_data` has the real door on the opposite local side
+/// from what `get_1x1_shape_and_type`'s dead-end rotation table assumes. Rather than transform the
+/// captured block data itself, this corrects it at the one place `rotation` is computed for every
+/// room, fixing the door alignment and every other rotated element (facing, secrets, crushers,
+/// etc.) consistently in one place, same as the rest of this function.
+fn door_rotation_correction(room_name: &str) -> Option<Direction> {
+    match room_name {
+        "Dragon" => Some(Direction::South), // Direction::South = a 180° flip, see `Rotatable`.
         _ => None,
     }
 }
@@ -135,7 +236,10 @@ impl Room {
         segments.sort_by(|a, b| a.z.cmp(&b.z));
         segments.sort_by(|a, b| a.x.cmp(&b.x));
         
-        let rotation = Room::get_rotation_from_segments(&segments, dungeon_doors);
+        let mut rotation = Room::get_rotation_from_segments(&segments, dungeon_doors);
+        if let Some(correction) = door_rotation_correction(&room_data.name) {
+            rotation = rotation.rotate(correction);
+        }
         let corner_pos = Room::get_corner_pos_from(&segments, &rotation, &room_data);
 
         // Same relative -> world transform `secrets_loader.rs` uses for `schest` entries (Y is
@@ -340,6 +444,7 @@ impl Room {
             fallingblocks_checked: false,
             fallingblocks_detected_count: 0,
             scheduled_falling_removals: Vec::new(),
+            pending_fallingblock_triggers: std::collections::HashSet::new(),
             mushroom_sets,
             lever_data,
             entered: false,
@@ -348,16 +453,40 @@ impl Room {
             room_entry_secrets_spawned: false,
             starred_mobs_remaining: 0,
             mobs_spawned: false,
+            mob_prespawn_queued: false,
+            weirdos_spawned: false,
+            quiz_started: false,
+            ice_path_spawned: false,
+            waterboard_spawned: false,
             trap_completion_chest_pos,
             trap_completed: false,
             puzzle_completed: false,
+            puzzle_failed: false,
             teleport_maze_state: None,
             tic_tac_toe_state: None,
+            ice_fill_state: None,
+            boulder_state: None,
+            waterboard_state: None,
+            blaze_state: None,
+            blaze_chest_state: None,
         }
     }
 
     pub fn get_corner_pos(&self) -> BlockPos {
         Room::get_corner_pos_from(&self.segments, &self.rotation, &self.room_data)
+    }
+
+    /// Every real door-connected neighbour room's index, across all of this room's own segments
+    /// (`RoomSegment::neighbours`, precomputed once in `Dungeon::from_layout`) - used to find
+    /// which rooms should get their mobs dormant-pre-spawned the instant a player enters an
+    /// adjacent room connected by a door (see `Dungeon::tick`'s own doc comment on that check).
+    /// May yield the same room index more than once if two of this room's own segments both
+    /// border it - callers already guard against re-queuing via `mob_prespawn_queued`, so this
+    /// doesn't need to deduplicate itself.
+    pub fn neighbouring_room_indices(&self) -> impl Iterator<Item = usize> + '_ {
+        self.segments.iter()
+            .flat_map(|segment| segment.neighbours.iter())
+            .filter_map(|neighbour| neighbour.map(|n| n.room_index))
     }
 
     pub fn get_corner_pos_from(segments: &[RoomSegment], rotation: &Direction, room_data: &RoomData) -> BlockPos {
@@ -398,6 +527,29 @@ impl Room {
         // one - no-op otherwise (see `teleport_maze_state`'s doc comment for why this needs a
         // per-tick check instead of the click-based `BlockInteractAction` every other puzzle uses).
         crate::dungeon::room::teleport_maze::tick(self, world);
+
+        // Same per-tick position check as Teleport Maze above, for Ice Fill's own walked-not-
+        // clicked ice tiles - no-op for every room but the one with an active `ice_fill_state`.
+        crate::dungeon::room::ice_fill::tick(self, world);
+
+        // Boulder's floor light-up effect (barrier <-> white stained glass near a player's feet)
+        // - no-op for every room but the one with an active `boulder_state`.
+        crate::dungeon::room::boulder::tick(self, world);
+
+        // Higher/Lower Blaze's reward-chest shaft animation (one block step every
+        // `blaze::CHEST_STEP_TICKS` ticks while a move is pending) - no-op for every room but
+        // the one with an active `blaze_chest_state`.
+        crate::dungeon::room::blaze::tick(self, world);
+
+        // Water Board's own room-scoped water flow simulation (see `waterboard::tick`'s doc
+        // comment) - no-op for every room but the one with an active `waterboard_state` whose
+        // WATER lever is currently on.
+        crate::dungeon::room::waterboard::tick(self, world);
+
+        // Places the Tic Tac Toe bot's own already-computed move once its 3-second delay
+        // actually elapses (see `tic_tac_toe::tick`'s doc comment) - no-op for every room but
+        // the one with an active `tic_tac_toe_state` that currently has a move pending.
+        crate::dungeon::room::tic_tac_toe::tick(self, world);
     }
 
     pub fn detect_crypts(&mut self, world: &World) -> usize {
@@ -582,30 +734,64 @@ impl Room {
         detected
     }
 
-    /// Check if player is touching any falling block and trigger the fall
-    /// Returns true if a falling block pattern was triggered
-    pub fn check_fallingblocks_collision(&mut self, world: &mut World, player_pos: &BlockPos) -> bool {
+    /// Checks if the player is standing on any (not-yet-triggered/not-yet-scheduled) falling
+    /// block pattern, and if so, schedules it to drop on the next shared 5-tick pulse rather than
+    /// dropping it immediately. Returns true if a pattern was newly scheduled this call.
+    ///
+    /// Falling floors run on a repeating 5-tick clock shared by every pattern (derived directly
+    /// from `world.tick_count`, so there's no separate clock state to keep in sync) - not an
+    /// individual "you stepped on it, wait N ticks from *now*" timer per player. Stepping on a
+    /// tile only tells you where in the CURRENT cycle you happened to land: `world.tick_count % 5`
+    /// counts 0,1,2,3,4 repeating, so `5 - (tick_count % 5)` is exactly how many ticks remain
+    /// until the next pulse - 1 tick if you stepped on right before it fires, up to the full 5 if
+    /// you stepped on right as a fresh cycle started. Once a pattern is scheduled, it commits -
+    /// it fires at the scheduled tick regardless of whether anyone is still standing on it by
+    /// then, same as a real trap you've already set off.
+    pub fn check_fallingblocks_collision(&mut self, world: &mut World, room_index: usize, player_pos: &BlockPos) -> bool {
         if self.fallingblock_patterns.is_empty() {
             return false;
         }
 
         // Check if player is standing on any falling block
-        let player_feet_pos = BlockPos { 
-            x: player_pos.x, 
+        let player_feet_pos = BlockPos {
+            x: player_pos.x,
             y: player_pos.y - 1, // Check block below player's feet
-            z: player_pos.z 
+            z: player_pos.z
         };
 
         // Find the first pattern that has the block the player is standing on
         for (i, pattern) in self.fallingblock_patterns.iter().enumerate() {
+            if self.pending_fallingblock_triggers.contains(&i) {
+                continue; // already scheduled - waiting on the pulse, not re-armed by a re-step
+            }
+
             let is_standing_on = pattern.blocks.iter().any(|block| {
                 let pos = BlockPos { x: block.x, y: block.y, z: block.z };
                 pos == player_feet_pos
             });
-            
+
             if is_standing_on {
-                // Player is standing on this falling block pattern - trigger it
-                self.trigger_fallingblocks(world, i);
+                // Inserted here and never removed, whether the schedule below has fired yet or
+                // not - this doubles as both "don't re-arm while waiting on the pulse" and (once
+                // it fires) "already dropped, never findable again", replacing what used to be an
+                // actual `Vec::remove` at trigger time. That removal has to stay gone now that
+                // more than one pattern's trigger can be in flight at once (each waiting on its
+                // own scheduled tick): removing by index would shift every *other* still-pending
+                // index that happened to be numerically larger, corrupting whichever pattern that
+                // scheduled closure captured.
+                self.pending_fallingblock_triggers.insert(i);
+
+                // The visual/collision cue starts right now, on the step itself - not deferred to
+                // the pulse. Only the moment the floor actually becomes passable (letting the
+                // player really fall through) waits for the shared cycle.
+                self.begin_fallingblock_animation(world, i);
+
+                let ticks_until_pulse = 5 - (world.tick_count % 5);
+                world.server_mut().schedule(ticks_until_pulse as u32, move |server| {
+                    let Some(room) = server.dungeon.rooms.get_mut(room_index) else { return };
+                    let world = &mut server.world;
+                    room.finalize_fallingblock_drop(world, i);
+                });
                 return true;
             }
         }
@@ -613,8 +799,14 @@ impl Room {
         false
     }
 
-    /// Trigger falling blocks for a specific pattern index
-    fn trigger_fallingblocks(&mut self, world: &mut World, pattern_index: usize) {
+    /// Runs the instant a player steps onto a falling block pattern - not deferred to the pulse.
+    /// Swaps each block to `Barrier` (invisible, but still solid: the floor already looks like
+    /// it's gone the moment you step on it, but you can't fall through it yet - that's
+    /// `finalize_fallingblock_drop`'s job, once the shared cycle's pulse actually arrives) and
+    /// spawns the cosmetic falling-block entity for each one, which runs its own independent
+    /// 5-blocks-over-20-ticks descent regardless of when the real floor opens up (real Hypixel's
+    /// same "the debris keeps falling after the hole opens" visual, not a gate on passability).
+    fn begin_fallingblock_animation(&mut self, world: &mut World, pattern_index: usize) {
         if let Some(pattern) = self.fallingblock_patterns.get(pattern_index).cloned() {
             // Play sound effect
             for (_, player) in &mut world.players {
@@ -633,24 +825,20 @@ impl Room {
                 let x = block.x;
                 let y = block.y;
                 let z = block.z;
-                
+
                 // Get the current block at this position
                 let current_block = world.get_block_at(x, y, z);
-                
+
                 // Skip air blocks
                 if matches!(current_block, crate::server::block::blocks::Blocks::Air) {
                     continue;
                 }
-                
-                // Replace with barrier block immediately
+
+                // Invisible but still solid - see this method's own doc comment for why this
+                // isn't Air yet.
                 world.set_block_at(crate::server::block::blocks::Blocks::Barrier, x, y, z);
                 world.interactable_blocks.remove(&crate::server::block::block_position::BlockPos { x, y, z });
-                
-                // Schedule the barrier block to be replaced with air after 20 ticks
-                world.server_mut().schedule(20, move |server| {
-                    server.world.set_block_at(crate::server::block::blocks::Blocks::Air, x, y, z);
-                });
-                
+
                 // Spawn falling block entity for animation
                 let _ = world.spawn_entity(
                     crate::server::utils::dvec3::DVec3::new(x as f64 + 0.5, y as f64 - crate::dungeon::room::fallingblocks::FALLING_FLOOR_ENTITY_OFFSET, z as f64 + 0.5),
@@ -662,9 +850,25 @@ impl Room {
                     crate::dungeon::room::fallingblocks::FallingFloorEntityImpl::new(current_block, 5.0, 20),
                 );
             }
-            
-            // Remove the pattern from the room so it can't be triggered again
-            let _ = self.fallingblock_patterns.remove(pattern_index);
+        }
+    }
+
+    /// Runs at the shared cycle's pulse (scheduled by `check_fallingblocks_collision`, 1-5 ticks
+    /// after the step that armed it) - the moment the floor actually opens up and the player can
+    /// fall through. `begin_fallingblock_animation` already handled the visual/sound cue and the
+    /// solid-but-invisible `Barrier` swap back when the player first stepped on; this only needs
+    /// to open the hole. Checks the block is still `Barrier` first (defensive - it should always
+    /// be, since nothing else touches these positions in between) rather than blindly overwriting
+    /// whatever's there. Not removed from `fallingblock_patterns` here either, for the same
+    /// index-stability reason `pending_fallingblock_triggers` (already permanently marking this
+    /// index) exists in the first place.
+    fn finalize_fallingblock_drop(&mut self, world: &mut World, pattern_index: usize) {
+        let Some(pattern) = self.fallingblock_patterns.get(pattern_index).cloned() else { return };
+        for block in &pattern.blocks {
+            let (x, y, z) = (block.x, block.y, block.z);
+            if matches!(world.get_block_at(x, y, z), crate::server::block::blocks::Blocks::Barrier) {
+                world.set_block_at(crate::server::block::blocks::Blocks::Air, x, y, z);
+            }
         }
     }
 
@@ -886,9 +1090,9 @@ impl Room {
         // Register levers for this room
         self.register_levers(world);
 
-        // Spawns the Three Weirdos NPCs + registers their chests, if this is that room - no-op
-        // for every other room (see the check at the top of `setup`).
-        crate::dungeon::room::three_weirdos::setup(self, room_index, world);
+        // Three Weirdos' NPCs are deliberately NOT spawned here - see `Room::weirdos_spawned`'s
+        // doc comment. `three_weirdos::setup` is now called from `Dungeon::tick`'s room-entry
+        // hook instead, the first time a player actually crosses into the room.
 
         // Spawns the Creeper Beams floating creeper + registers its 22 lanterns, if this is
         // that room - no-op for every other room.
@@ -897,6 +1101,23 @@ impl Room {
         // Generates the Teleport Maze puzzle's pad-link graph, if this is that room - no-op for
         // every other room.
         crate::dungeon::room::teleport_maze::setup(self, room_index, world);
+
+        // Picks this dungeon's Ice Fill obstacle patterns and spawns its first floor, if this is
+        // that room - no-op for every other room.
+        crate::dungeon::room::ice_fill::setup(self, room_index, world);
+
+        // Picks Water Board's own real maze pattern (purely internal variety - this stays exactly
+        // ONE room_data_storage entry, see waterboard.rs's own module doc comment for why) and
+        // swaps `self.room_data.block_data` to match, before the generic block-placement loop
+        // below reads it - no-op for every other room. Guarded by `id` NOT already carrying a
+        // `water_board_pattern_N` tag: `practice::find_room_data`'s own `water_board_N` special
+        // case already calls `waterboard::apply_pattern` deterministically on the `RoomData` it
+        // hands to `Room::new`, before this function ever runs on it - without this guard, this
+        // call would silently REROLL and overwrite that deliberate choice with a fresh random one
+        // every time, since it only ever checked `name`, which `apply_pattern` never changes.
+        if self.room_data.name == "Water Board" && !self.room_data.id.starts_with("water_board_pattern_") {
+            crate::dungeon::room::waterboard::pick_pattern(&mut self.room_data);
+        }
 
         // Special placement for Gold room
         if self.room_data.name == "Gold" {
@@ -1089,6 +1310,20 @@ impl Room {
             world.set_block_at(block, corner.x + bp.x, y, corner.z + bp.z);
         }
 
+        // TEMPORARY test-only overlay - see boulder_test.rs's own doc comment. Not the real
+        // puzzle. Deliberately runs after the block-placement loop just above, same reasoning as
+        // Tic Tac Toe's own post-placement hook right below: this needs to *override* the room's
+        // Picks one of the 8 real captured box layouts, places its boxes, and registers the
+        // real reward chest, if this is that room - no-op for every other room. Deliberately runs
+        // after the block-placement loop just above: it needs to override the room's own normal
+        // static blocks wherever a box sits.
+        crate::dungeon::room::boulder::setup(self, room_index, world);
+
+        // Spawns the Higher or Lower puzzle's 10 blazes with randomized (but position-independent)
+        // HP, if this is that room - no-op for every other room.
+        crate::dungeon::room::blaze::setup(self, room_index, world);
+
+
         // Spawns the Tic Tac Toe board's 9 Item Frames (display only for now - see
         // `tic_tac_toe_state`'s doc comment), if this is that room - no-op for every other room.
         // Deliberately runs after the block-placement loop just above (not up with the other
@@ -1097,6 +1332,24 @@ impl Room {
         // and risking disagreeing with whatever `Blocks::rotate` actually produced for the
         // buttons - see `tic_tac_toe::setup`'s doc comment.
         crate::dungeon::room::tic_tac_toe::setup(self, room_index, world);
+
+        // Registers every mushroom secret's bottom/top blocks as interactable ONCE, here at room
+        // load time, instead of every tick for every player the game currently considers "in"
+        // this room (the old approach, in `Dungeon`'s per-tick player loop) - that depended on
+        // continuous 2D-grid-cell room tracking by player position, which stops the instant a
+        // player is teleported up to a set's own hidden loft if that loft's X/Z happens to fall
+        // outside this room's own grid footprint (common for a hidden secret spot). Per explicit
+        // bug report: a mushroom became permanently non-interactable after exactly one round
+        // trip - registering once, unconditionally, for the room's whole lifetime removes that
+        // entire dependency on live player tracking.
+        for (idx, set) in self.mushroom_sets.iter().enumerate() {
+            for &bp in &set.bottom {
+                world.interactable_blocks.insert(bp, crate::server::block::block_interact_action::BlockInteractAction::MushroomBottom { set_index: idx });
+            }
+            for &bp in &set.top {
+                world.interactable_blocks.insert(bp, crate::server::block::block_interact_action::BlockInteractAction::MushroomTop);
+            }
+        }
     }
 
     // pub fn get_world_pos(&self, position: DVec3) -> DVec3 {

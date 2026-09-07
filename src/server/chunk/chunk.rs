@@ -86,13 +86,27 @@ impl Chunk {
             }
         };
         
-        // currently all blocks have max skylight and regular light, 
-        // however ive come across issues, 
-        // where it seems clients recalculate light (due to it being invalid?) causing massive fps drops
-        
+        // All blocks have max skylight and regular light. Real 1.8 chunk data layout groups by
+        // *type* across the whole packet, not interleaved per section: every active section's
+        // block-type array, then every active section's block-light array, then every active
+        // section's sky-light array - each light array is its own 2048-byte nibble array, so a
+        // chunk with N active sections needs N*2048 bytes of block light and N*2048 of sky
+        // light, not a flat 4096 total regardless of N. Writing only 4096 bytes here (this loop
+        // used to run exactly once no matter how many sections were active) left every section
+        // past the first with no light data at all for any chunk taller than 16 blocks - i.e.
+        // basically every real room - corrupting the rest of the packet's layout (the `new`
+        // chunk's biome array below landed at the wrong offset, and the true tail bytes stayed
+        // zeroed). The client would flag such a chunk's lighting invalid and recompute it,
+        // which is exactly the already-suspected "clients recalculate light... causing massive
+        // fps drops" - and also why a forced full relight (F3+A) "fixes" rendering in it: F3+A
+        // discards the corrupted data and relights from scratch instead.
         if section_count != 0 {
-            for _ in 0..4096 {
-                data[offset] = 255;
+            for _ in 0..section_count * 2048 {
+                data[offset] = 255; // block light
+                offset += 1;
+            }
+            for _ in 0..section_count * 2048 {
+                data[offset] = 255; // sky light
                 offset += 1;
             }
         }

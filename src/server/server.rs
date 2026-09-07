@@ -337,22 +337,50 @@ impl Server {
     }
 }
 
+/// Chunk radius sent synchronously by `sync_player_view` - the rest of the view distance is
+/// queued into `player.pending_chunk_sync` and trickled in a few at a time by
+/// `drain_pending_chunk_sync` instead. See that field's doc comment for why: this radius still
+/// covers well more than a player's immediate surroundings (where an item they use the instant
+/// they spawn in, like an arrow, would land), so the one part of the view that has to be usable
+/// *immediately* is never deferred.
+const IMMEDIATE_SYNC_RADIUS: i32 = 2;
+
 /// Sends `player` a full, authoritative snapshot of everything currently in view of their
 /// position: fresh chunk data (`new = true`, so it fully replaces whatever the client
 /// previously had for that chunk - no stray blocks can survive this) plus spawn/equipment
 /// packets for every entity in those chunks. Used both for a brand-new player's initial join
 /// and by `dungeon_switch::switch_dungeon` to resync every connected player into a freshly
-/// rebuilt dungeon in one atomic burst.
+/// rebuilt dungeon.
+///
+/// Only the immediate `IMMEDIATE_SYNC_RADIUS` chunks around `player` are sent synchronously here
+/// - the remaining ring out to the full view distance is queued into `player.pending_chunk_sync`
+/// and trickled a handful per tick by `drain_pending_chunk_sync` (called from `main.rs`'s tick
+/// loop) instead of all landing in one burst. Sending the *entire* view distance at once (up to
+/// 169 chunks at `VIEW_DISTANCE=6`) used to be genuinely correct as far as this server's own
+/// packet delivery goes, but overwhelms the vanilla 1.8 client's own chunk mesh-building queue -
+/// any entity spawned in a chunk whose render mesh hasn't been built yet renders as invisible
+/// until a full client-side reload (F3+A) forces every chunk to rebuild at once. That's exactly
+/// "sometimes entities need F3+A to show, like arrows, if I join and shoot the bow": a fired
+/// arrow's spawn packet landing in the same tick as (or right after) a hundred-plus still-
+/// unmeshed chunks. Splitting the burst doesn't change what eventually gets sent, just how
+/// quickly - the full view distance still fills in within well under a second either way.
 pub fn sync_player_view(world: &mut World, player: &mut Player) {
     let chunk_x = (player.position.x.floor() as i32) >> 4;
     let chunk_z = (player.position.z.floor() as i32) >> 4;
     let view_distance = world::VIEW_DISTANCE as i32 + 1;
+
+    let mut pending: Vec<(i32, i32)> = Vec::new();
 
     world.chunk_grid.for_each_in_view(
         chunk_x,
         chunk_z,
         view_distance,
         |chunk, x, z| {
+            if (x - chunk_x).abs() > IMMEDIATE_SYNC_RADIUS || (z - chunk_z).abs() > IMMEDIATE_SYNC_RADIUS {
+                pending.push((x, z));
+                return;
+            }
+
             player.write_packet(&chunk.get_chunk_data(x, z, true));
 
             for entity_id in chunk.entities.iter_mut() {
@@ -371,4 +399,84 @@ pub fn sync_player_view(world: &mut World, player: &mut Player) {
             }
         }
     );
+
+    // Nearest-first, so the trickle fills in outward from the player rather than in raw scan
+    // order - the closer ring is more likely to matter (about to walk into view) than the far
+    // edge of the view distance.
+    pending.sort_by_key(|&(x, z)| (x - chunk_x).abs().max((z - chunk_z).abs()));
+    player.pending_chunk_sync = pending;
+}
+
+/// How many queued `pending_chunk_sync` chunks to actually send each tick - see that field's and
+/// `sync_player_view`'s doc comments for why this exists. Small enough that the client's own
+/// chunk mesh-building never falls far behind the chunks it's being told about, but the full
+/// view distance still fills in within about a second (169 chunks / 8 per tick ≈ 21 ticks).
+const PENDING_CHUNKS_PER_TICK: usize = 8;
+
+/// Sends the next `PENDING_CHUNKS_PER_TICK` chunks (if any) queued by `sync_player_view` for
+/// `player` - a no-op once the queue is empty, i.e. every tick after the first second or so
+/// following a join or dungeon resync.
+pub fn drain_pending_chunk_sync(player: &mut Player) {
+    if player.pending_chunk_sync.is_empty() {
+        return;
+    }
+    let take = player.pending_chunk_sync.len().min(PENDING_CHUNKS_PER_TICK);
+    let batch: Vec<(i32, i32)> = player.pending_chunk_sync.drain(..take).collect();
+    send_chunk_batch(player, batch);
+}
+
+/// Sends *every* chunk still queued in `player.pending_chunk_sync` right now, instead of
+/// trickling `PENDING_CHUNKS_PER_TICK` per tick - use this immediately before teleporting a
+/// player somewhere they might act on the destination instantly (`/practice`'s teleport is the
+/// motivating case). `/practice` moves a player by directly overwriting `position`/
+/// `last_position` together (see `practice::teleport_player`), which deliberately skips the
+/// normal "you moved, resync newly-visible chunks" path in `main.rs`'s tick loop (that path
+/// diffs against `last_position`, and there's no diff when the two already match) - so a
+/// teleport is the *one* case that doesn't eventually self-correct via ordinary movement. Without
+/// this, a `/practice` run soon enough after joining that some of the destination room's chunks
+/// were still sitting in the staggered queue (see `sync_player_view`'s doc comment for why that
+/// queue exists at all) would land the player in a room real block data hasn't fully arrived for
+/// yet - invisible to the player only briefly (the queue drains within about a second either
+/// way), but long enough that a mod doing a *one-time* read of the room's blocks on arrival (real
+/// Odin's `WorldScan` room-identification is exactly this: a one-shot block-hash scan on room
+/// entry, no retry if it reads incomplete data) can permanently misidentify the room for that
+/// visit. Larger rooms - Blaze's tall shaft being the most extreme in the whole dungeon - are the
+/// most likely to have some of their footprint still queued this soon after a join.
+pub fn flush_all_pending_chunk_sync(player: &mut Player) {
+    if player.pending_chunk_sync.is_empty() {
+        return;
+    }
+    let batch: Vec<(i32, i32)> = player.pending_chunk_sync.drain(..).collect();
+    send_chunk_batch(player, batch);
+}
+
+fn send_chunk_batch(player: &mut Player, batch: Vec<(i32, i32)>) {
+    let world = player.world_mut();
+    for (x, z) in batch {
+        let Some(chunk) = world.chunk_grid.get_chunk_mut(x, z) else { continue };
+        player.write_packet(&chunk.get_chunk_data(x, z, true));
+
+        // A stale ID here (chunk-membership desync) should never crash this - collect only the
+        // still-alive ones first, same as `main.rs`'s own `ChunkDiff::New` handling this replaces
+        // for a moved/teleported player - and prune the rest from the chunk's own list below so
+        // they don't linger forever (harmless if another player's batch already did it first).
+        let valid_entity_ids: Vec<_> = chunk.entities.iter()
+            .filter(|&&entity_id| world.entities.contains_key(&entity_id))
+            .copied()
+            .collect();
+
+        for &entity_id in &valid_entity_ids {
+            let Some((entity, entity_impl)) = world.entities.get_mut(&entity_id) else { continue };
+            crate::server::world::write_entity_spawn(entity, entity_impl.as_mut(), &mut player.packet_buffer);
+
+            if let Some(equipment) = world.entity_equipment.get(&entity_id) {
+                use crate::server::entity::spawn_equipped::send_equipment_packets;
+                send_equipment_packets(&mut player.packet_buffer, entity_id, equipment);
+            }
+        }
+
+        let Some(chunk) = world.chunk_grid.get_chunk_mut(x, z) else { continue };
+        chunk.entities.clear();
+        chunk.entities.extend(valid_entity_ids);
+    }
 }
