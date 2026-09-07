@@ -37,13 +37,23 @@ pub struct MobAiState {
     pub archetype: DungeonMobType,
     pub spawn_origin: DVec3,
     pub spawn_yaw: f32,
-    /// The room this mob was spawned into - `ai/mod.rs::run_mob_ai` checks this room's own
-    /// `Room::entered` every tick and forces `ActivationState::Dormant` (skipping perception/
-    /// idle-wander entirely) regardless of distance until it's actually true. Lets a room's mobs
-    /// be pre-spawned - visible, but completely inactive - the instant a player enters a
-    /// DIFFERENT, door-connected room, without them acting alive before a player has actually
-    /// crossed into their own room (see `Dungeon::tick`'s adjacent-room pre-spawn check).
+    /// The room this mob was spawned into - purely a lookup key `Dungeon::tick` uses to find
+    /// every mob belonging to a room the instant that room is actually entered (see
+    /// `room_entered`'s own doc comment for what that then does); `ai/mod.rs::run_mob_ai` itself
+    /// never reads this field or looks the room up.
     pub room_index: usize,
+    /// Whether this mob's own room (`room_index`) has actually been entered by a player yet -
+    /// pushed directly to `true`, once, by `Dungeon::tick` the exact tick that happens (iterating
+    /// every mob whose `room_index` matches), rather than `ai/mod.rs::run_mob_ai` re-deriving it
+    /// every tick via `world.server_mut().dungeon.rooms.get(room_index)`. That would need a real
+    /// `Server`/`Dungeon` reachable from every single mob tick, including a fully idle one -
+    /// exactly what `perf_bench.rs`'s own doc comment says must never be required (its benchmark
+    /// intentionally leaves `world.server` null for idle mobs). Starts `false` (matches spawning
+    /// dormant-until-entered, see `MobAiState::new`'s own default `ActivationState::Dormant`);
+    /// `run_mob_ai` forces `ActivationState::Dormant` (skipping perception/idle-wander entirely)
+    /// regardless of distance while this is still `false` - see the module's own doc comment for
+    /// the full dormant-pre-spawn feature this backs.
+    pub room_entered: bool,
 
     pub activation: ActivationState,
 
@@ -90,12 +100,13 @@ pub struct MobAiState {
 }
 
 impl MobAiState {
-    pub fn new(archetype: DungeonMobType, spawn_origin: DVec3, spawn_yaw: f32, room_index: usize) -> Self {
+    pub fn new(archetype: DungeonMobType, spawn_origin: DVec3, spawn_yaw: f32, room_index: usize, room_entered: bool) -> Self {
         Self {
             archetype,
             spawn_origin,
             spawn_yaw,
             room_index,
+            room_entered,
             activation: ActivationState::Dormant,
             target: None,
             first_sight_pending: false,

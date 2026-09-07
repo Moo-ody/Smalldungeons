@@ -36,6 +36,7 @@ mod tests {
             spawn_active_mob(
                 &mut world,
                 0,
+                true, // room_entered - benchmarking realistic active/idle-wandering tick cost, not permanently-dormant mobs
                 false,
                 pos,
                 0.0,

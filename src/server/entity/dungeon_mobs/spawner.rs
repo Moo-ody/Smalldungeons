@@ -127,15 +127,26 @@ fn spawn_single_mob(world: &mut World, room_index: usize, room: &Room, corner: B
         return;
     }
 
-    let _ = spawn_active_mob(world, room_index, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name, skin_override);
+    let _ = spawn_active_mob(world, room_index, room.entered, counts_toward_clear, world_pos, yaw, archetype, base_kind, spawn_as_npc, upside_down, equipment, nametag, full_name, skin_override);
 }
 
 /// Spawns the real, fully-active mob entity (AI, equipment, nametag, combat-state
 /// registration) - shared by the normal immediate-spawn path and `FelsMarkerImpl`'s
 /// activation once a player triggers it.
+///
+/// `room_entered` seeds `MobAiState::room_entered` directly (the room's own CURRENT `Room::entered`
+/// value at this exact spawn moment, from whichever caller already has it in scope) rather than
+/// this function looking it up itself via `world.server_mut().dungeon.rooms.get(room_index)` -
+/// that would need a real `Server`/`Dungeon` reachable from every mob spawn, including
+/// `perf_bench.rs`'s benchmark harness, which deliberately spawns mobs with `world.server` left
+/// null (see that file's own doc comment). Every caller of this function already either has a
+/// real `&Room` in scope (the normal room-JSON spawn path) or is triggered by a player physically
+/// already being in the room (Crypt Undead/King Midas on superboom, Fels on marker activation) -
+/// in both cases the true value is already known for free, no lookup needed.
 pub(crate) fn spawn_active_mob(
     world: &mut World,
     room_index: usize,
+    room_entered: bool,
     counts_toward_clear: bool,
     world_pos: DVec3,
     yaw: f32,
@@ -239,7 +250,7 @@ pub(crate) fn spawn_active_mob(
     }
 
     if let Some(archetype) = archetype {
-        world.entity_mob_ai.insert(entity_id, MobAiState::new(archetype, world_pos, yaw, room_index));
+        world.entity_mob_ai.insert(entity_id, MobAiState::new(archetype, world_pos, yaw, room_index, room_entered));
 
         // Melee archetypes drive their swing/arm-pose through the existing
         // CombatState/AttackCooldown system (already ticked globally by
@@ -320,9 +331,13 @@ pub fn spawn_crypt_undead(world: &mut World, room_index: usize, position: DVec3,
         .unwrap_or_default();
     let nametag = format!("\u{a7}c{full_name}{health}");
 
+    // `room_entered: true` - only ever triggered by a player detonating a real Crypt right there
+    // in the room, so it's unconditionally already entered (see `spawn_active_mob`'s own doc
+    // comment for why this is a plain bool, not a lookup).
     spawn_active_mob(
         world,
         room_index,
+        true,
         false,
         position,
         yaw,
@@ -367,9 +382,13 @@ pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, y
         .unwrap_or_default();
     let nametag = format!("\u{a7}c\u{a7}l{full_name}{health}");
 
+    // `room_entered: true` - only ever triggered by a player superbooming the room's own real
+    // King Midas "crypt" right there, so it's unconditionally already entered (see
+    // `spawn_active_mob`'s own doc comment for why this is a plain bool, not a lookup).
     spawn_active_mob(
         world,
         room_index,
+        true,
         false,
         position,
         yaw,
@@ -434,7 +453,10 @@ pub fn spawn_mimic(world: &mut World, position: DVec3, yaw: f32, room_index: usi
         entity.yaw = yaw;
     }
 
-    world.entity_mob_ai.insert(entity_id, MobAiState::new(DungeonMobType::Mimic, position, yaw, room_index));
+    // Always `true` - a mimic only ever spawns from a chest a player just physically opened,
+    // so the room is unconditionally already entered at this exact moment (see
+    // `spawn_active_mob`'s own doc comment for why this is a plain bool, not a lookup).
+    world.entity_mob_ai.insert(entity_id, MobAiState::new(DungeonMobType::Mimic, position, yaw, room_index, true));
     world.set_combat_state(entity_id, CombatState { aggressive: false, swing_ticks: 0 });
     world.set_attack_cooldown(entity_id, AttackCooldown { ticks: 0 });
     world.set_ai_suspended(entity_id, AISuspended { ticks_left: 10 });
@@ -679,9 +701,13 @@ impl EntityImpl for FelsMarkerImpl {
 
         let entity_id: EntityId = entity.id;
         world.despawn_entity(entity_id);
+        // `room_entered: true` - only ever triggered by a real player standing within
+        // `FELS_MARKER_ACTIVATION_RADIUS`, so the room is unconditionally already entered (see
+        // `spawn_active_mob`'s own doc comment for why this is a plain bool, not a lookup).
         let _ = spawn_active_mob(
             world,
             self.room_index,
+            true,
             self.counts_toward_clear,
             self.trigger_pos,
             self.yaw,

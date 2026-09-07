@@ -1260,6 +1260,24 @@ impl Dungeon {
                     }
                 }
 
+                // Wakes every already-spawned mob in a room the instant it's actually entered -
+                // pushes `MobAiState::room_entered = true` directly into each affected mob's own
+                // state, rather than `run_mob_ai` re-deriving it every tick via
+                // `world.server_mut().dungeon.rooms.get(room_index)` (see that field's own doc
+                // comment for why: an idle mob must never need a real `Server`/`Dungeon` behind
+                // it, or `perf_bench.rs`'s intentionally-server-less benchmark harness breaks).
+                // A no-op for a room with no mobs pre-spawned yet - the pending mob-spawn cycle
+                // will seed its mobs already-awake once it actually runs instead, since
+                // `spawn_active_mob` reads the room's own real `entered` value fresh at that
+                // later spawn time (see its own doc comment).
+                if !rooms_just_entered.is_empty() {
+                    for state in server.world.entity_mob_ai.values_mut() {
+                        if rooms_just_entered.contains(&state.room_index) {
+                            state.room_entered = true;
+                        }
+                    }
+                }
+
                 // Spawn entry secrets immediately (like locked chests)
                 for (secret_rc, _room_index) in entry_secrets_to_spawn {
                     let mut secret = secret_rc.borrow_mut();

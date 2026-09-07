@@ -124,14 +124,6 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
 
     let mob_pos = entity.position;
 
-    // A mob pre-spawned dormant into a room the player hasn't actually entered yet (see
-    // `MobAiState::room_index`'s own doc comment / `Dungeon::tick`'s adjacent-room pre-spawn
-    // check) must stay fully asleep - visible, but no perception/idle-wander - regardless of how
-    // close a player standing in a NEIGHBOURING room happens to be to the shared door. Defaults
-    // to "entered" (normal distance-based behavior) if the room index somehow doesn't resolve,
-    // rather than a mob getting permanently stuck dormant over a lookup failure.
-    let room_entered = world.server_mut().dungeon.rooms.get(state.room_index).map(|room| room.entered).unwrap_or(true);
-
     // --- Activation: idle-activation range is distinct from (and larger than) combat vision ---
     let nearest_player_distance = world.players.values()
         .map(|player| player.position.distance_to(&mob_pos))
@@ -143,7 +135,15 @@ pub fn run_mob_ai(entity: &mut Entity, _packet_buffer: &mut PacketBuffer) {
     // trip (see the leashed_out movement branch below) and only starts looking for a target
     // again once it's actually back (`leash::tick_leash` clears `leashed_out` on arrival).
     if state.target.is_none() && !state.leashed_out {
-        if !room_entered || nearest_player_distance > IDLE_ACTIVATION_RANGE {
+        // A mob pre-spawned dormant into a room the player hasn't actually entered yet (see
+        // `MobAiState::room_entered`'s own doc comment / `Dungeon::tick`'s adjacent-room pre-
+        // spawn check) stays fully asleep - visible, but no perception/idle-wander - regardless
+        // of how close a player standing in a NEIGHBOURING room happens to be to the shared
+        // door. `room_entered` is a plain flag pushed into this state directly by `Dungeon::tick`
+        // the tick the room is actually entered (not re-derived here via `world.server_mut()`,
+        // which would need a real `Server`/`Dungeon` behind every single mob tick - see
+        // `perf_bench.rs`'s own doc comment on why an idle mob must never need that).
+        if !state.room_entered || nearest_player_distance > IDLE_ACTIVATION_RANGE {
             state.activation = ActivationState::Dormant;
             state.idle_wander_target = None;
         } else {
