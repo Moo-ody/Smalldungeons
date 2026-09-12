@@ -218,6 +218,14 @@ pub struct EntityMetadata {
     /// live in. Used by `ai::mod` to visually sprint humanoid NPC-model dungeon mobs while
     /// active in combat.
     pub is_sprinting: bool,
+    /// Base `Entity` flags byte bit 0x10 - vanilla's real "eating/drinking/blocking/aiming a
+    /// bow" pose (one arm raised holding the active item up), same byte `is_invisible`/
+    /// `is_sprinting` live in. This, not a swing (`Animation` packet), is what actually makes a
+    /// player-model entity look like it's drawing a bow - a swing is the melee-punch animation
+    /// and was confirmed (by explicit report) to read as literally punching while "drawing".
+    /// Used by `ai::attack::try_ranged`/Shadow Assassin's volley for the duration of a shot's
+    /// draw/aim.
+    pub is_using_item: bool,
     pub skin_parts: Option<SkinParts>, // For Player entities
     /// `EntityVariant::ArmorStand`-only: renders at ~0.5x scale (vanilla "small" status bit).
     /// Following-nametag armor stands (`spawn_following_nametag`) need this - otherwise the
@@ -228,6 +236,14 @@ pub struct EntityMetadata {
     /// the model's own height roughly halves that extra float, landing much closer to right
     /// above the actual head instead of ~2 blocks above it.
     pub is_small_armor_stand: bool,
+    /// `EntityVariant::ArmorStand`-only: vanilla "marker" status bit - removes its hitbox
+    /// entirely (no click target, no collision), not just the visible base plate. Needed for a
+    /// purely decorative stand riding right on top of (or overlapping) another entity a player
+    /// is meant to be able to attack - Ice Path's floating TNT "hat" sits close enough above the
+    /// Silverfish it rides that without this, the stand's own (still real, even while invisible)
+    /// hitbox intercepted the client's attack raycast before it ever reached the fish
+    /// underneath, making the fish itself unpunchable.
+    pub is_marker_armor_stand: bool,
 }
 
 impl EntityMetadata {
@@ -245,8 +261,10 @@ impl EntityMetadata {
             custom_name_visible: false,
             ai_disabled: false,
             is_sprinting: false,
+            is_using_item: false,
             skin_parts,
             is_small_armor_stand: false,
+            is_marker_armor_stand: false,
         }
     }
 }
@@ -277,6 +295,10 @@ impl PacketSerializable for EntityMetadata {
 
         if self.is_sprinting {
             flags |= 0b0000_1000; // Bit 3: Sprinting
+        }
+
+        if self.is_using_item {
+            flags |= 0b0001_0000; // Bit 4: eating/drinking/blocking/aiming a bow
         }
 
         write_data(buf, BYTE, 0, flags);
@@ -330,10 +352,15 @@ impl PacketSerializable for EntityMetadata {
             EntityVariant::Arrow => { /* no-op */ }
             // NEW: Bonzo projectiles don't carry extra metadata
             EntityVariant::BonzoProjectile => { /* no-op */ }
-            // Index 10: ArmorStand status byte - bit 0x01 = small. Only written when set, so
-            // non-nametag armor stands (e.g. the Fels marker) keep their normal full size.
-            EntityVariant::ArmorStand if self.is_small_armor_stand => {
-                write_data(buf, BYTE, 10, 0x01u8);
+            // Index 10: ArmorStand status byte - bit 0x01 = small, bit 0x10 = marker (removes
+            // the hitbox entirely, not just the base plate - see `is_marker_armor_stand`'s doc
+            // comment). Only written when at least one bit is actually set, so an ordinary
+            // armor stand keeps its normal full size and real hitbox.
+            EntityVariant::ArmorStand if self.is_small_armor_stand || self.is_marker_armor_stand => {
+                let mut status = 0u8;
+                if self.is_small_armor_stand { status |= 0x01; }
+                if self.is_marker_armor_stand { status |= 0x10; }
+                write_data(buf, BYTE, 10, status);
             }
             EntityVariant::Creeper { powered } => {
                 // Vanilla EntityCreeper's real DataWatcher layout - re-verified directly against

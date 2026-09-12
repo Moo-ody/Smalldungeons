@@ -71,6 +71,14 @@ pub enum BlockInteractAction {
         state: Rc<RefCell<crate::dungeon::room::quiz::QuizState>>,
         answer_index: usize,
     },
+    /// One of the Quiz puzzle's 3 pedestal blocks itself - the block each `QuizButton` quartet
+    /// surrounds, not one of the buttons. Submits `answer_index` exactly like clicking one of
+    /// its own 4 buttons would, but also sends Oruo scolding whoever clicked the pedestal
+    /// instead of an actual button - see `dungeon::room::quiz::interact_pedestal`.
+    QuizPedestal {
+        state: Rc<RefCell<crate::dungeon::room::quiz::QuizState>>,
+        answer_index: usize,
+    },
     /// A button or qualifying face-center sign on one face of a Boulder puzzle box - see
     /// `dungeon::room::boulder`. Pushing it moves the box at `(grid_x, grid_z)` one grid cell in
     /// `direction`.
@@ -866,6 +874,10 @@ impl BlockInteractAction {
 
             Self::QuizButton { state, answer_index } => {
                 crate::dungeon::room::quiz::interact_button(player, block_pos, *answer_index, state);
+            }
+
+            Self::QuizPedestal { state, answer_index } => {
+                crate::dungeon::room::quiz::interact_pedestal(player, block_pos, *answer_index, state);
             }
 
             Self::BoulderTrigger { state, grid_x, grid_z, direction } => {

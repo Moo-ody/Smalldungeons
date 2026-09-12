@@ -1,9 +1,7 @@
-//! `/practice <room> <door> <secrets> [as]` - loads a single named room in isolation and arms the
+//! `/practice <room> <door> <secrets>` - loads a single named room in isolation and arms the
 //! secret-route timer for the given target secret count (practice-mode only, see
-//! `Server.practice_mode`). The trailing `as` is optional and, when present, force-spawns every
-//! secret in the room immediately instead of the normal proximity/room-entry gating - omit it for
-//! secrets to pop in as you'd see them on a real run. See `dungeon::practice` for the actual
-//! room-building/reset/timer logic.
+//! `Server.practice_mode`). Secrets spawn exactly like a normal run - proximity/room-entry gated,
+//! never force-spawned. See `dungeon::practice` for the actual room-building/reset/timer logic.
 
 use crate::dungeon::practice;
 use crate::server::commands::argument::Argument;
@@ -38,16 +36,7 @@ impl CommandMetadata for Practice {
             return Ok(Outcome::Success);
         };
 
-        let instant_secrets = match args.get(3) {
-            None => false,
-            Some(flag) if flag.eq_ignore_ascii_case("as") => true,
-            Some(flag) => {
-                player.send_message(&format!("\u{a7}c'{}' isn't valid here - use 'as' to instantly spawn all secrets, or omit it.", flag));
-                return Ok(Outcome::Success);
-            }
-        };
-
-        if let Err(e) = practice::load_practice_room(server, room_name, door_choice, target_secrets, instant_secrets) {
+        if let Err(e) = practice::load_practice_room(server, room_name, door_choice, target_secrets) {
             player.send_message(&format!("\u{a7}c{}", e));
         }
 
@@ -60,7 +49,6 @@ impl CommandMetadata for Practice {
             Argument::new("room", true, practice::supported_room_names(server)),
             Argument::new("door", true, DOOR_CHOICES.iter().map(|s| s.to_string()).collect()),
             Argument::new("secrets", true, SECRET_COUNT_CHOICES.map(|n| n.to_string()).collect()),
-            Argument::new("as", false, vec!["as".to_string()]),
         ]
     }
 }

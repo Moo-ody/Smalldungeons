@@ -879,9 +879,9 @@ impl EntityImpl for PickupEntityImpl {
             }
         }
 
-        // Matches `SecretItemEntityImpl`'s cooldown - avoids an instant, feedback-less pickup if
-        // a player is already standing right where the last starred mob died.
-        const PICKUP_COOLDOWN_TICKS: u32 = 10;
+        // Avoids an instant, feedback-less pickup if a player is already standing right where
+        // the last starred mob died.
+        const PICKUP_COOLDOWN_TICKS: u32 = 5;
         if entity.ticks_existed < PICKUP_COOLDOWN_TICKS {
             return;
         }

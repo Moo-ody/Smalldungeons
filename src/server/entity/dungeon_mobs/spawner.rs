@@ -7,7 +7,7 @@
 
 use crate::dungeon::room::room::Room;
 use crate::net::packets::packet_buffer::PacketBuffer;
-use crate::net::protocol::play::clientbound::{PlayerListItem, Teams};
+use crate::net::protocol::play::clientbound::{PacketEntityMetadata, PlayerListItem, Teams};
 use crate::net::protocol::play::serverbound::EntityInteractionType;
 use crate::net::var_int::VarInt;
 use crate::server::block::block_position::BlockPos;
@@ -252,11 +252,14 @@ pub(crate) fn spawn_active_mob(
     if let Some(archetype) = archetype {
         world.entity_mob_ai.insert(entity_id, MobAiState::new(archetype, world_pos, yaw, room_index, room_entered));
 
-        // Melee archetypes drive their swing/arm-pose through the existing
-        // CombatState/AttackCooldown system (already ticked globally by
-        // `World::process_combat_state_system`) - it just needs registering here, the
-        // same way `spawn_equipped_zombie` already does for the `/spawn` debug command.
-        if matches!(profile_for(archetype).attack, AttackModule::Melee { .. }) {
+        // Melee archetypes (including `HybridMeleeRanged`'s melee half - Lost/Frozen/Angry
+        // Adventurer, Crypt Souleater - confirmed by explicit report: without this they never
+        // swung at all, since `attack::try_melee` silently no-ops on a missing cooldown entry)
+        // drive their swing/arm-pose through the existing CombatState/AttackCooldown system
+        // (already ticked globally by `World::process_combat_state_system`) - it just needs
+        // registering here, the same way `spawn_equipped_zombie` already does for the `/spawn`
+        // debug command.
+        if matches!(profile_for(archetype).attack, AttackModule::Melee { .. } | AttackModule::HybridMeleeRanged { .. }) {
             world.set_combat_state(entity_id, CombatState { aggressive: false, swing_ticks: 0 });
             world.set_attack_cooldown(entity_id, AttackCooldown { ticks: 0 });
             world.set_ai_suspended(entity_id, AISuspended { ticks_left: 10 });
@@ -352,6 +355,80 @@ pub fn spawn_crypt_undead(world: &mut World, room_index: usize, position: DVec3,
     )
 }
 
+/// An Iron Sword (legacy item id 267) in the mainhand, plus dyed leather boots (301) in a dark
+/// purple - per explicit reference (a render of the real mob): worn permanently, visible even
+/// while the body itself is invisible (vanilla renders equipment independent of the wearer's own
+/// invisibility - no special-case code needed for that half). The RGB is a by-eye estimate off
+/// that render (no exact value given) - revisit if a precise value ever turns up.
+fn shadow_assassin_equipment() -> Equipment {
+    Equipment {
+        main_hand: Some(ItemStack::new(267)),
+        boots: Some(ItemStack::new(301).leather_rgb(0x4B, 0x00, 0x55)),
+        ..Default::default()
+    }
+}
+
+/// Spawns the Shadow Assassin Champion-room miniboss standing at `position` facing `yaw` -
+/// called from `dungeon::room::shadow_assassin::setup` on room entry, same ad-hoc-spawn shape as
+/// `spawn_crypt_undead`/`spawn_king_midas` (no captured room-JSON spawn exists for this room -
+/// see `DungeonMobType::ShadowAssassin`'s own doc comment). `counts_toward_clear: true` per
+/// explicit request - the room completes when he's killed, same "last starred mob dies" path
+/// every other starred mob's room uses (`combat::kill_mob` decrements
+/// `Room::starred_mobs_remaining`, and at 0 grants any Wither/Blood key plus the usual
+/// TNT+50%-blessing room-clear reward - see `Dungeon::grant_room_clear_rewards`). He can already
+/// be killed today via the existing lethal-weapon-only path (Hyperion/Spirit Sceptre - see
+/// `combat::apply_lethal_hit`) even though no general mob-vs-player damage system exists yet.
+pub fn spawn_shadow_assassin(world: &mut World, room_index: usize, room_entered: bool, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::ShadowAssassin;
+    let full_name = "Shadow Assassin".to_string();
+    // Given directly, not the generic star/red-name convention every other archetype's nametag
+    // gets from `spawn_active_mob`'s own builder (see `spawn_room_mobs`) - light purple + bold
+    // name, no star, per explicit request.
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}d\u{a7}l{full_name}{health}");
+
+    let mut equipment = shadow_assassin_equipment();
+    equipment.no_loot_no_pickup = true;
+
+    let entity_id = spawn_active_mob(
+        world,
+        room_index,
+        room_entered,
+        true,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        equipment,
+        nametag,
+        full_name,
+        None,
+    )?;
+
+    // Spawns invisible - per explicit reference, he's constantly invisible except for his
+    // permanently-worn boots (which stay visible regardless - see `shadow_assassin_equipment`'s
+    // doc comment). `spawn_active_mob` doesn't have a per-archetype invisibility hook today, so
+    // this is set directly on the freshly-spawned entity's metadata here instead.
+    if let Some((entity, _)) = world.entities.get_mut(&entity_id) {
+        entity.metadata.is_invisible = true;
+        let metadata = entity.metadata.clone();
+        let chunk_x = (position.x.floor() as i32) >> 4;
+        let chunk_z = (position.z.floor() as i32) >> 4;
+        if let Some(chunk) = world.chunk_grid.get_chunk_mut(chunk_x, chunk_z) {
+            chunk.packet_buffer.write_packet(&PacketEntityMetadata {
+                entity_id: VarInt(entity_id),
+                metadata,
+            });
+        }
+    }
+
+    Some(entity_id)
+}
+
 /// Full golden armor + a golden sword - what King Midas wears/wields. Legacy numeric item ids:
 /// 283 = golden sword, 314-317 = golden helmet/chestplate/leggings/boots.
 fn king_midas_equipment() -> Equipment {
@@ -367,11 +444,15 @@ fn king_midas_equipment() -> Equipment {
 
 /// Spawns King Midas standing at `position` facing `yaw` - called when a player superbooms his
 /// golden "crypt" (see `Dungeon::superboom_at`/`Room::explode_kingmidas_near`). Uses the same
-/// `spawn_active_mob` pipeline as `spawn_crypt_undead` (player-model NPC, same AI machinery),
-/// but isn't tied to any room's starred-mob clear count and is never registered in
-/// `entity_crypt_room` - his kill is never credited as a crypt. His actual death sequence
-/// (armor breaking off per hit, dying on the 5th, dropping a Superboom TNT) is driven by
-/// `ai/combat.rs::apply_king_midas_hit`, not by the lethal-weapon-only path other archetypes use.
+/// `spawn_active_mob` pipeline as `spawn_crypt_undead` (player-model NPC, same AI machinery).
+/// `counts_toward_clear: true` per explicit request - the room completes when he's killed, same
+/// "last starred mob dies" path every other starred mob's room uses (see
+/// `spawn_shadow_assassin`'s own doc comment for the full chain); still never registered in
+/// `entity_crypt_room` though, so his kill isn't separately credited as a crypt. His actual
+/// death sequence (armor breaking off per hit, dying on the 5th) is driven by
+/// `ai/combat.rs::apply_king_midas_hit`, not the lethal-weapon-only path other archetypes use -
+/// but the 5th hit's `kill_mob` call now drops the usual TNT+50%-blessing reward generically,
+/// so `apply_king_midas_weapon_hit` no longer needs its own separate manual TNT drop.
 pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, yaw: f32) -> Option<EntityId> {
     let archetype = DungeonMobType::KingMidas;
     let full_name = "King Midas".to_string();
@@ -389,7 +470,7 @@ pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, y
         world,
         room_index,
         true,
-        false,
+        true,
         position,
         yaw,
         Some(archetype),
@@ -400,6 +481,237 @@ pub fn spawn_king_midas(world: &mut World, room_index: usize, position: DVec3, y
         nametag,
         full_name,
         None,
+    )
+}
+
+/// Base64 Mojang profile "textures" value for the Young Dragon Helmet's own item icon (the
+/// skull rendered in inventory/equipment view) - a real capture (`room_data/mobs/atlas.json`,
+/// the "Atlas" room's own `runIndex: 2` Lost Adventurer spawn), distinct from the body skin
+/// `mob_type::lost_adventurer_skin_for_helmet` resolves for the actual player-model rendering.
+const LOST_ADVENTURER_YOUNG_DRAGON_HELMET_ICON: &str = "ewogICJ0aW1lc3RhbXAiIDogMTcyMDA1MDI3MjQwNiwKICAicHJvZmlsZUlkIiA6ICJlMjc5NjliODYyNWY0NDg1YjkyNmM5NTBhMDljMWMwMSIsCiAgInByb2ZpbGVOYW1lIiA6ICJLRVZJTktFTE9LRSIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9hMGU4MWVkMDdkZmIwMjQ0ZDU2ZjRkNWYyYjM3NTUzZWMwMjZmYjQ3OTZmMGZiMGM1N2E4ZWIyNjQ5ODNlMWUwIiwKICAgICAgIm1ldGFkYXRhIiA6IHsKICAgICAgICAibW9kZWwiIDogInNsaW0iCiAgICAgIH0KICAgIH0KICB9Cn0=";
+
+/// Real captured equipment for the "Young Dragon" Lost Adventurer variant
+/// (`room_data/mobs/atlas.json`'s `runIndex: 2` entry - dyed color `14542064`, packed RGB
+/// `0xDDE4F0`) - hand-built the same way every other ad-hoc archetype's equipment is
+/// (`shadow_assassin_equipment`, `king_midas_equipment`, `mimic_equipment`) rather than
+/// round-tripping through `equipment_convert::convert_equipment`'s JSON-shaped intermediate.
+fn lost_adventurer_young_dragon_equipment() -> Equipment {
+    let dyed = |item: i16| ItemStack::new(item).leather_rgb(0xDD, 0xE4, 0xF0);
+
+    let mut helmet = ItemStack {
+        item: 397, // skull
+        stack_size: 1,
+        metadata: 3, // player head - resolves its icon texture from the embedded SkullOwner
+        tag_compound: None,
+    };
+    helmet.set_skull_owner(LOST_ADVENTURER_YOUNG_DRAGON_HELMET_ICON);
+    helmet.set_display_name("\u{a7}6Young Dragon Helmet");
+    helmet.set_unbreakable(true);
+
+    let mut chest = dyed(299);
+    chest.set_display_name("\u{a7}6Young Dragon Chestplate");
+    chest.set_unbreakable(true);
+
+    let mut legs = dyed(300);
+    legs.set_display_name("\u{a7}6Young Dragon Leggings");
+    legs.set_unbreakable(true);
+
+    let mut boots = dyed(301);
+    boots.set_display_name("\u{a7}6Young Dragon Boots");
+    boots.set_unbreakable(true);
+
+    let mut sword = ItemStack::new(276); // diamond sword
+    sword.set_display_name("\u{a7}6Aspect of the Dragons");
+    sword.set_unbreakable(true);
+
+    Equipment {
+        main_hand: Some(sword),
+        helmet: Some(helmet),
+        chest: Some(chest),
+        legs: Some(legs),
+        boots: Some(boots),
+        no_loot_no_pickup: true,
+        unbreakable: true,
+    }
+}
+
+/// Spawns a Lost Adventurer (Young Dragon variant - "any type" per explicit request, picked
+/// arbitrarily among the 4 real variants) standing at `position` facing `yaw` - called from
+/// `dungeon::room::default_room::setup` on room entry for the "Default" room, which always gets
+/// exactly one this way regardless of which of its two captured mob-data layouts
+/// (`spawn_room_mobs`) happens to load, since only one of those two real captures includes him.
+/// Nametag matches the real starred-mob convention (star + red name + HP) - the real captured
+/// `room_data/mobs/default.json` entry for him is `isStarred: true`, same as this one.
+/// `counts_toward_clear: true`, same reasoning as Shadow Assassin/King Midas - see
+/// `spawn_shadow_assassin`'s own doc comment for the full room-clear/reward chain.
+pub fn spawn_lost_adventurer(world: &mut World, room_index: usize, room_entered: bool, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::LostAdventurer;
+    let full_name = "Lost Adventurer".to_string();
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}6\u{272F} \u{a7}c{full_name}{health}");
+
+    let skin_override = lost_adventurer_skin_for_helmet("Young Dragon Helmet");
+
+    spawn_active_mob(
+        world,
+        room_index,
+        room_entered,
+        true,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        lost_adventurer_young_dragon_equipment(),
+        nametag,
+        full_name,
+        skin_override,
+    )
+}
+
+/// Base64 Mojang profile "textures" value for the Frozen Blaze Helmet's own item icon (a real
+/// capture, `room_data/mobs/cathedral.json`'s Frozen Adventurer entry), distinct from the body
+/// skin `DungeonMobType::skin_override` already resolves for this archetype.
+const FROZEN_BLAZE_HELMET_ICON: &str = "ewogICJ0aW1lc3RhbXAiIDogMTY2MTA4NTAzNTkyNywKICAicHJvZmlsZUlkIiA6ICJjMTNkYzkxZjg1YjA0ZWM4OGU2NDk5YzdjZDc4Zjk3MSIsCiAgInByb2ZpbGVOYW1lIiA6ICJjYXNzdGhlY3J5cHRpZCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS83MDMxMGI1NWVlZDk1OGZlZThmZmFhZjcxODQ2NzE2N2RlYjFhN2M5MDQ2ZDY3YjI1ODg3YjU5NjkyNTYzNmJiIgogICAgfQogIH0KfQ==";
+
+/// Real captured equipment for Frozen Adventurer (`room_data/mobs/cathedral.json`'s own
+/// `runIndex: 1` entry - dyed color `10541807`, packed RGB `0xA0DAEF`) - hand-built the same way
+/// as `lost_adventurer_young_dragon_equipment` above.
+fn frozen_adventurer_equipment() -> Equipment {
+    let dyed = |item: i16| ItemStack::new(item).leather_rgb(0xA0, 0xDA, 0xEF);
+
+    let mut helmet = ItemStack {
+        item: 397, // skull
+        stack_size: 1,
+        metadata: 3, // player head - resolves its icon texture from the embedded SkullOwner
+        tag_compound: None,
+    };
+    helmet.set_skull_owner(FROZEN_BLAZE_HELMET_ICON);
+    helmet.set_display_name("\u{a7}6Frozen Blaze Helmet");
+    helmet.set_unbreakable(true);
+
+    let mut chest = dyed(299);
+    chest.set_display_name("\u{a7}6Frozen Blaze Chestplate");
+    chest.set_unbreakable(true);
+
+    let mut legs = dyed(300);
+    legs.set_display_name("\u{a7}6Frozen Blaze Leggings");
+    legs.set_unbreakable(true);
+
+    let mut boots = dyed(301);
+    boots.set_display_name("\u{a7}6Frozen Blaze Boots");
+    boots.set_unbreakable(true);
+
+    let mut wand = ItemStack::new(280); // stick
+    wand.set_display_name("\u{a7}9Ice Spray Wand");
+    wand.set_unbreakable(true);
+
+    Equipment {
+        main_hand: Some(wand),
+        helmet: Some(helmet),
+        chest: Some(chest),
+        legs: Some(legs),
+        boots: Some(boots),
+        no_loot_no_pickup: true,
+        unbreakable: true,
+    }
+}
+
+/// Spawns a Frozen Adventurer standing at `position` facing `yaw` - same ad-hoc shape as
+/// `spawn_lost_adventurer`. `counts_toward_clear: true`, same reasoning as every other ad-hoc
+/// miniboss - see `spawn_shadow_assassin`'s own doc comment for the full room-clear/reward chain.
+/// Nametag is starred, matching the real captured entry's own `isStarred: true`.
+pub fn spawn_frozen_adventurer(world: &mut World, room_index: usize, room_entered: bool, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::FrozenAdventurer;
+    let full_name = "Frozen Adventurer".to_string();
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}6\u{272F} \u{a7}c{full_name}{health}");
+
+    spawn_active_mob(
+        world,
+        room_index,
+        room_entered,
+        true,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        frozen_adventurer_equipment(),
+        nametag,
+        full_name,
+        None, // falls back to `DungeonMobType::skin_override()`, already set for this archetype
+    )
+}
+
+/// Real captured equipment for Angry Archaeologist (`room_data/mobs/atlas.json`'s own
+/// `runIndex: 1` entry) - full diamond armor, no dye (unlike the two leather-armor archetypes
+/// above).
+fn angry_archaeologist_equipment() -> Equipment {
+    let mut helmet = ItemStack::new(310); // diamond helmet
+    helmet.set_display_name("\u{a7}6Perfect Helmet - Tier XII");
+    helmet.set_unbreakable(true);
+
+    let mut chest = ItemStack::new(311); // diamond chestplate
+    chest.set_display_name("\u{a7}6Perfect Chestplate - Tier XII");
+    chest.set_unbreakable(true);
+
+    let mut legs = ItemStack::new(312); // diamond leggings
+    legs.set_display_name("\u{a7}6Perfect Leggings - Tier XII");
+    legs.set_unbreakable(true);
+
+    let mut boots = ItemStack::new(313); // diamond boots
+    boots.set_display_name("\u{a7}6Perfect Boots - Tier XII");
+    boots.set_unbreakable(true);
+
+    let mut sword = ItemStack::new(276); // diamond sword
+    sword.set_display_name("\u{a7}aDiamond Sword");
+    sword.set_unbreakable(true);
+
+    Equipment {
+        main_hand: Some(sword),
+        helmet: Some(helmet),
+        chest: Some(chest),
+        legs: Some(legs),
+        boots: Some(boots),
+        no_loot_no_pickup: true,
+        unbreakable: true,
+    }
+}
+
+/// Spawns an Angry Archaeologist standing at `position` facing `yaw` - same ad-hoc shape as
+/// `spawn_lost_adventurer`. `counts_toward_clear: true`, same reasoning as every other ad-hoc
+/// miniboss - see `spawn_shadow_assassin`'s own doc comment for the full room-clear/reward chain.
+/// Nametag is unstarred, matching the real captured entry's own `isStarred: false`.
+pub fn spawn_angry_archaeologist(world: &mut World, room_index: usize, room_entered: bool, position: DVec3, yaw: f32) -> Option<EntityId> {
+    let archetype = DungeonMobType::AngryArchaeologist;
+    let full_name = "Angry Archaeologist".to_string();
+    let health = archetype.base_health()
+        .map(|hp| format!(" \u{a7}a{}\u{a7}c\u{2764}", format_health(hp)))
+        .unwrap_or_default();
+    let nametag = format!("\u{a7}c{full_name}{health}");
+
+    spawn_active_mob(
+        world,
+        room_index,
+        room_entered,
+        true,
+        position,
+        yaw,
+        Some(archetype),
+        archetype.base_kind(),
+        archetype.spawn_as_npc(),
+        archetype.is_upside_down(),
+        angry_archaeologist_equipment(),
+        nametag,
+        full_name,
+        None, // falls back to `DungeonMobType::skin_override()`, already set for this archetype
     )
 }
 
@@ -573,6 +885,7 @@ impl EntityImpl for DungeonPlayerMobImpl {
                 crate::server::entity::dungeon_mobs::ai::combat::apply_lethal_hit(entity, player);
             }
             crate::server::entity::dungeon_mobs::ai::aggro::on_mob_attacked(entity, player.client_id);
+            crate::server::entity::dungeon_mobs::ai::combat::on_player_damaged_mob(entity.world_mut(), entity.id);
         }
         false
     }

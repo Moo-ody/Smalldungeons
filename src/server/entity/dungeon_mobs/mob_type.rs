@@ -62,6 +62,14 @@ pub enum DungeonMobType {
     /// kills him outright on his 5th hit (each of the first 4 strips one piece of armor)
     /// instead of using the lethal-weapon-only path every other archetype relies on.
     KingMidas,
+    /// The Champion-room miniboss (see `dungeon::room::shadow_assassin::setup`) - spawned ad
+    /// hoc on room entry like `KingMidas`/`Mimic`, not from room JSON: no real spawn was ever
+    /// captured for the "Shadow Assassin" room (`room_data/mobs/shadow_assassin.json`'s
+    /// `spawns` array is empty), so there's no scraped position/equipment to replay. Currently
+    /// skin + starting status (invisible, permanently-worn dark purple leather boots, iron
+    /// sword) only - real fighting mechanics (invisibility-break-on-approach, teleport,
+    /// backstab bonus) aren't implemented yet, see `ai/profile.rs`'s placeholder entry.
+    ShadowAssassin,
 }
 
 impl DungeonMobType {
@@ -90,6 +98,7 @@ impl DungeonMobType {
             "Angry Archaeologist" => Self::AngryArchaeologist,
             "Lost Adventurer" => Self::LostAdventurer,
             "Frozen Adventurer" => Self::FrozenAdventurer,
+            "Shadow Assassin" => Self::ShadowAssassin,
             _ => return None,
         })
     }
@@ -121,7 +130,8 @@ impl DungeonMobType {
             | Self::AngryArchaeologist
             | Self::LostAdventurer
             | Self::FrozenAdventurer
-            | Self::KingMidas => MobBaseKind::Player,
+            | Self::KingMidas
+            | Self::ShadowAssassin => MobBaseKind::Player,
         }
     }
 
@@ -151,6 +161,10 @@ impl DungeonMobType {
             // handler divides this by `KING_MIDAS_HITS_TO_KILL` and re-displays the remainder
             // after each hit, even though he actually dies from a fixed hit count, not damage.
             Self::KingMidas => Some(4_300_000),
+            // Real HP scales by floor/dungeon progress per the documented behavior, but this
+            // project doesn't model floor scaling for any archetype - given directly as a flat
+            // display value instead (matches the nametag's own explicit `&a12M` given directly).
+            Self::ShadowAssassin => Some(12_000_000),
         }
     }
 
@@ -182,6 +196,7 @@ impl DungeonMobType {
                 | Self::CryptUndead
                 | Self::AngryArchaeologist
                 | Self::KingMidas
+                | Self::ShadowAssassin
         )
     }
 
@@ -222,6 +237,7 @@ impl DungeonMobType {
                 Some(ANGRY_ARCHAEOLOGIST_SKIN_SIGNATURE),
             )),
             Self::KingMidas => Some((KING_MIDAS_SKIN, Some(KING_MIDAS_SKIN_SIGNATURE))),
+            Self::ShadowAssassin => Some((SHADOW_ASSASSIN_SKIN, Some(SHADOW_ASSASSIN_SKIN_SIGNATURE))),
             _ => None,
         }
     }
@@ -324,6 +340,15 @@ const ANGRY_ARCHAEOLOGIST_SKIN_SIGNATURE: &str = "rkTKeilcdLpr6W0kMtW2q/sxg3hKMq
 /// `FROZEN_ADVENTURER_SKIN`/`ANGRY_ARCHAEOLOGIST_SKIN` above.
 const KING_MIDAS_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTYyMjQ3NTc1NDkyMSwKICAicHJvZmlsZUlkIiA6ICJjZGM5MzQ0NDAzODM0ZDdkYmRmOWUyMmVjZmM5MzBiZiIsCiAgInByb2ZpbGVOYW1lIiA6ICJSYXdMb2JzdGVycyIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS82MmJjYTA4NTc1MDA0MzUwM2Y1ZGY5ZjdkZWY4MjRhMmUzYWNmYzI3ODQyYmNkMDlkMmI2Njk1ODgxZTgzMmY1IgogICAgfQogIH0KfQ==";
 const KING_MIDAS_SKIN_SIGNATURE: &str = "QnF9T5bPy3ebZybtwl34TuJIpuOyJLBgZKSzCxUEMoJuXeIcPgOSuwTgG6xv8dPNEdU1YwEugZgYVkH+yoUCvf1tY3NT2/8KIlGC1VX4w5D6h4zYLrAJ7CCJRaNDp0SWVXwDXUqQBHR2ZD5bMy+4AtpoAn/rA+FKnsWjfU2E6nU88BrePVPsvE33xMXO9JyG/AAv+yC6/2uIfieCwYYy57ObF+duyaPxH4MhJQ8Mjs1zMj+ZrcMQjaGyTJOx6ReqW4CC+FoeFQdrJFmC53wGezkU4vUWZTrCa/kUSIeTXeVNAcEmU5IRHlXg/sL91iSIIIDp78dgFSU/tYrK+O/rkwbJYYZoMebhFdED1S6ccHIJp+fsuG1nnSmww9F89vqLUy0NdP2+x78Y96Lc29SWNIYIcXPkW3aKQNMYlQ78ugelY541yIWd6jFuNw8JyQGOg+Ixce3D5c9+rZ4sD46b87fLrNczatpo3NEJvqjgaTvyXPKGHltvtTZbjIc6FWJUEw1zSWMcN7E0fAU0ovxRKi+yVMWs7a23vZCcCg/R8abJY8XC/evF03aqJprpcSDQhKy29krQ/wmPNYWPsgMZNH0RTriJOgs9a54Q+pLdVmutVZy2E4TQ3PamBbwst5md7v+nyqLZ8jo0i9Aq5JyAwYgyP1+SjWlRgQfK9hNcvUY=";
+
+/// GameProfile "textures" property value for the Shadow Assassin NPC body skin (Mojang profile
+/// "GeyserMC" - a known placeholder/proxy profile the real texture hash happens to be hosted
+/// under, not an indication this skin belongs to that project), plus its Yggdrasil signature -
+/// given directly by the user, already in the signed shape every other `spawn_as_npc` skin here
+/// needs to actually render (see `CRYPT_UNDEAD_SKIN`'s doc comment for why an unsigned value
+/// silently falls back to the default Steve/Alex skin instead).
+const SHADOW_ASSASSIN_SKIN: &str = "ewogICJ0aW1lc3RhbXAiIDogMTc4OTEzODIwMDY5NiwKICAicHJvZmlsZUlkIiA6ICIyMWUzNjdkNzI1Y2Y0ZTNiYjI2OTJjNGEzMDBhNGRlYiIsCiAgInByb2ZpbGVOYW1lIiA6ICJHZXlzZXJNQyIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9kODAzNzA4ZWNkYWM5YzZiYWFlOTIzMjAyYzc1NmZmNWE3OTUwMGQyY2MwMzdjZWI1NTA0Yjg3NmE3ZTZkYjAxIiwKICAgICAgIm1ldGFkYXRhIiA6IHsKICAgICAgICAibW9kZWwiIDogInNsaW0iCiAgICAgIH0KICAgIH0KICB9Cn0=";
+const SHADOW_ASSASSIN_SKIN_SIGNATURE: &str = "YxV6BIOpR0L2IBbTYhkdb8AXL2hB85afQargoSeJcDYIxZngMnJbEOPPlFe+YDo6/+GeDu/Lbwbbbo+bKGzE4wkzdBbGP7hVW6euxO93QZRmIEkzkPj4csK6x02GLfiGgawI7fbC9UbEhV6xix1+4URPmPW4C8umaHVEpNBSoWwbKaXNL4FwZptLGFhSsZVrApDKrdcjAsZKo2sNU0FqReV+5sAzVTUa9ICvC1ygE2xDboFrMW99UwRUbmgbzE54mgEfaOL+Tavt1QzYZprD+TCwiWYhRHhJVIahMOw8lwJvAzGdDq+b7rhW4+8kHdnZIXcQ/gu35k8S2DNa7JLKI1KmnHXhjed2C2ic6OGiYmX8A140J+w77P6YgtmcZouVpIJ7aLJX8SpkeGaWXiqzIJ8ZT4UhMByCWSE0lJlUdZxiDAx+7sgDo+uTESOqJRG1pDOKN9A7bq5mrbCpWQpU+izr3PrTPPnDfbfW4/cXwMm0TN353PH0qbRWBZorKHV3NhP7Gg+asAoM+HYqPJT8CxA0Lzg0+bqSOUFOl2oNJVsjYNYr72pjjv93oM5zzju6XExLV1yq4N2OZBfdu973/jkxhjFtamK+5r7etr8FTw76jlznTDYjGYIpGsbRd3cEdL6WNQCfeIibBjTAHLCq/sQoICVfD/7jGlPpkiD5mKY=";
 
 /// Formats a raw HP number the way Hypixel dungeon nametags do: `3,500,000` -> `"3.5M"`,
 /// `90,000` -> `"90k"`. Trims to at most 2 decimal places and drops trailing zeros.

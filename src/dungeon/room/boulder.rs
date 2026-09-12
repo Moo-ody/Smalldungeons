@@ -45,6 +45,7 @@ use crate::server::block::rotatable::Rotatable;
 use crate::server::player::player::{ClientId, Player};
 use crate::server::utils::direction::Direction;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -208,7 +209,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
     }
 
     let patterns = load_patterns();
-    let pattern_index = rand::Rng::random_range(&mut rand::rng(), 0..patterns.len());
+    let pattern_index = rand::Rng::random_range(&mut seeded_rng(), 0..patterns.len());
     let pattern = &patterns[pattern_index];
 
     let rotation = room.rotation;

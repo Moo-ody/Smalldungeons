@@ -11,7 +11,6 @@ use crate::server::player::terminals::starts_with::LETTERS;
 use crate::server::server::Server;
 use crate::server::utils::nbt::nbt::NBT;
 use crate::server::utils::sounds::Sounds;
-use indoc::indoc;
 
 #[derive(Debug)]
 pub struct ContainerData {
@@ -26,7 +25,6 @@ pub enum UI {
     Inventory,
     MortReadyUpMenu,
     CncMenu,
-    MapSettingsMenu,
     TerminalUI {
         typ: TerminalType,
         rand: i16
@@ -46,10 +44,6 @@ impl UI {
             UI::CncMenu => Some(ContainerData {
                 title: "Undersized party!".to_string(),
                 slot_amount: 36,
-            }),
-            UI::MapSettingsMenu => Some(ContainerData {
-                title: "Map Settings".to_string(),
-                slot_amount: 27,
             }),
             UI::TerminalUI { typ: TerminalType::Panes, rand } => Some(ContainerData {
                 title: "Correct all the panes!".to_string(),
@@ -128,46 +122,6 @@ impl UI {
                 content[13] = Some(undersized_party_head());
                 content[31] = Some(ItemStack {
                     item: 166, // Barrier
-                    stack_size: 1,
-                    metadata: 0,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::compound("display", vec![
-                            NBT::string("Name", "§cClose")
-                        ])
-                    ])),
-                });
-                Some(content)
-            }
-            UI::MapSettingsMenu => {
-                let mut content = default_container_content(27);
-
-                let (name, color) = if server.dungeon.secrets_always_spawn {
-                    ("\u{a7}aSecrets Always Spawn: \u{a7}aON", 13) // green
-                } else {
-                    ("\u{a7}cSecrets Always Spawn: \u{a7}cOFF", 14) // red
-                };
-                content[13] = Some(ItemStack {
-                    item: 95,
-                    stack_size: 1,
-                    metadata: color,
-                    tag_compound: Some(NBT::with_nodes(vec![
-                        NBT::compound("display", vec![
-                            NBT::string("Name", name),
-                            NBT::list_from_string("Lore", indoc! {r#"
-                                §7When §aON§7, every secret in a room
-                                §7spawns the instant you enter it.
-
-                                §7When §cOFF§7, secrets use their
-                                §7normal bounding boxes and only
-                                §7spawn once you walk near them.
-
-                                §eClick to toggle!
-                            "#})
-                        ])
-                    ])),
-                });
-                content[22] = Some(ItemStack {
-                    item: 166,
                     stack_size: 1,
                     metadata: 0,
                     tag_compound: Some(NBT::with_nodes(vec![
@@ -283,25 +237,6 @@ impl UI {
                 // Everything else is purely a display for now - just re-sync so a client-side
                 // pickup attempt on the panes/sword snaps back.
                 player.sync_inventory();
-            }
-            UI::MapSettingsMenu => {
-                match packet.slot_id {
-                    13 => {
-                        let server = player.server_mut();
-                        server.dungeon.secrets_always_spawn = !server.dungeon.secrets_always_spawn;
-                        if server.dungeon.secrets_always_spawn {
-                            server.dungeon.spawn_all_secrets_in_entered_rooms(&mut server.world);
-                        }
-                        player.sync_inventory();
-                    }
-                    22 => {
-                        player.current_ui = UI::None;
-                        player.write_packet(&CloseWindow {
-                            window_id: player.window_id,
-                        });
-                    }
-                    _ => {}
-                }
             }
             UI::TerminalUI { typ, rand } => {
                 if let Some(mut terminal) = player.current_terminal.take() { // this take thing is kinda weird, but it works ig

@@ -19,12 +19,16 @@
 //!   formatted chat, so this implementation is chat-only, matching Odin's own solver (which
 //!   never spawns a hologram or tracks a statue entity either).
 //!
-//! Room-entry (not room-load) triggered, same idiom `three_weirdos::setup` uses - see
-//! `Dungeon::tick`'s `rooms_just_entered` hook and `Room::quiz_started`. The timed sequence
-//! (intro lines, inter-question pacing) is driven by chained `Server::schedule` one-shot
-//! closures, the same technique `tic_tac_toe.rs::drop_wall` uses for its own delayed step,
-//! rather than a per-tick state machine - there's nothing here that needs polling every tick,
-//! only a chain of "wait N ticks, then do the next thing" steps.
+//! Triggered once a player has actually crossed the room's real entry threshold - deliberately
+//! *not* the same instant `room.entered` flips (that fires the moment a player is merely inside
+//! this room's coarse 32x32 grid cell, which can include the doorway/hallway before the room's
+//! own floor even starts). See `Dungeon::tick`'s dedicated Quiz check (checked every tick,
+//! independent of the `rooms_just_entered` hook everything else here uses) and
+//! `Room::quiz_started`/`Room::get_local_block_pos`. The timed sequence (intro lines,
+//! inter-question pacing) is driven by chained `Server::schedule` one-shot closures, the same
+//! technique `tic_tac_toe.rs::drop_wall` uses for its own delayed step, rather than a per-tick
+//! state machine - there's nothing here that needs polling every tick, only a chain of "wait N
+//! ticks, then do the next thing" steps.
 
 use crate::dungeon::room::room::Room;
 use crate::net::protocol::play::clientbound::SoundEffect;
@@ -252,13 +256,17 @@ fn build_question(kind: QuestionKind, rng: &mut impl Rng) -> QuestionInstance {
         }
         QuestionKind::NightSpawner => {
             // Zombie Villagers only spawn under night-time light conditions like a regular
-            // Zombie; Ghasts have no day/night gating (the Nether has no day/night cycle), so
-            // Ghast is the deliberate wrong option here rather than the correct one.
-            let filler = MISC.choose(rng).unwrap().1.to_string();
+            // Zombie; Ghasts have no day/night gating (the Nether has no day/night cycle), and
+            // Silverfish only ever come from spawners/breaking a silverfish block, never
+            // ambient day/night spawning at all - both are deliberate wrong options here rather
+            // than the correct one. The second wrong option used to be a random filler pulled
+            // from the unrelated `MISC` SkyBlock-trivia pool (an NPC name, a minion count, ...) -
+            // not even a monster, so it read as a nonsensical distractor rather than a real
+            // wrong answer to the actual question.
             shuffled_instance(
                 "Which of these monsters only spawns at night?",
                 "Zombie Villager".to_string(),
-                ["Ghast".to_string(), filler],
+                ["Ghast".to_string(), "Silverfish".to_string()],
                 rng,
             )
         }
@@ -274,11 +282,25 @@ fn build_question(kind: QuestionKind, rng: &mut impl Rng) -> QuestionInstance {
     }
 }
 
-/// Picks 2 distinct entries from `pool` other than index `skip`, mapped through `pick`.
+/// Picks 2 wrong-answer entries from `pool`, other than index `skip` (the correct one) and
+/// deduplicated by the mapped *value*, not just by index - several of these shared pools have
+/// more than one entry mapping to the same answer text (e.g. `FAIRY_SOULS` has multiple
+/// locations with the same soul count), and picking one of those as a "wrong" option would put
+/// the exact same text in two of the 3 slots: one correct, one that looks identical but is
+/// scored wrong - effectively two right-looking answers in the same question. Excluding every
+/// value equal to the correct answer (and any repeat among the wrong candidates themselves)
+/// guarantees the 3 options are always 3 genuinely distinct pieces of text.
 fn other_two<T>(pool: &[T], skip: usize, rng: &mut impl Rng, pick: impl Fn(&T) -> String) -> [String; 2] {
-    let mut others: Vec<&T> = pool.iter().enumerate().filter(|(i, _)| *i != skip).map(|(_, v)| v).collect();
+    let correct_value = pick(&pool[skip]);
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(correct_value);
+    let mut others: Vec<String> = pool.iter().enumerate()
+        .filter(|(i, _)| *i != skip)
+        .map(|(_, v)| pick(v))
+        .filter(|value| seen.insert(value.clone()))
+        .collect();
     others.shuffle(rng);
-    [pick(others[0]), pick(others[1])]
+    [others.swap_remove(0), others.swap_remove(0)]
 }
 
 // --- Puzzle state and flow ----------------------------------------------------------------------
@@ -308,9 +330,11 @@ pub struct QuizState {
 /// Sets up the Quiz puzzle for `room` if it actually is one - picks 3 questions, resolves and
 /// registers the 12 real buttons, and kicks off Oruo's intro speech. No-op for every other room
 /// (belt-and-suspenders; the caller already filters by name and by `Room::quiz_started`). Called
-/// once from `Dungeon::tick`'s room-entry hook, the first time a player actually crosses into
-/// the room - same reasoning as `three_weirdos::setup`'s doc comment (Oruo shouldn't start
-/// talking before anyone has actually entered).
+/// once from `Dungeon::tick`'s dedicated Quiz check, the first tick a player's position has
+/// actually crossed the room's real entry threshold (local z >= 0 at the captured
+/// (14-16, 68, 0) border row - see that check's own comment) - deliberately a stricter, later
+/// point than "merely inside the room's grid cell", so Oruo doesn't start talking while a player
+/// is still in the doorway/hallway leading up to the room.
 pub fn setup(room: &Room, room_index: usize, world: &mut World) {
     if room.room_data.name != "Quiz" {
         return;
@@ -344,6 +368,13 @@ pub fn setup(room: &Room, room_index: usize, world: &mut World) {
         for &pos in group {
             world.interactable_blocks.insert(pos, BlockInteractAction::QuizButton { state: state.clone(), answer_index });
         }
+    }
+
+    // The pedestal block itself (not one of the 4 buttons around it) is also clickable, and
+    // submits that same pedestal's answer just like one of its buttons would - plus Oruo
+    // scolding whoever clicked it instead of a real button.
+    for (answer_index, &pos) in pedestal_centers.iter().enumerate() {
+        world.interactable_blocks.insert(pos, BlockInteractAction::QuizPedestal { state: state.clone(), answer_index });
     }
 
     say(world, INTRO_LINES[0]);
@@ -488,6 +519,16 @@ fn despawn_holograms(world: &mut World, state: &Rc<RefCell<QuizState>>) {
     for entity_id in entities.into_iter().flatten() {
         world.despawn_entity(entity_id);
     }
+}
+
+/// `BlockInteractAction::QuizPedestal`'s handler - a player clicked one of the 3 pedestal blocks
+/// itself rather than one of the 4 real buttons surrounding it. Submits `answer_index` exactly
+/// like a real button click would (delegates straight to `interact_button`, same guard/scoring/
+/// sound/message behavior), but first sends Oruo's own flavor scold for clicking the pedestal
+/// instead of an actual button.
+pub fn interact_pedestal(player: &mut Player, block_pos: &BlockPos, answer_index: usize, state: &Rc<RefCell<QuizState>>) {
+    say(player.world_mut(), "Enough! My buttons are not to be pressed with such lack of grace!");
+    interact_button(player, block_pos, answer_index, state);
 }
 
 /// `BlockInteractAction::QuizButton`'s handler - a player clicked the button at `block_pos`,
@@ -645,5 +686,68 @@ mod verify_positions {
 
         let expected: HashSet<BlockPos> = PEDESTALS.iter().flat_map(|&p| button_offsets(p)).collect();
         assert_eq!(expected, real_buttons, "quiz.rs's hardcoded button positions no longer match the captured Quiz room");
+    }
+}
+
+#[cfg(test)]
+mod answer_bank_tests {
+    use super::*;
+
+    /// Every question, from every category, over many random shuffles/fillers - the 3 options
+    /// must always be 3 genuinely distinct strings. Catches both ways this previously broke: a
+    /// shared-pool duplicate value (see `fairy_souls_other_two_excludes_same_value_entries`)
+    /// putting the same text in two slots, or (the now-fixed `EndDragon`) a wrong-answer pool
+    /// with no real correct answer to pick at all.
+    #[test]
+    fn every_question_has_three_distinct_options() {
+        let mut rng = rand::rng();
+        for kind in all_question_kinds() {
+            for _ in 0..25 {
+                let instance = build_question(kind, &mut rng);
+                let [a, b, c] = &instance.options;
+                assert!(a != b && a != c && b != c, "duplicate options in {instance:?}");
+                assert!(instance.correct_index < 3);
+            }
+        }
+    }
+
+    /// `FAIRY_SOULS` has several locations sharing the exact same soul count ("The End", "The
+    /// Park", and "Gold Mine" are all "12 Fairy Souls"; "Backwater Bayou" and "Jerry's Workshop"
+    /// are both "5 Fairy Souls"). Picking one of those as a "wrong" option for a question whose
+    /// correct answer is the same count would show identical text in two slots - one scored
+    /// correct, one identical-looking but scored wrong.
+    #[test]
+    fn fairy_souls_other_two_excludes_same_value_entries() {
+        let mut rng = rand::rng();
+        // Index 4 = "The End" = "12 Fairy Souls", shared with indices 7 ("The Park") and 11
+        // ("Gold Mine").
+        for _ in 0..50 {
+            let wrong = other_two(FAIRY_SOULS, 4, &mut rng, |(_, a)| a.to_string());
+            assert_ne!(wrong[0], "12 Fairy Souls");
+            assert_ne!(wrong[1], "12 Fairy Souls");
+            assert_ne!(wrong[0], wrong[1]);
+        }
+    }
+
+    /// The `NightSpawner` question's second wrong option used to be a random filler pulled from
+    /// the unrelated `MISC` SkyBlock-trivia pool (an NPC name, a minion count, ...) - not even a
+    /// monster, so it read as nonsense rather than a real wrong answer. Both wrong options must
+    /// actually be monster names now, and neither can be the correct answer.
+    #[test]
+    fn night_spawner_wrong_options_are_real_monsters_not_random_trivia() {
+        let mut rng = rand::rng();
+        for _ in 0..25 {
+            let instance = build_question(QuestionKind::NightSpawner, &mut rng);
+            for (i, option) in instance.options.iter().enumerate() {
+                if i == instance.correct_index {
+                    assert_eq!(option, "Zombie Villager");
+                } else {
+                    assert!(
+                        option == "Ghast" || option == "Silverfish",
+                        "unexpected NightSpawner wrong option: {option}"
+                    );
+                }
+            }
+        }
     }
 }

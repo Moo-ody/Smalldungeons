@@ -101,6 +101,29 @@ fn get_stair_aabb(
     ))
 }
 
+/// Whether `block` is any stairs block, and if so which half its real collision occupies
+/// (`true` = upper half `[y+0.5, y+1]`, `false` = lower half `[y, y+0.5]` - see
+/// `get_stair_aabb`). Used by `dungeon_mobs::ai::physics` to tell a stair actually being
+/// climbed apart from a decorative stair recessed below the surrounding floor.
+pub fn stair_top_half(block: Blocks) -> Option<bool> {
+    match block {
+        Blocks::OakStairs { top_half, .. }
+        | Blocks::StoneStairs { top_half, .. }
+        | Blocks::BrickStairs { top_half, .. }
+        | Blocks::StoneBrickStairs { top_half, .. }
+        | Blocks::NetherbrickStairs { top_half, .. }
+        | Blocks::SandstoneStairs { top_half, .. }
+        | Blocks::SpruceStairs { top_half, .. }
+        | Blocks::BirchStairs { top_half, .. }
+        | Blocks::JungleStairs { top_half, .. }
+        | Blocks::QuartzStairs { top_half, .. }
+        | Blocks::AcaciaStairs { top_half, .. }
+        | Blocks::DarkOakStairs { top_half, .. }
+        | Blocks::RedSandstoneStairs { top_half, .. } => Some(top_half),
+        _ => None,
+    }
+}
+
 /// Whether a block is a liquid (water or lava, flowing or still) - used to trigger
 /// buoyancy/swimming physics, distinct from `is_block_passable` (which is also true for
 /// liquids, since they don't block movement, but true for plain air too).

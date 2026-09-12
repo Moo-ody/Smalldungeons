@@ -88,6 +88,7 @@ use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::particles::ParticleTypes;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::cell::RefCell;
@@ -223,7 +224,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &World) {
     // comment on `TeleportMazeState`. Computed before `build_maze_graph` since it needs this as
     // the connectivity backbone's actual goal (not `exit_index` - see there).
     let look_at_index = {
-        let mut rng = rand::rng();
+        let mut rng = seeded_rng();
         let candidates: Vec<usize> = (0..pads.len()).filter(|&i| i != exit_index && i != entrance_index).collect();
         candidates[rng.random_range(0..candidates.len())]
     };
@@ -285,7 +286,7 @@ const ENTRANCE_SECTION: u8 = 3;
 /// chamber's other pads once there is always physically possible, since all of a chamber's pads
 /// share one open floor).
 fn build_maze_graph(count: usize, goal_index: usize, exclude_index: usize) -> Vec<usize> {
-    let mut rng = rand::rng();
+    let mut rng = seeded_rng();
     let goal_section = SECTION_OF[goal_index] as usize;
     let entrance_section = ENTRANCE_SECTION as usize;
     let exclude_section = SECTION_OF[exclude_index] as usize;
@@ -378,19 +379,52 @@ pub fn tick(room: &mut Room, world: &mut World) {
     }
 }
 
-/// Yaw/pitch to look from `from_feet` (a landing spot) directly at `target_pos`'s block center
-/// (+0.5, not a standing-eye-height offset - this needs to aim at the actual block, not at where
-/// a hypothetical player's *eyes* would be if they were standing on it - an earlier version
-/// targeted `+1.0 + 1.62` there, mathematically a point ~2.6 blocks *above* the block itself, so
-/// the resulting direction pointed generally the right way without ever actually landing on the
-/// block, reading as "facing the direction, not the exact pad").
-fn look_at_direction(from_feet: DVec3, target_pos: BlockPos) -> (f32, f32) {
-    let target = DVec3::new(target_pos.x as f64 + 0.5, target_pos.y as f64 + 0.5, target_pos.z as f64 + 0.5);
-    let eye = DVec3::new(from_feet.x, from_feet.y + 1.62, from_feet.z);
-    let dx = target.x - eye.x;
-    let dz = target.z - eye.z;
-    let horizontal = (dx * dx + dz * dz).sqrt();
-    (movement::yaw_towards(dx, dz), movement::pitch_towards(target.y - eye.y, horizontal))
+/// Yaw to look from `from_feet` (a landing spot) directly at `target_pos`'s block center (+0.5
+/// on x/z, horizontal only). Per explicit request, every forced look direction this puzzle sets
+/// on a teleport keeps pitch level at 0 - callers no longer get a pitch out of this at all, only
+/// the yaw.
+fn look_at_direction(from_feet: DVec3, target_pos: BlockPos) -> f32 {
+    let dx = (target_pos.x as f64 + 0.5) - from_feet.x;
+    let dz = (target_pos.z as f64 + 0.5) - from_feet.z;
+    movement::yaw_towards(dx, dz)
+}
+
+/// A real teleport pad sits at one corner of a small 2x2 raised platform - the pad's own cell
+/// plus 2 orthogonal `StoneSlab` neighbors and one diagonal `StoneSlab` corner cell, confirmed
+/// directly in this room's own captured `block_data` (every `PAD_POSITIONS` entry checked by
+/// hand). Landing on a pad via the ordinary pad-to-pad teleport lands the player on that
+/// diagonal corner slab instead of centered on the pad itself, per explicit request - real
+/// Hypixel does the same (you never end up standing dead-center on the frame block you teleport
+/// onto).
+///
+/// Ordinary chamber pads have exactly one valid diagonal (2 solid walls + 1 slab-lined corner);
+/// the two single-pad chambers (the entrance and the reward-room's `EXIT_PAD`) instead have slabs
+/// on 3 of their 4 sides, leaving *two* geometrically valid diagonal corners with no single
+/// "correct" one recoverable from the room's static layout alone. For that rare case, this picks
+/// whichever valid corner's direction from the pad best matches the direction toward
+/// `look_at_pos` (the same target the yaw is already being pointed at) - a reasonable tie-break
+/// reusing data already being computed, not a guess independent of anything else known here.
+/// Returns `(corner position, whether that slab is the upper half)` - the upper half needs `+1.0`
+/// under the player's feet like a full block, the lower half only `+0.5`.
+fn find_corner_slab(world: &World, pad: BlockPos, look_at_pos: BlockPos) -> Option<(BlockPos, bool)> {
+    let mut valid: Vec<(BlockPos, bool)> = Vec::new();
+    for (dx, dz) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        let corner = BlockPos { x: pad.x + dx, y: pad.y, z: pad.z + dz };
+        if let Blocks::StoneSlab { top_half, .. } = world.get_block_at(corner.x, corner.y, corner.z) {
+            valid.push((corner, top_half));
+        }
+    }
+
+    if valid.len() <= 1 {
+        return valid.into_iter().next();
+    }
+
+    let target_dx = (look_at_pos.x - pad.x) as f64;
+    let target_dz = (look_at_pos.z - pad.z) as f64;
+    valid.into_iter().max_by(|(a, _), (b, _)| {
+        let score = |p: &BlockPos| ((p.x - pad.x) as f64) * target_dx + ((p.z - pad.z) as f64) * target_dz;
+        score(a).partial_cmp(&score(b)).unwrap()
+    })
 }
 
 fn tick_player(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &mut World, client_id: ClientId) {
@@ -473,20 +507,36 @@ fn tick_player(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &mut World, cli
     }
 
     let landing_pos = state_rc.borrow().pads[landing_index];
+    // `landing_index` can never equal `look_at_index` here (that's `is_win`, already handled and
+    // returned above), so there's always a real, different pad to point the camera at.
+    let look_at_pos = state_rc.borrow().pads[look_at_index];
+
     // The one-tick "Odin-detection" position: y specifically 69.5 (pad block y + 0.5), x/z on the
     // 0.5 grid - matches OdinClient's own solver (`TPMazeSolver.tpPacket`), which only recognizes
     // a `PlayerPosLook` as a pad-landing packet when `y == 69.5 && x % 0.5 == 0.0 && z % 0.5 ==
     // 0.0`. That y is *below* an End Portal Frame's real collision top (13/16 - a full block, not
     // the half this sends), so sent alone it visibly sinks the player partway into the block.
     // Sent first and immediately followed by the real resting position below, Odin's one-shot
-    // listener still sees the exact packet it's watching for (it doesn't care what comes after),
-    // while the player actually ends up standing cleanly on top a moment later.
+    // listener still sees the exact packet it's watching for (it doesn't care what comes after) -
+    // still on the pad's own cell, deliberately not the corner: this position only exists for the
+    // detection packet, never actually seen/stood on by the player.
     let odin_feet = DVec3::new(landing_pos.x as f64 + 0.5, landing_pos.y as f64 + 0.5, landing_pos.z as f64 + 0.5);
-    let landing_feet = DVec3::new(landing_pos.x as f64 + 0.5, landing_pos.y as f64 + 1.0, landing_pos.z as f64 + 0.5);
-    // `landing_index` can never equal `look_at_index` here (that's `is_win`, already handled and
-    // returned above), so there's always a real, different pad to point the camera at.
-    let look_at_pos = state_rc.borrow().pads[look_at_index];
-    let (yaw, pitch) = look_at_direction(landing_feet, look_at_pos);
+
+    // Land on the pad's diagonal corner slab, not centered on the pad itself - see
+    // `find_corner_slab`'s doc comment. Falls back to the pad's own center (the old behavior)
+    // only if a pad is somehow missing its corner slab, which shouldn't happen for any real
+    // captured pad.
+    let landing_feet = match find_corner_slab(world, landing_pos, look_at_pos) {
+        Some((corner, top_half)) => {
+            let y = corner.y as f64 + if top_half { 1.0 } else { 0.5 };
+            DVec3::new(corner.x as f64 + 0.5, y, corner.z as f64 + 0.5)
+        }
+        None => DVec3::new(landing_pos.x as f64 + 0.5, landing_pos.y as f64 + 1.0, landing_pos.z as f64 + 0.5),
+    };
+    // Yaw points from the real landing spot (the corner) toward the next hint; pitch stays level
+    // per explicit request - every forced look direction here keeps pitch at 0.
+    let yaw = look_at_direction(landing_feet, look_at_pos);
+    let pitch = 0.0;
 
     state_rc.borrow_mut().last_teleport_tick.insert(client_id, current_tick);
 
@@ -544,10 +594,10 @@ fn teleport_to_reward_chest(state_rc: &Rc<RefCell<TeleportMazeState>>, world: &m
     // +1 - `reward_landing` is the confirmed-in-game block coordinate; the player's feet land one
     // level above it (standing on top of that block), same as every pad landing above.
     let landing_feet = DVec3::new(reward_landing.x as f64 + 0.5, reward_landing.y as f64 + 1.0, reward_landing.z as f64 + 0.5);
-    let (yaw, pitch) = look_at_direction(landing_feet, chest_pos);
+    let yaw = look_at_direction(landing_feet, chest_pos);
 
     if let Some(player) = world.players.get_mut(&client_id) {
-        player.server_teleport(landing_feet, yaw, pitch, 0);
+        player.server_teleport(landing_feet, yaw, 0.0, 0);
         play_teleport_effects(player, landing_feet);
     }
 

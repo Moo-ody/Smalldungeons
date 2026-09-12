@@ -203,10 +203,6 @@ impl Item {
                 // The ghast sound and projectile spawning happens in shoot_bonzo_projectile()
                 // No need to do anything here since it's handled by the packet system
             }
-            Item::MagicalMap => {
-                use crate::server::player::container_ui::UI;
-                player.open_ui(UI::MapSettingsMenu);
-            }
             _ => {}
         }
         Ok(())

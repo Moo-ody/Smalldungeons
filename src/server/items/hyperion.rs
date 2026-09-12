@@ -220,11 +220,19 @@ fn handle_hyperion_teleport(
     let mut last_safe_block: Option<(i32, i32, i32)> = None;
     let mut current = start;
 
-    for _ in 0..steps {
+    for step_index in 0..steps {
         current = DVec3::new(current.x + step.x, current.y + step.y, current.z + step.z);
         let bx = current.x.floor() as i32;
         let by = current.y.floor() as i32;
         let bz = current.z.floor() as i32;
+
+        // Same carve-out as ether transmission (`etherwarp::handle_teleport`): ignore the first
+        // block raycast, but only if that first block is Iron Bars - every other first-sample
+        // block still goes through the normal check below.
+        if step_index == 0 && matches!(block_at(player, bx, by, bz), crate::server::block::blocks::Blocks::IronBars) {
+            last_safe_block = Some((bx, by, bz));
+            continue;
+        }
 
         // We want to stand in this cell: require feet and head passable
         if is_passable_for_transmission(block_at(player, bx, by, bz))

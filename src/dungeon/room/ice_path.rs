@@ -147,6 +147,11 @@ pub fn setup(room: &Room, room_index: usize, world: &mut World) {
         m.is_invisible = true;
         m.ai_disabled = true;
         m.is_small_armor_stand = true;
+        // Marker: no hitbox at all. Without this, the stand's own (still real, even while
+        // invisible) hitbox - riding right at/just below the fish's own position - intercepted
+        // the client's attack raycast before it reached the actual Silverfish underneath,
+        // making the fish itself unpunchable.
+        m.is_marker_armor_stand = true;
         m
     };
     let hat_pos = DVec3::new(position.x, position.y + TNT_Y_OFFSET, position.z);

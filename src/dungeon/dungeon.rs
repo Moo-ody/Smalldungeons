@@ -90,10 +90,6 @@ pub struct Dungeon {
     /// forward across `/rs` (only the timer/finished-latch reset, not the target) so a player
     /// can retry the same route target repeatedly. `None` means no practice room is loaded yet.
     pub practice_target_secrets: Option<u8>,
-    /// Whether `/practice ... as` asked every secret in the room to be force-spawned immediately
-    /// (see `practice::spawn_all_secrets`), instead of the normal proximity/room-entry gating.
-    /// Carried across `/rs` like `practice_target_secrets`, so a restart repeats the same choice.
-    pub practice_instant_secrets: bool,
     /// Tick the route timer started on - set the first time any player's position moves away
     /// from where they spawned into the room (see `tick`), i.e. "first input", not room-load
     /// time. `None` before that first movement.
@@ -128,12 +124,6 @@ pub struct Dungeon {
     pub locked_chests: HashMap<BlockPos, LockedChestState>,
     // Maps lever world position to all chests it unlocks
     pub lever_to_chests: HashMap<BlockPos, Vec<BlockPos>>,
-
-    /// Toggled from the magical map's right-click GUI (see `UI::MapSettingsMenu`). When true,
-    /// every secret in a room spawns the instant the room is entered, instead of the normal
-    /// per-secret bounding-box proximity gating in `tick` below. Off by default so ordinary runs
-    /// keep vanilla secret-spawn behavior.
-    pub secrets_always_spawn: bool,
 
     /// Room indices that have been entered but whose mobs haven't spawned yet - drained once
     /// per `MOB_SPAWN_CYCLE_TICKS` ticks (see `tick`'s `Started` arm), instead of spawning the
@@ -236,7 +226,6 @@ impl Dungeon {
             map: DungeonMap::new(map_offset_x, map_offset_y),
             practice_room: false,
             practice_target_secrets: None,
-            practice_instant_secrets: false,
             practice_route_start_tick: None,
             practice_route_finished: false,
             practice_route_finish_seconds: None,
@@ -247,7 +236,6 @@ impl Dungeon {
             score: DungeonScoreState::default(),
             locked_chests: HashMap::new(),
             lever_to_chests: HashMap::new(),
-            secrets_always_spawn: false,
             pending_mob_spawn_rooms: Vec::new(),
             // boss_room_corner: BlockPos { x: -8, y: 254, z: -8 },
             // boss_room_width: 0, // Will be set when boss room is loaded
@@ -581,35 +569,6 @@ impl Dungeon {
 
     pub fn server_mut<'a>(&self) -> &'a mut Server {
         unsafe { self.server.as_mut().expect("server is null") }
-    }
-
-    /// Force-spawns every not-yet-spawned secret in every already-entered room, bypassing the
-    /// normal bounding-box/room-entry gating. Used when `secrets_always_spawn` is toggled on
-    /// (see `UI::MapSettingsMenu`) so rooms the players are already standing in catch up
-    /// immediately instead of waiting for the next room entry.
-    pub fn spawn_all_secrets_in_entered_rooms(&mut self, world: &mut world::World) {
-        let mut secrets_to_spawn = Vec::new();
-        for room in &self.rooms {
-            if !room.entered {
-                continue;
-            }
-            secrets_to_spawn.extend(room.json_secrets.iter().cloned());
-        }
-
-        for secret_rc in secrets_to_spawn {
-            let mut secret = secret_rc.borrow_mut();
-            if secret.has_spawned {
-                continue;
-            }
-            secret.has_spawned = true;
-            crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(&secret_rc, secret, world);
-        }
-
-        for room in &mut self.rooms {
-            if room.entered {
-                room.room_entry_secrets_spawned = true;
-            }
-        }
     }
 
     pub fn get_room_at(&self, x: i32, z: i32) -> Option<usize> {
@@ -1157,6 +1116,10 @@ impl Dungeon {
                 let mut quiz_rooms_to_spawn: Vec<usize> = Vec::new();
                 let mut ice_path_rooms_to_spawn: Vec<usize> = Vec::new();
                 let mut waterboard_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut shadow_assassin_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut default_room_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut dragon_rooms_to_spawn: Vec<usize> = Vec::new();
+                let mut default_dirt_rooms_to_spawn: Vec<usize> = Vec::new();
 
                 for (player_id, room_index_opt) in &player_room_indices {
                     if let Some(room_index) = room_index_opt {
@@ -1176,16 +1139,8 @@ impl Dungeon {
                                 weirdos_rooms_to_spawn.push(*room_index);
                             }
 
-                            // Quiz's intro speech starts on this exact same entry transition,
-                            // same reasoning as Three Weirdos above (Oruo shouldn't start
-                            // talking before a player has actually crossed into the room).
-                            if room.room_data.name == "Quiz" && !room.quiz_started {
-                                room.quiz_started = true;
-                                quiz_rooms_to_spawn.push(*room_index);
-                            }
-
                             // Ice Path's silverfish spawns on this exact same entry transition,
-                            // same reasoning as Three Weirdos/Quiz above.
+                            // same reasoning as Three Weirdos above.
                             if room.room_data.name == "Ice Path" && !room.ice_path_spawned {
                                 room.ice_path_spawned = true;
                                 ice_path_rooms_to_spawn.push(*room_index);
@@ -1200,19 +1155,42 @@ impl Dungeon {
                                 waterboard_rooms_to_spawn.push(*room_index);
                             }
 
+                            // The Shadow Assassin miniboss spawns on this exact same entry
+                            // transition - same reasoning as Three Weirdos above (he shouldn't
+                            // exist yet for a player merely peeking in from an adjacent room).
+                            if room.room_data.name == "Shadow Assassin" && !room.shadow_assassin_spawned {
+                                room.shadow_assassin_spawned = true;
+                                shadow_assassin_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // "Default"'s guaranteed Lost Adventurer spawns on this exact same
+                            // entry transition - same reasoning as Shadow Assassin above.
+                            if room.room_data.name == "Default" && !room.default_lost_adventurer_spawned {
+                                room.default_lost_adventurer_spawned = true;
+                                default_room_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // "Dragon"'s random miniboss spawns on this exact same entry
+                            // transition - same reasoning as Shadow Assassin above.
+                            if room.room_data.name == "Dragon" && !room.dragon_miniboss_spawned {
+                                room.dragon_miniboss_spawned = true;
+                                dragon_rooms_to_spawn.push(*room_index);
+                            }
+
+                            // The *other* "Default" room's random miniboss spawns on this exact
+                            // same entry transition - see `default_dirt.rs`'s own doc comment
+                            // for how it's told apart from `default_room.rs`'s "Default" capture.
+                            if room.room_data.name == "Default" && !room.default_dirt_miniboss_spawned {
+                                room.default_dirt_miniboss_spawned = true;
+                                default_dirt_rooms_to_spawn.push(*room_index);
+                            }
+
                             // Collect entry secrets (schest, sess) to spawn immediately when room is entered.
-                            // With `secrets_always_spawn` on, every secret in the room spawns on entry
-                            // instead of just schest/sess, bypassing the proximity gating below entirely.
                             if !room.room_entry_secrets_spawned {
                                 room.room_entry_secrets_spawned = true;
                                 for secret_rc in &room.json_secrets {
                                     let secret = secret_rc.borrow();
                                     if secret.has_spawned {
-                                        continue;
-                                    }
-
-                                    if self.secrets_always_spawn {
-                                        entry_secrets_to_spawn.push((secret_rc.clone(), *room_index));
                                         continue;
                                     }
 
@@ -1226,9 +1204,56 @@ impl Dungeon {
                                 }
                             }
                         }
+
+                        // Quiz's intro speech is gated independently of `room.entered` above -
+                        // that flag (and everything driven by it: the map's entered icon, mob
+                        // wake-up, entry secrets) fires the instant a player is merely inside
+                        // this room's coarse 32x32 grid cell, which can include the doorway/
+                        // hallway leading up to the actual room before its own floor even
+                        // starts. Oruo shouldn't start talking until a player has actually
+                        // crossed that threshold - checked every tick (not just on the
+                        // `!room.entered` transition) against the real captured room-local
+                        // border (14-16, 68, 0): once translated to world space and back via
+                        // `get_local_block_pos`, "on the blocks or past them" is local z >= 0.
+                        if room.room_data.name == "Quiz" && !room.quiz_started {
+                            if let Some(player) = server.world.players.get(player_id) {
+                                let player_pos = BlockPos {
+                                    x: player.position.x.floor() as i32,
+                                    y: player.position.y.floor() as i32,
+                                    z: player.position.z.floor() as i32,
+                                };
+                                if room.get_local_block_pos(&player_pos).z >= 0 {
+                                    room.quiz_started = true;
+                                    quiz_rooms_to_spawn.push(*room_index);
+                                }
+                            }
+                        }
+
+                        // Quiz-only rescue: falling below y=63 anywhere in this room (a gap in
+                        // the floor, etc.) instantly teleports the player back to a fixed safe
+                        // spot instead of leaving them to fall indefinitely - per explicit
+                        // request, scoped to this one room, not a dungeon-wide fall-catch.
+                        if room.room_data.name == "Quiz" {
+                            let below_floor = server.world.players.get(player_id)
+                                .is_some_and(|player| player.position.y < 63.0);
+                            if below_floor {
+                                let rescue = room.get_world_block_pos(&BlockPos { x: 15, y: 69, z: 4 });
+                                if let Some(player) = server.world.players.get_mut(player_id) {
+                                    // flags 24: xyz absolute, yaw/pitch relative-with-zero-delta
+                                    // (keeps the player's current look, no forced head-snap) -
+                                    // same convention `etherwarp.rs`'s teleports use.
+                                    player.server_teleport(
+                                        DVec3::new(rescue.x as f64 + 0.5, rescue.y as f64, rescue.z as f64 + 0.5),
+                                        0.0,
+                                        0.0,
+                                        24,
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
-                
+
                 // Any room not yet spawned gets its mobs pre-spawned in a DORMANT state (visible,
                 // but no idle movement/perception - see `run_mob_ai`'s own room-entered gate) the
                 // instant a player enters a DIFFERENT room connected to it by a door, even before
@@ -1255,6 +1280,36 @@ impl Dungeon {
                             if !neighbour.mobs_spawned && !neighbour.mob_prespawn_queued {
                                 neighbour.mob_prespawn_queued = true;
                                 dormant_prespawn_rooms.push(neighbour_index);
+                            }
+
+                            // Yellow-room ("Champion room") minibosses get the exact same
+                            // dormant pre-spawn treatment as ordinary mobs above, per explicit
+                            // request - queued into the same `_rooms_to_spawn` vectors (and
+                            // through the same already-existing `setup()` calls below) that real
+                            // room entry uses, just guarded by neighbour-entry instead of
+                            // `rooms_just_entered`. Each `setup()` reads `room.entered` fresh at
+                            // call time (see its own doc comment) - still `false` here - so it
+                            // spawns properly dormant; the generic per-mob wake-up loop just below
+                            // (keyed only on `room_index`, not mob type) wakes it exactly the same
+                            // way it wakes ordinary pre-spawned mobs once the room is actually
+                            // entered. Setting each flag here (same as real entry already does)
+                            // means the real-entry check further up just no-ops instead of
+                            // double-spawning once the player actually walks in.
+                            if neighbour.room_data.name == "Shadow Assassin" && !neighbour.shadow_assassin_spawned {
+                                neighbour.shadow_assassin_spawned = true;
+                                shadow_assassin_rooms_to_spawn.push(neighbour_index);
+                            }
+                            if neighbour.room_data.name == "Default" && !neighbour.default_lost_adventurer_spawned {
+                                neighbour.default_lost_adventurer_spawned = true;
+                                default_room_rooms_to_spawn.push(neighbour_index);
+                            }
+                            if neighbour.room_data.name == "Dragon" && !neighbour.dragon_miniboss_spawned {
+                                neighbour.dragon_miniboss_spawned = true;
+                                dragon_rooms_to_spawn.push(neighbour_index);
+                            }
+                            if neighbour.room_data.name == "Default" && !neighbour.default_dirt_miniboss_spawned {
+                                neighbour.default_dirt_miniboss_spawned = true;
+                                default_dirt_rooms_to_spawn.push(neighbour_index);
                             }
                         }
                     }
@@ -1321,6 +1376,38 @@ impl Dungeon {
                 for room_index in waterboard_rooms_to_spawn {
                     if let Some(room) = self.rooms.get_mut(room_index) {
                         crate::dungeon::room::waterboard::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Spawns the Shadow Assassin miniboss for any room just entered this tick - see
+                // `shadow_assassin_rooms_to_spawn`'s collection above.
+                for room_index in shadow_assassin_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::shadow_assassin::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Spawns "Default"'s guaranteed Lost Adventurer for any room just entered this
+                // tick - see `default_room_rooms_to_spawn`'s collection above.
+                for room_index in default_room_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::default_room::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Spawns "Dragon"'s random miniboss for any room just entered this tick - see
+                // `dragon_rooms_to_spawn`'s collection above.
+                for room_index in dragon_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::dragon::setup(room, room_index, &mut server.world);
+                    }
+                }
+
+                // Spawns the *other* "Default" room's random miniboss for any room just entered
+                // this tick - see `default_dirt_rooms_to_spawn`'s collection above.
+                for room_index in default_dirt_rooms_to_spawn {
+                    if let Some(room) = self.rooms.get(room_index) {
+                        crate::dungeon::room::default_dirt::setup(room, room_index, &mut server.world);
                     }
                 }
 

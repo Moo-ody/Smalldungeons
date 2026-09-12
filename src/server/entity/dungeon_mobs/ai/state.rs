@@ -97,6 +97,43 @@ pub struct MobAiState {
     /// each time one doesn't. Once this reaches `LOS_FORGET_TICKS`, the mob gives up ("relatively
     /// oblivious") and returns to spawn - see `ai/mod.rs`.
     pub ticks_since_los: u32,
+
+    /// Only meaningful for an archetype with `AiProfile::teleport_ambush` set (currently just
+    /// Shadow Assassin) - ticks left frozen (no movement, still invisible) after first
+    /// acquiring a target, before the initial ambush teleport. Seeded from
+    /// `TeleportAmbush::stun_ticks` the tick a target is acquired; 0 once the freeze has ended
+    /// (or for any archetype with no `teleport_ambush` profile, where it's simply never set).
+    pub stun_ticks: u32,
+    /// Only meaningful alongside `stun_ticks` above - counts down to the next scheduled
+    /// teleport-behind while aggroed (`TeleportAmbush::reengage_interval_ticks`).
+    pub teleport_cooldown: Cooldown,
+
+    /// Only meaningful for a `teleport_ambush` archetype (Shadow Assassin) - `true` orbits its
+    /// target clockwise, `false` counter-clockwise. Rolled once per engagement (the ambush
+    /// teleport that first sets `is_invisible = false`) and held fixed for the rest of that
+    /// fight - see `ai/mod.rs`'s `teleport_ambush` branch.
+    pub orbit_clockwise: bool,
+    /// Ticks until the next volley-chance roll while orbiting normally (it attacks continuously
+    /// every tick otherwise - see `ai/mod.rs`'s `teleport_ambush` branch). Only meaningful for a
+    /// `teleport_ambush` archetype.
+    pub weave_cooldown: Cooldown,
+    /// > 0 while mid bow-volley (arrows still left to fire this burst) - movement is fully
+    /// frozen while this is nonzero.
+    pub volley_arrows_left: u8,
+    /// Ticks until the volley's next arrow.
+    pub volley_shot_cooldown: Cooldown,
+
+    /// Only meaningful for a `room_confined` archetype (see `AiProfile::room_confined`'s own
+    /// doc comment) - `true` once a player has actually landed a hit on it
+    /// (`combat::on_player_damaged_mob`), permanently lifting its room confinement. Never reset
+    /// back to `false` - even after an auto-return teleport (see `no_interaction_ticks` below),
+    /// it stays released.
+    pub damaged_once: bool,
+    /// Only meaningful once `damaged_once` - ticks since any player was last in this mob's line
+    /// of sight *or* damage was dealt in either direction. Reset to 0 by either; once it reaches
+    /// the auto-return threshold (`ai/mod.rs`'s `NO_INTERACTION_RETURN_TICKS`), the mob
+    /// teleports back to `spawn_origin` and this resets to 0 again.
+    pub no_interaction_ticks: u32,
 }
 
 impl MobAiState {
@@ -119,6 +156,14 @@ impl MobAiState {
             sprinting: false,
             los_check_cooldown: Cooldown::ready(),
             ticks_since_los: 0,
+            stun_ticks: 0,
+            teleport_cooldown: Cooldown::ready(),
+            orbit_clockwise: false,
+            weave_cooldown: Cooldown::ready(),
+            volley_arrows_left: 0,
+            volley_shot_cooldown: Cooldown::ready(),
+            damaged_once: false,
+            no_interaction_ticks: 0,
         }
     }
 }

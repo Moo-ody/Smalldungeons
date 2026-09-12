@@ -88,6 +88,7 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::fluid::WaterSim;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::cell::RefCell;
@@ -116,6 +117,15 @@ const USE_OPTIMIZED: &str = "false";
 /// while still requiring genuinely following the real timing, matching this project's general
 /// preference for a reasonable judgment call over fabricating false precision.
 const CLICK_TOLERANCE_TICKS: i64 = 20;
+
+/// How long after room entry the 3 randomly-chosen gates actually push closed (see `setup`) - per
+/// explicit correction, real play shows a brief pause before the real piston push happens, not an
+/// instant "already sealed the moment the room loads" state. Not a captured real value (no known
+/// source states the real exact delay) - just long enough to read as a deliberate reaction rather
+/// than instant, matching this project's general preference for a reasonable judgment call over
+/// fabricating false precision (see `CLICK_TOLERANCE_TICKS`/`SOLVE_WATER_EFFECT_TICKS` for the
+/// same reasoning applied elsewhere in this module).
+const GATE_CLOSE_DELAY_TICKS: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LeverKind {
@@ -447,7 +457,7 @@ const PATTERN_3_JSON: &str = include_str!("../../room_data/misc/puzzles/Waterboa
 /// every other pattern, so `material_blocks_for_room`/`answer_key_pattern_for_room` don't need a
 /// special case for "no swap happened".
 pub fn pick_pattern(room_data: &mut crate::dungeon::room::room_data::RoomData) {
-    apply_pattern(room_data, rand::Rng::random_range(&mut rand::rng(), 0..4));
+    apply_pattern(room_data, rand::Rng::random_range(&mut seeded_rng(), 0..4));
 }
 
 /// The actual swap-and-tag logic `pick_pattern` uses, factored out so `practice::find_room_data`'s
@@ -839,6 +849,9 @@ pub struct WaterboardState {
     /// `update_gate_sensors` only toggles a gate on the instant water NEWLY arrives (this flips
     /// false -> true), not every tick it happens to still be sitting there.
     gate_sensor_wet: HashMap<GateColor, bool>,
+    /// The tick each lever last had a click actually register (debounce bookkeeping) - see
+    /// `LEVER_DEBOUNCE_TICKS`.
+    last_click_tick: HashMap<LeverKind, u64>,
 }
 
 /// Room-local (min, max) corners spanning every real reference point that defines the puzzle's
@@ -973,12 +986,19 @@ fn output_row_positions(room: &Room) -> Vec<BlockPos> {
 /// silently at dungeon generation before anyone's there to see or hear it. Called once per room
 /// instance from `Dungeon::tick`'s room-entry hook, guarded by `Room::waterboard_spawned` so
 /// walking out and back in doesn't re-roll which gates are closed or re-register the levers.
+///
+/// Per explicit correction, the 3 chosen gates don't slam shut in the same instant a player
+/// crosses the threshold either - real play shows a brief pause before they actually push closed,
+/// not an instant "already sealed the moment you can see the room" state. `GATE_CLOSE_DELAY_TICKS`
+/// below defers only that real closing push (and its sound); every other part of this function -
+/// the levers becoming interactable, `WaterboardState`/`solution` bookkeeping, the material blocks'
+/// own resting position - stays immediate, since none of that is the thing confirmed delayed.
 pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
     if room.room_data.name != "Water Board" {
         return;
     }
 
-    let mut rng = rand::rng();
+    let mut rng = seeded_rng();
 
     // Water starts off, so the dam piston starts extended/closed - a real lapis block sealing the
     // gap, same as it'd be found on a fresh room.
@@ -996,12 +1016,23 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
     all_gates.shuffle(&mut rng);
     let closed_gates: Vec<GateColor> = all_gates[..3].to_vec();
 
+    // The other 2 gates' own resting-open geometry is real, present from the instant the room is
+    // even visible (nothing ever animates them) - only the 3 chosen-closed gates get the delayed
+    // real push below.
     for &gate in &GateColor::ALL {
-        let closed = closed_gates.contains(&gate);
-        apply_gate_state(room, world, gate, closed);
-        if closed {
-            play_gate_sound(world, room, gate, true);
+        if !closed_gates.contains(&gate) {
+            apply_gate_state(room, world, gate, false);
         }
+    }
+    {
+        let gates_to_close = closed_gates.clone();
+        world.server_mut().schedule(GATE_CLOSE_DELAY_TICKS, move |server| {
+            for &gate in &gates_to_close {
+                let Some(room) = server.dungeon.rooms.get(room_index) else { continue };
+                apply_gate_state(room, &mut server.world, gate, true);
+                play_gate_sound(&mut server.world, room, gate, true);
+            }
+        });
     }
     let gate_closed: HashMap<GateColor, bool> = GateColor::ALL.iter().map(|&g| (g, closed_gates.contains(&g))).collect();
     let gate_sensor_wet: HashMap<GateColor, bool> = GateColor::ALL.iter().map(|&g| (g, false)).collect();
@@ -1039,6 +1070,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
         water_sim,
         gate_closed,
         gate_sensor_wet,
+        last_click_tick: HashMap::new(),
     }));
 
     for &lever in &LeverKind::ALL {
@@ -1064,6 +1096,23 @@ fn combo_key(closed_gates: &[GateColor]) -> String {
     indices.iter().map(|i| i.to_string()).collect()
 }
 
+/// How many ticks must pass after a lever's last registered click before another click on that
+/// SAME lever counts as a new, independent one. This is the actual real-world root cause behind
+/// "Odin's solver sometimes doesn't work": Odin's own `WaterSolver.kt` (`waterInteract`) has a
+/// comment explaining that a single real right-click sometimes reaches the server as TWO separate
+/// interact packets - if the first one's interaction result isn't a hard success, the client
+/// automatically retries with the off-hand, and the server "treats [that] as a regular click,
+/// causing a double lever flick i.e. the gate doesn't open" (Odin has to filter this client-side
+/// by only counting `interactionResult == SUCCESS`, which this project has no equivalent of at
+/// the packet layer). Without a matching guard here, that phantom second click silently advances
+/// `consumed` an extra step for one lever, permanently misaligning every one of ITS remaining
+/// real clicks against the wrong queued expected time for the rest of that run - intermittent by
+/// nature, since it only bites on the runs where a duplicate packet actually happens to occur.
+/// 4 ticks (200ms) is far shorter than any deliberate second pull a player could mean for a
+/// timing puzzle whose real expected clicks are spaced in whole seconds, but comfortably covers a
+/// same-instant duplicate packet.
+const LEVER_DEBOUNCE_TICKS: u64 = 4;
+
 /// A lever was clicked. `Water` toggles the flow (and resets timing/progress on every toggle -
 /// per explicit confirmation, real play involves flicking it off and on to re-examine the board,
 /// which restarts the timing clock without undoing already-opened gates, since gates only ever
@@ -1072,6 +1121,17 @@ fn combo_key(closed_gates: &[GateColor]) -> String {
 /// time (per `WATER_SOLUTIONS`) counts as correct; once every lever's entire expected sequence is
 /// consumed, all 3 originally-closed gates open and the chest is revealed.
 pub fn handle_lever(player: &mut Player, state_rc: &Rc<RefCell<WaterboardState>>, lever: LeverKind) {
+    {
+        let now = player.world_mut().tick_count;
+        let mut state = state_rc.borrow_mut();
+        if let Some(&last) = state.last_click_tick.get(&lever) {
+            if now.saturating_sub(last) < LEVER_DEBOUNCE_TICKS {
+                return;
+            }
+        }
+        state.last_click_tick.insert(lever, now);
+    }
+
     if lever == LeverKind::Water {
         let (room_index, now_on) = {
             let mut state = state_rc.borrow_mut();
@@ -1495,6 +1555,47 @@ mod pattern_decode {
     /// `answer_key_pattern_for_room`'s own assignment for that same state - a mismatch here means
     /// Odin's solver and this server's own `WATER_SOLUTIONS` lookup disagree on which pattern is
     /// active, silently pulling different answer-key timings for the same real room.
+    /// One-off diagnostic (not a correctness assertion - purely investigative) for "Odin's solver
+    /// sometimes doesn't work": scans every real captured Water Board room state (the original
+    /// capture + all 4 pattern captures) for any real `Wool` block sitting anywhere near each of
+    /// the 5 gates' own real geometry (`x` 10..=20, `y` 53..=58, at that gate's own `z`), to see
+    /// whether any capture happens to show a gate closed at capture time - which would reveal the
+    /// real wool color/metadata for `GateColor::Purple`/`Blue`, the 2 colors `wool_metadata`'s own
+    /// doc comment says were never directly observed and are only a guessed vanilla-standard value.
+    /// Run with `cargo test dump_gate_wool_colors -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn dump_gate_wool_colors() {
+        let cases: [(&str, &str); 5] = [
+            ("original", include_str!("../../room_data/rooms/65,water_board,-60,-60.json")),
+            ("pattern_0", PATTERN_0_JSON),
+            ("pattern_1", PATTERN_1_JSON),
+            ("pattern_2", include_str!("../../room_data/misc/puzzles/Waterboard/65,water_board_pattern2,-60,-60.json")),
+            ("pattern_3", PATTERN_3_JSON),
+        ];
+        let gates: [(&str, i32); 5] = [
+            ("Purple", GateColor::Purple.local_pos().z),
+            ("Orange", GateColor::Orange.local_pos().z),
+            ("Blue", GateColor::Blue.local_pos().z),
+            ("Green", GateColor::Green.local_pos().z),
+            ("Red", GateColor::Red.local_pos().z),
+        ];
+        for (label, raw) in cases {
+            let data = RoomData::from_raw_json(raw);
+            for &(name, z) in &gates {
+                let mut found = Vec::new();
+                for x in 10..=20 {
+                    for y in 53..=58 {
+                        if let Blocks::Wool { color } = block_at(&data, x, y, z) {
+                            found.push(format!("({x},{y},{z})=wool({color})"));
+                        }
+                    }
+                }
+                eprintln!("{label} gate {name} (z={z}): {}", if found.is_empty() { "no wool found (open)".to_string() } else { found.join(", ") });
+            }
+        }
+    }
+
     #[test]
     #[ignore]
     fn check_odin_pattern_detection_matches() {

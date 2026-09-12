@@ -44,6 +44,21 @@ pub fn apply_lethal_hit(entity: &mut Entity, player: &Player) {
     kill_mob(entity.world_mut(), entity_id);
 }
 
+/// Called from every `interact` handler on an `Attack` action, alongside `apply_lethal_hit`/
+/// `apply_king_midas_hit` - marks a `AiProfile::room_confined` archetype's room-leash
+/// permanently released the first time a player actually attacks it (any weapon, not just a
+/// lethal one - there's no partial-damage/HP model to hook a "real" damage threshold off of, so
+/// "was attacked at all" is the closest real signal), and resets its no-interaction auto-return
+/// timer the same way any other sign of active combat does (see `ai/mod.rs`'s containment
+/// block). A no-op field write for any other archetype - harmless; those fields are simply never
+/// read unless `room_confined` is set.
+pub fn on_player_damaged_mob(world: &mut World, entity_id: EntityId) {
+    if let Some(state) = world.entity_mob_ai.get_mut(&entity_id) {
+        state.damaged_once = true;
+        state.no_interaction_ticks = 0;
+    }
+}
+
 /// How many hits King Midas takes before he dies - one per armor piece (helmet, chestplate,
 /// leggings, boots), then a 5th that actually kills him.
 const KING_MIDAS_HITS_TO_KILL: u8 = 5;
@@ -63,10 +78,10 @@ pub fn apply_king_midas_hit(entity: &mut Entity, _player: &Player) -> bool {
 /// bat projectile) can call it too, not just the direct melee-attack interact hooks. Each of
 /// his first 4 hits plays an anvil-break sound, strips one piece of his golden armor, and
 /// updates his nametag's HP suffix to `base_health / KING_MIDAS_HITS_TO_KILL` less than before;
-/// the 5th kills him and drops a Superboom TNT pickup, the same "cosmetic prop next to a body"
-/// mechanism the Wither/Blood door key companion TNT uses (`Dungeon::maybe_grant_door_key`/
-/// `spawn_pickup`). Returns `false` for every other archetype (or an already-gone entity) so
-/// callers fall through to their normal instant-kill path instead.
+/// the 5th kills him - `kill_mob` below drops the usual TNT+50%-blessing room-clear reward on
+/// its own now (`counts_toward_clear: true` - see `spawn_king_midas`'s own doc comment), so this
+/// function no longer drops a TNT pickup itself. Returns `false` for every other archetype (or
+/// an already-gone entity) so callers fall through to their normal instant-kill path instead.
 pub fn apply_king_midas_weapon_hit(world: &mut World, entity_id: EntityId) -> bool {
     let is_king_midas = world.entity_mob_ai.get(&entity_id)
         .is_some_and(|state| state.archetype == DungeonMobType::KingMidas);
@@ -84,7 +99,6 @@ pub fn apply_king_midas_weapon_hit(world: &mut World, entity_id: EntityId) -> bo
     if hit_count >= KING_MIDAS_HITS_TO_KILL {
         world.entity_king_midas_hits.remove(&entity_id);
         kill_mob(world, entity_id);
-        crate::dungeon::dungeon::spawn_pickup(world, pos, crate::dungeon::room::secrets::PickupKind::Tnt);
         return true;
     }
 

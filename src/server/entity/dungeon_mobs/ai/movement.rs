@@ -27,8 +27,20 @@ pub enum MovementStyle {
     /// until within `melee_range`, then orbits the target instead of standing still or
     /// continuing to push directly into them - `ai/mod.rs`'s attack-range face-lock (see there)
     /// keeps head/aim on the target the whole time regardless. Paired with `AttackModule::Melee`
-    /// using the same `melee_range`.
-    CircleStrafe { melee_range: f64 },
+    /// using the same `melee_range`. `orbit_radius` is the distance the orbit itself actively
+    /// settles into/holds (correcting inward or outward as needed - e.g. backing off if it ends
+    /// up standing right on the target) rather than just preserving whatever distance it
+    /// happened to be at on crossing `melee_range` - usually the same value as `melee_range`
+    /// (Crypt Dreadlord), but can be tighter (Lost/Frozen/Angry Adventurer's "up close" ~1 block
+    /// hover, per explicit request).
+    CircleStrafe { melee_range: f64, orbit_radius: f64 },
+    /// Lost/Frozen/Angry Adventurer's documented melee behavior: closes in normally until
+    /// within `melee_range`, then a slow side-to-side wiggle (not a full orbit like
+    /// `CircleStrafe` - explicit request: "shouldn't try to strafe around me totally... strafing
+    /// left and right a bit") toward `orbit_radius`, same radial-correction reasoning as
+    /// `CircleStrafe`'s own `orbit_radius`. Paired with `AttackModule::HybridMeleeRanged` using
+    /// the same `melee_range`.
+    LightStrafe { melee_range: f64, orbit_radius: f64 },
     // Phase 3+: SprintJump { .. } - enum extends here, the pipeline in ai/mod.rs does not need
     // to change when it's added.
 }
@@ -75,12 +87,20 @@ pub fn apply_movement_style(
                 face_toward(entity, target_pos);
             }
         }
-        MovementStyle::CircleStrafe { melee_range } => {
+        MovementStyle::CircleStrafe { melee_range, orbit_radius } => {
             let distance = entity.position.distance_to(&target_pos);
             if distance > melee_range {
                 steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump);
             } else {
-                strafe_around_target(entity, world, width, height, target_pos, speed_bps);
+                strafe_around_target(entity, world, width, height, target_pos, orbit_radius, speed_bps);
+            }
+        }
+        MovementStyle::LightStrafe { melee_range, orbit_radius } => {
+            let distance = entity.position.distance_to(&target_pos);
+            if distance > melee_range {
+                steer_toward(entity, world, width, height, steer_pos, speed_bps, allow_jump);
+            } else {
+                strafe_lightly_toward_radius(entity, world, width, height, target_pos, orbit_radius);
             }
         }
     }
@@ -91,22 +111,57 @@ pub fn apply_movement_style(
 /// it's endlessly circling one way.
 const STRAFE_FLIP_INTERVAL_TICKS: u32 = 40;
 
-/// Orbits `target_pos` at (roughly) the mob's current distance from it, walking tangentially
-/// instead of directly toward/away - used once a `CircleStrafe` mob is already within
-/// `melee_range`. Direction alternates over time (see `STRAFE_FLIP_INTERVAL_TICKS`) purely from
-/// `entity.ticks_existed`, so no extra per-mob state is needed to track which way it's currently
-/// circling. Doesn't touch yaw/pitch - `ai/mod.rs`'s attack-range face lock handles looking at
-/// the target on top of this.
-fn strafe_around_target(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, speed_bps: f64) {
+/// Orbits `target_pos`, walking tangentially instead of directly toward/away - used once a
+/// `CircleStrafe` mob is already within `melee_range`. Direction alternates over time (see
+/// `STRAFE_FLIP_INTERVAL_TICKS`) purely from `entity.ticks_existed`, so no extra per-mob state is
+/// needed to track which way it's currently circling. Blended with a radial correction back
+/// toward `orbit_radius` (positive = outward) rather than just preserving whatever distance it
+/// happened to already be at - otherwise a mob that ends up standing right on top of its target
+/// (`dx`/`dz` near zero) just orbits in place at that same degenerate radius forever instead of
+/// actually backing off to a sensible fighting distance. Doesn't touch yaw/pitch - `ai/mod.rs`'s
+/// attack-range face lock handles looking at the target on top of this.
+fn strafe_around_target(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, orbit_radius: f64, speed_bps: f64) {
     let dx = entity.position.x - target_pos.x;
     let dz = entity.position.z - target_pos.z;
     let radius = (dx * dx + dz * dz).sqrt().max(0.5);
     let direction = if (entity.ticks_existed / STRAFE_FLIP_INTERVAL_TICKS) % 2 == 0 { 1.0 } else { -1.0 };
     // Tangent to the target->mob radius, rotated 90 degrees.
     let (tangent_x, tangent_z) = (-dz / radius * direction, dx / radius * direction);
+    let radial_bias = ((orbit_radius - radius) / orbit_radius.max(0.5)).clamp(-1.0, 1.0);
+    let (radial_x, radial_z) = (dx / radius * radial_bias, dz / radius * radial_bias);
+
+    let combined_x = tangent_x + radial_x;
+    let combined_z = tangent_z + radial_z;
+    let len = (combined_x * combined_x + combined_z * combined_z).sqrt().max(1e-6);
 
     let step = speed_bps / TICKS_PER_SECOND;
-    physics::move_horizontal(entity, world, width, height, tangent_x * step, tangent_z * step, false);
+    physics::move_horizontal(entity, world, width, height, combined_x / len * step, combined_z / len * step, false);
+}
+
+/// Orbits `target_pos` like `strafe_around_target` above, but in a persisted direction
+/// (`clockwise`) instead of `strafe_around_target`'s time-based flip, blended with an
+/// inward/outward radial component (`radial_bias`: negative darts toward the target, positive
+/// retreats away from it, `0.0` is a pure orbit) - Shadow Assassin's documented "spins one
+/// direction, weaves in to strike, weaves back out" pattern (see `ai/mod.rs`'s `teleport_ambush`
+/// branch, which owns the persisted direction/weave-phase state this needs). Doesn't touch
+/// yaw/pitch, same as `strafe_around_target` - the caller's own face-lock handles that.
+pub fn orbit_and_weave(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, clockwise: bool, radial_bias: f64, speed_bps: f64) {
+    let dx = entity.position.x - target_pos.x;
+    let dz = entity.position.z - target_pos.z;
+    let radius = (dx * dx + dz * dz).sqrt().max(0.5);
+    let direction = if clockwise { 1.0 } else { -1.0 };
+    let (tangent_x, tangent_z) = (-dz / radius * direction, dx / radius * direction);
+    let (radial_x, radial_z) = (dx / radius * radial_bias, dz / radius * radial_bias);
+
+    let combined_x = tangent_x + radial_x;
+    let combined_z = tangent_z + radial_z;
+    let len = (combined_x * combined_x + combined_z * combined_z).sqrt();
+    if len < 1e-6 {
+        return;
+    }
+
+    let step = speed_bps / TICKS_PER_SECOND;
+    physics::move_horizontal(entity, world, width, height, combined_x / len * step, combined_z / len * step, false);
 }
 
 /// Slow left-right oscillation (not a full orbit) used by a ranged attacker while holding
@@ -125,6 +180,31 @@ fn strafe_lightly(entity: &mut Entity, world: &World, width: f64, height: f64, t
 
     let step = RANGED_STRAFE_SPEED_BPS / TICKS_PER_SECOND * direction;
     physics::move_horizontal(entity, world, width, height, tangent_x * step, tangent_z * step, false);
+}
+
+/// Same slow side-to-side wiggle as `strafe_lightly` above, blended with a radial correction
+/// back toward `orbit_radius` - same reasoning as `strafe_around_target`'s own correction, so a
+/// `LightStrafe` mob still backs off if it ends up standing right on the target instead of just
+/// wiggling in place there.
+fn strafe_lightly_toward_radius(entity: &mut Entity, world: &World, width: f64, height: f64, target_pos: DVec3, orbit_radius: f64) {
+    let dx = entity.position.x - target_pos.x;
+    let dz = entity.position.z - target_pos.z;
+    let radius = (dx * dx + dz * dz).sqrt().max(0.5);
+    let phase = entity.ticks_existed as f64 / RANGED_STRAFE_PERIOD_TICKS * std::f64::consts::TAU;
+    let tangential_direction = phase.sin();
+    let (tangent_x, tangent_z) = (-dz / radius * tangential_direction, dx / radius * tangential_direction);
+    let radial_bias = ((orbit_radius - radius) / orbit_radius.max(0.5)).clamp(-1.0, 1.0);
+    let (radial_x, radial_z) = (dx / radius * radial_bias, dz / radius * radial_bias);
+
+    let combined_x = tangent_x + radial_x;
+    let combined_z = tangent_z + radial_z;
+    let len = (combined_x * combined_x + combined_z * combined_z).sqrt();
+    if len < 1e-6 {
+        return;
+    }
+
+    let step = RANGED_STRAFE_SPEED_BPS / TICKS_PER_SECOND;
+    physics::move_horizontal(entity, world, width, height, combined_x / len * step, combined_z / len * step, false);
 }
 
 /// Deflection angles (degrees) tried in order when a direct step is fully blocked - small

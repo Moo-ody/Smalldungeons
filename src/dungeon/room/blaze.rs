@@ -56,6 +56,7 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -200,7 +201,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
     let descending = room.room_data.bottom == LOWER_BLAZE_BOTTOM;
     let positions = if room.room_data.bottom == HIGHER_BLAZE_BOTTOM { &HIGHER_BLAZE_POSITIONS } else { &LOWER_BLAZE_POSITIONS };
 
-    let mut rng = rand::rng();
+    let mut rng = seeded_rng();
     let mut hps: Vec<u32> = Vec::with_capacity(10);
     let mut hp = rand::Rng::random_range(&mut rng, 0..=1000u32) + 1000;
     hps.push(hp);

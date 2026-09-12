@@ -52,6 +52,7 @@ use crate::server::utils::direction::Direction;
 use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::World;
+use crate::utils::seeded_rng::seeded_rng;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
@@ -59,6 +60,12 @@ use std::cell::{Cell, RefCell};
 /// How long (ticks) the floor stays broken (see `break_floor`) before restoring, per explicit
 /// request - RustClear's own donor value was 60 (`in_ticks: 60`, 3s @ 20 TPS); this is 40 (2s).
 const FAIL_BREAK_TICKS: u64 = 40;
+
+/// How far above the current floor's own standing height (`FLOOR_Y` + 1, the block a player
+/// stands *on top of*) counts as "jumped" - per explicit request, jumping mid-attempt is a fail.
+/// Small enough that ordinary flat-floor walking (where Y shouldn't move at all) never trips it,
+/// generous enough to absorb minor floating-point/network noise in a real client's reported Y.
+const JUMP_Y_TOLERANCE: f64 = 0.1;
 
 // --- Real footprint data, rebuilt from Odin's `iceFillFloors.json` - see the module doc comment
 // for how and why this replaces RustClear's own (incomplete) arrays. Each tuple is a room-
@@ -188,7 +195,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
         return;
     }
 
-    let mut rng = rand::rng();
+    let mut rng = seeded_rng();
     let obstacle_choice = std::array::from_fn(|floor| rand::Rng::random_range(&mut rng, 0..OBSTACLE_PATTERNS[floor].len()));
 
     // Per explicit request: every floor's obstacle pattern is placed the instant the room loads,
@@ -333,6 +340,7 @@ pub fn tick(room: &mut Room, world: &mut World) {
 /// walked-puzzle, `teleport_maze.rs`, is likewise per-player).
 fn tick_player(state_rc: &Rc<RefCell<IceFillState>>, room: &Room, world: &mut World, client_id: ClientId) {
     let Some(player) = world.players.get(&client_id) else { return };
+    let player_y = player.position.y;
     let feet_block = BlockPos::new(
         player.position.x.floor() as i32,
         (player.position.y - 0.1).floor() as i32,
@@ -343,54 +351,77 @@ fn tick_player(state_rc: &Rc<RefCell<IceFillState>>, room: &Room, world: &mut Wo
 
     let outcome = {
         let mut state = state_rc.borrow_mut();
+        let current_floor = state.current_floor;
         let LayerState::Active { footprint, remaining, tracked } = &mut state.layer else { return };
 
-        if !footprint.contains(&feet_block) {
-            return;
-        }
-
-        if let Some(&last) = tracked.get(&client_id) {
-            if last == feet_block {
-                Outcome::None
+        // Jumping mid-attempt is a fail, per explicit request - real ice is too thin to survive
+        // one. Checked *before* the footprint-membership check below (not after), since a jump's
+        // upward arc pushes `feet_block`'s Y clean off the flat floor's own fixed Y - that check
+        // would otherwise just silently `return` on a jump (no match in `footprint`, which only
+        // ever contains tiles at `FLOOR_Y[current_floor]`) instead of catching it. Only checked
+        // once the player has actually started this floor (`tracked` has an entry for them) -
+        // matches the diagonal/repeat checks below, which are similarly only meaningful mid-
+        // attempt, and avoids failing someone who merely jumps near the puzzle before engaging.
+        if tracked.contains_key(&client_id) {
+            let standing_y = FLOOR_Y[current_floor] as f64 + 1.0;
+            if player_y > standing_y + JUMP_Y_TOLERANCE {
+                Outcome::Fail("§cDon't jump!")
+            } else if !footprint.contains(&feet_block) {
+                return;
             } else {
-                let dx = feet_block.x - last.x;
-                let dz = feet_block.z - last.z;
-                if dx != 0 && dz != 0 {
-                    // A genuine diagonal step (both axes changed) - always a fail, regardless of
-                    // distance, since it's the real corner-cutting cheese this check exists to
-                    // catch: it'd let a player skip a tile without ever landing on it.
-                    Outcome::Fail("§cDon't move diagonally! Bad!")
+                let last = tracked[&client_id];
+                if last == feet_block {
+                    Outcome::None
                 } else {
-                    // A straight-line move, possibly skipping several tiles in one tick (fast
-                    // movement/speed effects/network jitter causing a tick to sample two positions
-                    // further apart than 1 block - not the player's fault, and not a real skip
-                    // since every tile in between still gets walked over physically). Walk every
-                    // intermediate tile along that line and mark each visited, rather than only
-                    // checking the final landing tile - this used to `Fail` on any two-tile gap,
-                    // misreporting ordinary fast walking as "diagonal" or "wrong block".
-                    let steps = dx.abs().max(dz.abs());
-                    let step_x = dx.signum();
-                    let step_z = dz.signum();
-                    let mut bad_tile = None;
-                    let mut walked = Vec::with_capacity(steps as usize);
-                    for i in 1..=steps {
-                        let pos = BlockPos::new(last.x + step_x * i, last.y, last.z + step_z * i);
-                        if !footprint.contains(&pos) {
-                            bad_tile = Some(());
-                            break;
-                        }
-                        if remaining.remove(&pos) {
-                            walked.push(pos); // only newly-visited tiles need converting to PackedIce
-                        }
-                    }
-                    if bad_tile.is_some() {
-                        Outcome::Fail("§cOops! You stepped on the wrong block!")
+                    let dx = feet_block.x - last.x;
+                    let dz = feet_block.z - last.z;
+                    if dx != 0 && dz != 0 {
+                        // A genuine diagonal step (both axes changed) - always a fail, regardless
+                        // of distance, since it's the real corner-cutting cheese this check exists
+                        // to catch: it'd let a player skip a tile without ever landing on it.
+                        Outcome::Fail("§cDon't move diagonally! Bad!")
                     } else {
-                        tracked.insert(client_id, feet_block);
-                        Outcome::Correct { done: remaining.is_empty(), walked }
+                        // A straight-line move, possibly skipping several tiles in one tick (fast
+                        // movement/speed effects/network jitter causing a tick to sample two
+                        // positions further apart than 1 block - not the player's fault, and not a
+                        // real skip since every tile in between still gets walked over physically).
+                        // Walk every intermediate tile along that line and mark each visited,
+                        // rather than only checking the final landing tile - this used to `Fail` on
+                        // any two-tile gap, misreporting ordinary fast walking as "diagonal" or
+                        // "wrong block".
+                        let steps = dx.abs().max(dz.abs());
+                        let step_x = dx.signum();
+                        let step_z = dz.signum();
+                        let mut bad_tile = None;
+                        let mut walked = Vec::with_capacity(steps as usize);
+                        for i in 1..=steps {
+                            let pos = BlockPos::new(last.x + step_x * i, last.y, last.z + step_z * i);
+                            if !footprint.contains(&pos) {
+                                bad_tile = Some(());
+                                break;
+                            }
+                            if remaining.remove(&pos) {
+                                walked.push(pos); // only newly-visited tiles need converting to PackedIce
+                            } else {
+                                // Not (or no longer) in `remaining` - either an obstacle tile, or
+                                // one already walked earlier this attempt (now PackedIce). Per
+                                // explicit request, stepping back onto ice already turned to
+                                // PackedIce is now also a fail, not a silent no-op.
+                                bad_tile = Some(());
+                                break;
+                            }
+                        }
+                        if bad_tile.is_some() {
+                            Outcome::Fail("§cOops! You stepped on the wrong block!")
+                        } else {
+                            tracked.insert(client_id, feet_block);
+                            Outcome::Correct { done: remaining.is_empty(), walked }
+                        }
                     }
                 }
             }
+        } else if !footprint.contains(&feet_block) {
+            return;
         } else if !remaining.remove(&feet_block) {
             Outcome::Fail("§cOops! You stepped on the wrong block!")
         } else {

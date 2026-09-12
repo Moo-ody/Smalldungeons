@@ -56,6 +56,7 @@ use crate::server::utils::dvec3::DVec3;
 use crate::server::utils::sounds::Sounds;
 use crate::server::world::{ScheduledFixedSound, World};
 use crate::server::block::rotatable::Rotatable;
+use crate::utils::seeded_rng::seeded_rng;
 use rand::Rng;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -347,7 +348,7 @@ pub fn setup(room: &mut Room, room_index: usize, world: &mut World) {
         world.interactable_blocks.insert(block_pos, BlockInteractAction::TicTacToeButton { state: state.clone(), index });
     }
 
-    let opening_move = CORNERS[rand::rng().random_range(0..CORNERS.len())];
+    let opening_move = CORNERS[seeded_rng().random_range(0..CORNERS.len())];
     set_cell(&state, world, opening_move, CellState::X);
 
     room.tic_tac_toe_state = Some(state);
@@ -650,7 +651,7 @@ fn best_bot_move(board: &[CellState; 9]) -> usize {
             std::cmp::Ordering::Less => {}
         }
     }
-    best_moves[rand::rng().random_range(0..best_moves.len())]
+    best_moves[seeded_rng().random_range(0..best_moves.len())]
 }
 
 /// `BlockInteractAction::TicTacToeButton`'s handler - a player clicked button `index`. Places

@@ -240,6 +240,17 @@ impl EntityImpl for FollowingNametagImpl {
                 host_entity.position.z
             );
 
+            // The nametag should never reveal an invisible host's position (Shadow Assassin,
+            // spawned invisible until its ambush teleport - see `ai/mod.rs`'s `teleport_ambush`
+            // branch) - hidden while the host is, shown again the instant it isn't. Checked
+            // every tick (not just the periodic resend below) so this flips the same tick the
+            // host's own visibility does.
+            let desired_visible = !host_entity.metadata.is_invisible;
+            let visibility_changed = entity.metadata.custom_name_visible != desired_visible;
+            if visibility_changed {
+                entity.metadata.custom_name_visible = desired_visible;
+            }
+
             // Periodically resend the full metadata packet (custom name + visibility), not
             // just once at spawn - the one-shot resend added earlier for the "shows briefly
             // then hides" symptom didn't fully fix it (still seen a few ticks after spawn, per
@@ -247,8 +258,9 @@ impl EntityImpl for FollowingNametagImpl {
             // checked), so whatever's dropping it client-side isn't something a single extra
             // packet at spawn reliably outruns. Cheap defensive resync every second rather than
             // continuing to guess at the exact client-side cause without being able to observe
-            // it directly.
-            if entity.ticks_existed % 20 == 0 {
+            // it directly - also fires immediately on an actual visibility change above, rather
+            // than waiting up to 20 ticks for the next periodic tick.
+            if visibility_changed || entity.ticks_existed % 20 == 0 {
                 packet_buffer.write_packet(&crate::net::protocol::play::clientbound::PacketEntityMetadata {
                     entity_id: crate::net::var_int::VarInt(entity.id),
                     metadata: entity.metadata.clone(),

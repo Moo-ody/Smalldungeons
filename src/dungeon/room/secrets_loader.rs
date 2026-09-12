@@ -1,3 +1,4 @@
+use crate::dungeon::room::secret_spawn_boxes::spawn_radius_for;
 use crate::dungeon::room::secrets::{DungeonSecret, SecretType};
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::rotatable::Rotatable;
@@ -106,7 +107,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 })
                 .unwrap_or(Direction::North)
                 .rotate(rotation); // Rotate direction based on room rotation
-            let secret = DungeonSecret::new(SecretType::RegularChest { direction }, world_pos, 8.0);
+            let secret = DungeonSecret::new(SecretType::RegularChest { direction }, world_pos, spawn_radius_for(room_name, &entry.id, 8.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -124,7 +125,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 y: rotated.y, // Y coordinates are absolute (like crypts)
                 z: corner.z + rotated.z,
             };
-            let secret = DungeonSecret::new(SecretType::RegularEssence, world_pos, 8.0);
+            let secret = DungeonSecret::new(SecretType::RegularEssence, world_pos, spawn_radius_for(room_name, &entry.id, 8.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -142,7 +143,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 y: rotated.y, // Y coordinates are absolute (like crypts)
                 z: corner.z + rotated.z,
             };
-            let secret = DungeonSecret::new(SecretType::BatSpawn { entity_id: None }, world_pos, 8.0);
+            let secret = DungeonSecret::new(SecretType::BatSpawn { entity_id: None }, world_pos, spawn_radius_for(room_name, &entry.id, 8.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -160,7 +161,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 y: rotated.y, // Y coordinates are absolute (like crypts)
                 z: corner.z + rotated.z,
             };
-            let secret = DungeonSecret::new(SecretType::BatDie, world_pos, 8.0);
+            let secret = DungeonSecret::new(SecretType::BatDie, world_pos, spawn_radius_for(room_name, &entry.id, 8.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -179,7 +180,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 z: corner.z + rotated.z,
             };
             // ItemSpawn secrets don't store the item - it's created fresh at spawn time
-            let secret = DungeonSecret::new(SecretType::ItemSpawn, world_pos, 8.0);
+            let secret = DungeonSecret::new(SecretType::ItemSpawn, world_pos, spawn_radius_for(room_name, &entry.id, 8.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -207,7 +208,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 })
                 .unwrap_or(Direction::North)
                 .rotate(rotation); // Rotate direction based on room rotation
-            let secret = DungeonSecret::new(SecretType::SecretChest { direction }, world_pos, 4.0);
+            let secret = DungeonSecret::new(SecretType::SecretChest { direction }, world_pos, spawn_radius_for(room_name, &entry.id, 4.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         
@@ -225,7 +226,7 @@ pub fn load_secrets_for_room(room_name: &str, corner: BlockPos, rotation: crate:
                 y: rotated.y, // Y coordinates are absolute (like crypts)
                 z: corner.z + rotated.z,
             };
-            let secret = DungeonSecret::new(SecretType::SecretEssence, world_pos, 4.0);
+            let secret = DungeonSecret::new(SecretType::SecretEssence, world_pos, spawn_radius_for(room_name, &entry.id, 4.0));
             secrets.push(Rc::new(RefCell::new(secret)));
         }
         

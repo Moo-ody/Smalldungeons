@@ -7,7 +7,7 @@
 //! is pure cosmetic/model data (skin, HP display, base entity kind) with no knowledge of AI
 //! concepts, and should stay that way so nothing there ever needs to depend on `ai::*` types.
 
-use crate::server::entity::dungeon_mobs::ai::attack::AttackModule;
+use crate::server::entity::dungeon_mobs::ai::attack::{AttackModule, RangedProjectile, MELEE_COOLDOWN_TICKS};
 use crate::server::entity::dungeon_mobs::ai::movement::MovementStyle;
 use crate::server::entity::dungeon_mobs::mob_type::DungeonMobType;
 
@@ -24,6 +24,24 @@ pub const DEFAULT_AGGRO_PROPAGATION_RADIUS: f64 = 8.0;
 /// supports it).
 pub const DEFAULT_LEASH_DISTANCE: f64 = 20.0;
 
+/// Shadow Assassin's documented ambush pattern: freeze invisible after first spotting a target,
+/// then teleport directly behind them (becoming visible) instead of walking up - re-triggered
+/// periodically (or immediately if the target gets far enough away) while still aggroed, laid
+/// on top of the normal `movement`/`attack` modules below (which drive the ordinary
+/// strafe-and-swing combat once engaged). `None` on every other archetype's profile.
+#[derive(Clone, Copy)]
+pub struct TeleportAmbush {
+    /// Ticks frozen (no movement, still invisible) after first acquiring a target, before the
+    /// initial ambush teleport.
+    pub stun_ticks: u32,
+    /// How often (ticks), while still aggroed, it re-teleports directly behind its target even
+    /// if already close/fighting.
+    pub reengage_interval_ticks: u32,
+    /// If the target gets at least this far away while aggroed, teleport behind them
+    /// immediately instead of waiting for `reengage_interval_ticks`.
+    pub reengage_distance: f64,
+}
+
 #[derive(Clone, Copy)]
 pub struct AiProfile {
     /// Whether this archetype has real AI behavior yet. `false` archetypes are left exactly
@@ -37,6 +55,24 @@ pub struct AiProfile {
     pub movement: MovementStyle,
     pub attack: AttackModule,
     pub speed_multiplier: f64,
+    /// See `TeleportAmbush`'s own doc comment. `None` for every archetype except Shadow
+    /// Assassin today.
+    pub teleport_ambush: Option<TeleportAmbush>,
+    /// Periodically forces a real jump (see `physics::try_jump`) while genuinely chasing a
+    /// target from far away (not while holding a ranged stance, and not once already close) -
+    /// "run and jump to the player until they get close" per explicit request, giving a
+    /// player-model archetype a bounding/parkour-ish charge instead of a flat glide.
+    pub hops_while_approaching: bool,
+    /// Yellow-room ("Champion room") miniboss containment, per explicit request: `true`
+    /// archetypes refuse to engage a target standing outside their own spawn room
+    /// (`MobAiState::room_index`) at all - no movement, no attack - until a player actually
+    /// lands a hit on them (`MobAiState::damaged_once`, set by
+    /// `combat::on_player_damaged_mob`), which permanently lifts the room confinement. Once
+    /// released, `ai/mod.rs`'s own containment check separately auto-teleports it back to
+    /// `MobAiState::spawn_origin` after 100 ticks with no LOS to any player and no damage dealt
+    /// in either direction (`MobAiState::no_interaction_ticks`) - see `run_mob_ai`'s own
+    /// containment block for both halves of this mechanic.
+    pub room_confined: bool,
 }
 
 impl AiProfile {
@@ -49,8 +85,11 @@ impl AiProfile {
             aggro_propagation_radius: DEFAULT_AGGRO_PROPAGATION_RADIUS,
             leash_distance: Some(DEFAULT_LEASH_DISTANCE),
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             speed_multiplier: 1.0,
+            teleport_ambush: None,
+            hops_while_approaching: false,
+            room_confined: false,
         }
     }
 
@@ -74,7 +113,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             vision_range: 32.0,
             requires_los: true,
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             speed_multiplier: if archetype == ZombieLord { 1.2 } else { 1.0 },
             ..AiProfile::defaults()
         },
@@ -100,8 +139,8 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         // on the player-model NPC path (see `spawn_as_npc`).
         CryptDreadlord => AiProfile {
             vision_range: 16.0,
-            movement: MovementStyle::CircleStrafe { melee_range: 2.5 },
-            attack: AttackModule::Melee { range: 2.5 },
+            movement: MovementStyle::CircleStrafe { melee_range: 2.5, orbit_radius: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             ..AiProfile::defaults()
         },
 
@@ -111,7 +150,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         CryptSouleater => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::HybridMeleeRanged { melee_range: 5.0, ranged_preferred: 10.0, ranged_tolerance: 6.0 },
-            attack: AttackModule::HybridMeleeRanged { melee_range: 5.0, ranged_speed_bps: 20.0, ranged_cooldown_ticks: 20, ranged_range: 16.0 },
+            attack: AttackModule::HybridMeleeRanged { melee_range: 5.0, ranged_speed_bps: 20.0, ranged_cooldown_ticks: 20, ranged_range: 16.0, projectile: RangedProjectile::WitherSkull },
             ..AiProfile::defaults()
         },
 
@@ -122,7 +161,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         CryptUndead => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             ..AiProfile::defaults()
         },
 
@@ -133,7 +172,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         Withermancer => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             speed_multiplier: 1.5,
             ..AiProfile::defaults()
         },
@@ -144,7 +183,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         // back in the meantime, same reasoning as Withermancer above.
         Fels => AiProfile {
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             leash_distance: None,
             speed_multiplier: 3.0,
             ..AiProfile::defaults()
@@ -161,14 +200,30 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         },
 
         // Lost Adventurer / Angry Archaeologist / Frozen Adventurer: all documented as bow
-        // users with high mobility ("Lost Adventurer which wears Frozen Blaze Armor" etc) -
-        // their real special abilities (healing, freeze, dragon-armor perks) are Phase 4+ and
-        // not implemented, but a basic ranged stance is a much closer placeholder than
-        // standing completely still.
+        // users with high mobility ("Lost Adventurer which wears Frozen Blaze Armor" etc) - per
+        // explicit request, bow from range but switch to melee (sword) once a player closes in,
+        // same hybrid shape Crypt Souleater already uses just with a real arrow instead of a
+        // wither skull (see `RangedProjectile`/`try_ranged`'s `uses_bow` - this one actually
+        // raises/lowers a bow for the shot). Their real special abilities (healing, freeze,
+        // dragon-armor perks) are Phase 4+ and not implemented yet.
+        // `movement` closes in (not `HybridMeleeRanged`'s hold-at-range pattern - fixed after an
+        // explicit follow-up report: with a `ranged_preferred`/`ranged_tolerance` hold zone, he'd
+        // settle in and camp around ~9-10 blocks out, shooting forever, instead of actually
+        // running the rest of the way to melee), then once within `melee_range` a slow left-right
+        // wiggle (`LightStrafe`, not `CircleStrafe`'s full orbit - per explicit follow-up
+        // correction: "shouldn't try to strafe around me totally... strafing left and right a
+        // bit") toward a tight ~1-block `orbit_radius`, backing off if it ends up standing right
+        // on the player. This is also what stops `hops_while_approaching` below jumping into the
+        // player once close - see its `still_closing` check. `attack` (still `HybridMeleeRanged`)
+        // already fires arrows while still outside `melee_range` and switches to melee once
+        // inside it, on top of this; `ai/mod.rs`'s `bow_draw_ticks` freeze (separate from this
+        // `movement` field entirely) is what stops it still advancing while actually mid-shot.
         LostAdventurer | AngryArchaeologist | FrozenAdventurer => AiProfile {
             vision_range: 24.0,
-            movement: MovementStyle::MaintainDistance { preferred: 10.0, tolerance: 2.0 },
-            attack: AttackModule::Ranged { speed_bps: 24.0, cooldown_ticks: 25, range: 12.0 },
+            movement: MovementStyle::LightStrafe { melee_range: 2.5, orbit_radius: 1.0 },
+            attack: AttackModule::HybridMeleeRanged { melee_range: 2.5, ranged_speed_bps: 24.0, ranged_cooldown_ticks: 25, ranged_range: 12.0, projectile: RangedProjectile::Arrow },
+            hops_while_approaching: true,
+            room_confined: true,
             ..AiProfile::defaults()
         },
 
@@ -181,7 +236,7 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
             vision_range: 32.0,
             requires_los: true,
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
             speed_multiplier: 2.5,
             ..AiProfile::defaults()
         },
@@ -192,7 +247,38 @@ pub fn profile_for(archetype: DungeonMobType) -> AiProfile {
         KingMidas => AiProfile {
             vision_range: 16.0,
             movement: MovementStyle::Approach,
-            attack: AttackModule::Melee { range: 2.5 },
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: MELEE_COOLDOWN_TICKS },
+            ..AiProfile::defaults()
+        },
+
+        // Shadow Assassin: same detection range/LOS requirement as this codebase's other
+        // player-model NPCs (Crypt Dreadlord/Undead, King Midas - vision_range 16.0), but once
+        // it acquires a target it doesn't approach on foot at all - see `TeleportAmbush`'s doc
+        // comment and `ai/mod.rs`'s dedicated branch for it. `movement`/`attack` below are what
+        // drives it once actually engaged (strafe + melee), same shape as Crypt Dreadlord.
+        // Backstab bonus / no-damage-reduction aren't implemented yet (no real mob-vs-player
+        // damage system exists at all yet - see `attack::try_melee`'s own doc comment).
+        ShadowAssassin => AiProfile {
+            vision_range: 16.0,
+            requires_los: true,
+            // `movement` is never actually read for a `teleport_ambush` archetype - `ai/mod.rs`'s
+            // dedicated branch drives its orbit/weave/volley movement directly
+            // (`movement::orbit_and_weave`) instead of the generic `apply_movement_style` path.
+            // Left as a plain `CircleStrafe` here only so the field has *some* value - it's
+            // otherwise unused for this archetype.
+            movement: MovementStyle::CircleStrafe { melee_range: 2.5, orbit_radius: 2.5 },
+            // Attacks continuously while orbiting now (see `ai/mod.rs`'s `teleport_ambush`
+            // branch), so this cooldown alone paces the actual hit rate - lowered from an
+            // earlier 10 per explicit follow-up correction ("way more offensive... hitting me
+            // almost constantly").
+            attack: AttackModule::Melee { range: 2.5, cooldown_ticks: 6 },
+            speed_multiplier: 1.5,
+            teleport_ambush: Some(TeleportAmbush {
+                stun_ticks: 40,
+                reengage_interval_ticks: 120,
+                reengage_distance: 20.0,
+            }),
+            room_confined: true,
             ..AiProfile::defaults()
         },
     }

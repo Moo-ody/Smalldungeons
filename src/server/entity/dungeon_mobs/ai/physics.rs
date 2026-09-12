@@ -4,7 +4,7 @@
 //! not clipping through walls/players/each other is a baseline physical property, not an AI
 //! behavior choice.
 
-use crate::server::block::block_collision::{check_block_collisions, get_block_aabb, is_liquid};
+use crate::server::block::block_collision::{check_block_collisions, get_block_aabb, is_liquid, stair_top_half};
 use crate::server::block::blocks::Blocks;
 use crate::server::entity::dungeon_mobs::mob_type::MobBaseKind;
 use crate::server::entity::entity::{Entity, EntityId};
@@ -120,6 +120,18 @@ pub fn move_horizontal(entity: &mut Entity, world: &World, width: f64, height: f
 
 fn try_move_axis(entity: &mut Entity, world: &World, width: f64, height: f64, dx: f64, dz: f64, allow_jump: bool) -> bool {
     let flat_candidate = DVec3::new(entity.position.x + dx, entity.position.y, entity.position.z + dz);
+
+    // Treated as a full obstruction (refuses the whole axis, same as a genuine wall) rather than
+    // just rejecting the flat candidate below and falling through to the step-up attempt - the
+    // step-up would also succeed here (there's nothing solid up there to actually block it,
+    // just open air over the recess), so rejecting only the flat candidate wouldn't have stopped
+    // the sink, only delayed it by one stutter-step. Only checked while grounded, same reasoning
+    // `safe_to_step` already uses (a mob already falling for some unrelated reason shouldn't have
+    // its horizontal drift frozen by this).
+    if entity.on_ground && is_decorative_stair_recess(world, width, entity.position, flat_candidate, dx, dz) {
+        return false;
+    }
+
     if !is_blocked(world, flat_candidate, width, height) && safe_to_step(world, entity, flat_candidate, width) {
         entity.position.x = flat_candidate.x;
         entity.position.z = flat_candidate.z;
@@ -172,9 +184,68 @@ fn try_move_axis(entity: &mut Entity, world: &World, width: f64, height: f64, dx
     false
 }
 
+/// Whether stepping flat onto `candidate` (same Y as the mob's current position) would walk it
+/// down into a *decorative* stair recessed half a block below the surrounding floor, rather
+/// than a genuine lower path (a real descending staircase, or an actual drop/ledge) - confirmed
+/// by explicit report with a screenshot: mobs were partially sinking into decorative stairs
+/// recessed into an otherwise-flat floor. The existing flat-Y step check only tests for a
+/// *collision* at the current height, and a lower-half stair's real collision box
+/// (`[y, y+0.5]` - see `block_collision::get_stair_aabb`) sits entirely below a mob currently
+/// standing at `y+1` on a normal full-height floor block, so the flat-Y box floats clear over
+/// it with no collision at all - the move succeeded, and gravity alone quietly sank the mob
+/// into the recess over the next few ticks (`is_on_ground`'s thin probe never reached down to
+/// the stair's real, lower surface either).
+///
+/// Distinguishes the two cases the same way a person looking at it would: is the floor *right
+/// after this dip*, one more step past it in the same direction of travel, back at the height
+/// the mob's currently standing at? If so, this one recessed stair is an isolated decorative dip
+/// in an otherwise-flat floor - refuse the flat step (steering's own deflection-angle fallback
+/// routes around it instead). If the floor beyond keeps trending down (a real staircase) or
+/// opens onto nothing (a genuine ledge), this returns `false` and movement proceeds exactly as
+/// it already did - upward stair-climbing (`STAIR_STEP_HEIGHT` above) is untouched either way,
+/// since that's a different code path entirely.
+fn is_decorative_stair_recess(world: &World, width: f64, current_pos: DVec3, candidate: DVec3, dx: f64, dz: f64) -> bool {
+    // The layer the mob is presumably standing *on top of* right now (one block below its own
+    // feet) - this only means "recessed below the current floor" relative to that specific
+    // layer, so this is the one to check the target column against, not the candidate's own Y.
+    let current_floor_y = current_pos.y.floor() as i32 - 1;
+    let target_x = candidate.x.floor() as i32;
+    let target_z = candidate.z.floor() as i32;
+
+    let target_block = world.get_block_at(target_x, current_floor_y, target_z);
+    let Some(top_half) = stair_top_half(target_block) else { return false };
+    if top_half {
+        // An upper-half stair's collision top is at the SAME height a normal full block at this
+        // layer would have (`y+1`) - not a recess at all, nothing to catch here.
+        return false;
+    }
+
+    // `f64::signum()` returns `1.0` (not `0.0`) for an input of exactly `0.0` - `move_horizontal`
+    // always calls this one axis at a time (the other delta is exactly `0.0`), so a naive
+    // `.signum()` on both would incorrectly offset the probe diagonally on the axis that isn't
+    // actually moving.
+    let step_x = if dx != 0.0 { dx.signum() } else { 0.0 };
+    let step_z = if dz != 0.0 { dz.signum() } else { 0.0 };
+
+    let further = DVec3::new(candidate.x + step_x, current_pos.y, candidate.z + step_z);
+    let probe = aabb_at(DVec3::new(further.x, further.y - 0.1, further.z), width, 0.1);
+    check_block_collisions(world, &probe)
+}
+
 /// Vanilla's real initial jump velocity (`EntityLivingBase.jump()`'s `motionY = 0.42F`, no
 /// jump-boost effect applied here).
 const JUMP_VELOCITY: f64 = 0.42;
+
+/// Forces a jump (same impulse `try_move_axis`'s own ledge-jump fallback uses) if `entity` is
+/// currently grounded - a no-op mid-air (matches vanilla: you can't jump again until you land).
+/// Used for a purely cosmetic "bunny-hop while charging in" effect (see `ai/mod.rs`'s
+/// `hops_while_approaching`), unlike the ledge-jump above, which only fires reactively when
+/// something's actually blocking the way.
+pub fn try_jump(entity: &mut Entity) {
+    if entity.on_ground {
+        entity.velocity.y = JUMP_VELOCITY;
+    }
+}
 
 /// Taller step-up height for climbing onto another partial-height (stair/slab/carpet) block
 /// specifically - see the comment in `try_move_axis` for why more than `STEP_HEIGHT` is needed

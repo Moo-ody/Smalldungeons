@@ -296,51 +296,6 @@ fn apply_practice_dungeon(server: &mut Server, mut new_dungeon: Dungeon) -> anyh
     Ok(())
 }
 
-/// Force-spawns every secret in the (single) practice room immediately, bypassing the normal
-/// proximity/room-entry gating (`dungeon::tick`'s `RegularChest`/`RegularEssence`/`BatSpawn`/
-/// `BatDie`/`ItemSpawn` proximity checks, and the `SecretChest`/`SecretEssence` "spawn on room
-/// entry" path) - practice mode is for drilling a known secret route, so every secret should be
-/// visible/interactable the instant the room loads rather than popping in as you walk near it.
-/// Marks the room `entered` and `room_entry_secrets_spawned` too, so `Dungeon::tick`'s normal
-/// entry-secret pass (which already checks `has_spawned`) doesn't redundantly re-spawn anything.
-///
-/// Forcing `entered = true` here also means `Dungeon::tick`'s own room-entry hook (the one that
-/// normally rolls Water Board's gates - see `waterboard_spawned`) never gets a chance to fire on
-/// its own for a practice room, since by the time a player's next tick runs the room already
-/// reports itself as already-entered. So this replicates that hook directly, the same way it
-/// already replicates the entry-secrets pass above - otherwise `/rs` on a Water Board practice
-/// room would keep whatever gates the room happened to load with instead of re-randomizing them.
-fn spawn_all_secrets(server: &mut Server) {
-    let Some(room) = server.dungeon.rooms.get(0) else { return };
-    let secrets = room.json_secrets.clone();
-
-    for secret_rc in secrets {
-        let mut secret = secret_rc.borrow_mut();
-        if secret.has_spawned {
-            continue;
-        }
-        secret.has_spawned = true;
-        crate::dungeon::room::secrets::DungeonSecret::spawn_into_world(&secret_rc, secret, &mut server.world);
-    }
-
-    let mut just_entered_waterboard = false;
-    if let Some(room) = server.dungeon.rooms.get_mut(0) {
-        room.entered = true;
-        room.room_entry_secrets_spawned = true;
-
-        if room.room_data.name == "Water Board" && !room.waterboard_spawned {
-            room.waterboard_spawned = true;
-            just_entered_waterboard = true;
-        }
-    }
-
-    if just_entered_waterboard {
-        if let Some(room) = server.dungeon.rooms.get_mut(0) {
-            crate::dungeon::room::waterboard::setup(room, 0, &mut server.world);
-        }
-    }
-}
-
 fn teleport_player(player: &mut crate::server::player::player::Player, pos: DVec3, yaw: f32, pitch: f32) {
     // Yaw/pitch aren't part of the position-reconciliation race `server_teleport` guards
     // against (see `PendingTeleport`'s doc comment) - flags 0 means fully absolute look too, so
@@ -367,12 +322,12 @@ fn teleport_player(player: &mut crate::server::player::player::Player, pos: DVec
     player.flush_packets();
 }
 
-/// `/practice <room> <door> <secrets> [as]` - loads a fresh, isolated copy of the named room and
+/// `/practice <room> <door> <secrets>` - loads a fresh, isolated copy of the named room and
 /// spawns every connected player just inside the requested door (or a random valid one if
 /// `door_choice` is `"random"`), and arms the secret-route timer for `target_secrets` (see
-/// `Dungeon::tick`). `instant_secrets` mirrors the trailing `as` flag - when set, every secret in
-/// the room is force-spawned immediately instead of the normal proximity/room-entry gating.
-pub fn load_practice_room(server: &mut Server, room_name: &str, door_choice: &str, target_secrets: u8, instant_secrets: bool) -> anyhow::Result<()> {
+/// `Dungeon::tick`). Secrets spawn exactly like a normal run - proximity/room-entry gated, not
+/// force-spawned.
+pub fn load_practice_room(server: &mut Server, room_name: &str, door_choice: &str, target_secrets: u8) -> anyhow::Result<()> {
     let Some(room_data) = find_room_data(server, room_name) else {
         anyhow::bail!("Unknown or unsupported practice room: '{}'", room_name);
     };
@@ -411,10 +366,6 @@ pub fn load_practice_room(server: &mut Server, room_name: &str, door_choice: &st
     server.dungeon.practice_last_found_secrets = 0;
     server.dungeon.practice_route_flash_ticks = 0;
     server.dungeon.practice_timer_text = Some("&60.00s".to_string());
-    server.dungeon.practice_instant_secrets = instant_secrets;
-    if instant_secrets {
-        spawn_all_secrets(server);
-    }
 
     for (_, player) in server.world.players.iter_mut() {
         teleport_player(player, chosen.inside_pos, chosen.inside_yaw, 0.0);
@@ -437,7 +388,6 @@ pub fn restart_practice_room(server: &mut Server) -> anyhow::Result<()> {
     let room_data = server.dungeon.rooms[0].room_data.clone();
     let target_secrets = server.dungeon.practice_target_secrets;
     let route_prefix = server.dungeon.practice_route_prefix.clone();
-    let instant_secrets = server.dungeon.practice_instant_secrets;
     let (dungeon, door_spawns) = build_practice_dungeon(room_data)?;
     let fallback = door_spawns.first()
         .map(|d| (d.inside_pos, d.inside_yaw, 0.0f32))
@@ -452,11 +402,6 @@ pub fn restart_practice_room(server: &mut Server) -> anyhow::Result<()> {
     server.dungeon.practice_last_found_secrets = 0;
     server.dungeon.practice_route_flash_ticks = 0;
     server.dungeon.practice_timer_text = Some("&60.00s".to_string());
-    server.dungeon.practice_instant_secrets = instant_secrets;
-    if instant_secrets {
-        spawn_all_secrets(server);
-    }
-    spawn_all_secrets(server);
 
     for (_, player) in server.world.players.iter_mut() {
         let (pos, yaw, pitch) = player.practice_last_spawn.unwrap_or(fallback);

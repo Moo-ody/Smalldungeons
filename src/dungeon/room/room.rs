@@ -9,6 +9,7 @@ use crate::dungeon::room::fallingblocks::{get_room_fallingblocks, FallingBlockPa
 use crate::dungeon::room::levers::{get_room_levers, LeverData};
 use crate::dungeon::room::locked_chests::{get_room_locked_chests, facing_string_to_direction};
 use crate::dungeon::dungeon::{Dungeon, LockedChestState};
+use crate::utils::seeded_rng::seeded_rng;
 use crate::server::block::block_position::BlockPos;
 use crate::server::block::blocks::Blocks;
 use crate::server::block::rotatable::Rotatable;
@@ -117,6 +118,26 @@ pub struct Room {
     /// hear it - same room-entry hook as Three Weirdos/Quiz/Ice Path above, guarded so walking
     /// out and back in doesn't re-roll which gates are closed or re-register the levers.
     pub waterboard_spawned: bool,
+
+    /// Whether `shadow_assassin::setup` has already run for this room instance - same
+    /// idempotency role as `waterboard_spawned`, guarding the room-entry hook against
+    /// re-spawning the miniboss if a player walks out and back in.
+    pub shadow_assassin_spawned: bool,
+
+    /// Whether `default_room::setup` has already run for this room instance - same idempotency
+    /// role as `shadow_assassin_spawned`, guarding the room-entry hook against re-spawning the
+    /// guaranteed Lost Adventurer if a player walks out and back in.
+    pub default_lost_adventurer_spawned: bool,
+
+    /// Whether `dragon::setup` has already run for this room instance - same idempotency role
+    /// as `default_lost_adventurer_spawned`, guarding the room-entry hook against re-rolling/
+    /// re-spawning the random miniboss if a player walks out and back in.
+    pub dragon_miniboss_spawned: bool,
+
+    /// Whether `default_dirt::setup` has already run for this room instance - same idempotency
+    /// role as `dragon_miniboss_spawned`, for the *other* "Default" room capture (see
+    /// `default_dirt.rs`'s own doc comment).
+    pub default_dirt_miniboss_spawned: bool,
 
     /// World position of the one specific secret chest that marks a Trap room "cleared" - `None`
     /// for every room except the two known Trap layouts (see `trap_completion_secret_relative_pos`).
@@ -458,6 +479,10 @@ impl Room {
             quiz_started: false,
             ice_path_spawned: false,
             waterboard_spawned: false,
+            shadow_assassin_spawned: false,
+            default_lost_adventurer_spawned: false,
+            dragon_miniboss_spawned: false,
+            default_dirt_miniboss_spawned: false,
             trap_completion_chest_pos,
             trap_completed: false,
             puzzle_completed: false,
@@ -582,13 +607,17 @@ impl Room {
         if self.crypt_patterns.is_empty() { return Vec::new(); }
 
         // Collect indices to remove to avoid borrow issues while mutating
+        // Vertical reach is one block short of the horizontal radius - real Superboom TNT
+        // doesn't blow out a full symmetric cube; using `radius` on Y too let it reach one
+        // block further up/down than intended (e.g. one block below when placed up high).
+        let vertical_radius = radius - 1;
         let mut indices: Vec<usize> = Vec::new();
         for (i, pattern) in self.crypt_patterns.iter().enumerate() {
             let in_range = pattern.iter().any(|(pos, _)| {
                 let dx = (pos.x - center.x).abs();
                 let dy = (pos.y - center.y).abs();
                 let dz = (pos.z - center.z).abs();
-                dx.max(dy).max(dz) <= radius
+                dx.max(dz) <= radius && dy <= vertical_radius
             });
             if in_range { indices.push(i); }
         }
@@ -623,13 +652,16 @@ impl Room {
     pub fn explode_kingmidas_near(&mut self, world: &mut World, center: &BlockPos, radius: i32) -> Vec<BlockPos> {
         if self.kingmidas_patterns.is_empty() { return Vec::new(); }
 
+        // See `explode_crypt_near`'s doc comment on `vertical_radius` for why Y is bounded a
+        // block short of the horizontal radius rather than reusing it directly.
+        let vertical_radius = radius - 1;
         let mut indices: Vec<usize> = Vec::new();
         for (i, pattern) in self.kingmidas_patterns.iter().enumerate() {
             let in_range = pattern.iter().any(|(pos, _)| {
                 let dx = (pos.x - center.x).abs();
                 let dy = (pos.y - center.y).abs();
                 let dz = (pos.z - center.z).abs();
-                dx.max(dy).max(dz) <= radius
+                dx.max(dz) <= radius && dy <= vertical_radius
             });
             if in_range { indices.push(i); }
         }
@@ -685,6 +717,10 @@ impl Room {
             return 0; 
         }
 
+        // See `explode_crypt_near`'s doc comment on `vertical_radius` for why Y is bounded a
+        // block short of the horizontal radius rather than reusing it directly.
+        let vertical_radius = radius - 1;
+
         // Find the FIRST pattern that has any block within range
         for (i, pattern) in self.superboomwall_patterns.iter().enumerate() {
             let in_range = pattern.blocks.iter().any(|block| {
@@ -692,7 +728,7 @@ impl Room {
                 let dx = (pos.x - center.x).abs();
                 let dy = (pos.y - center.y).abs();
                 let dz = (pos.z - center.z).abs();
-                dx.max(dy).max(dz) <= radius
+                dx.max(dz) <= radius && dy <= vertical_radius
             });
             
             if in_range {
@@ -735,29 +771,29 @@ impl Room {
     }
 
     /// Checks if the player is standing on any (not-yet-triggered/not-yet-scheduled) falling
-    /// block pattern, and if so, schedules it to drop on the next shared 5-tick pulse rather than
-    /// dropping it immediately. Returns true if a pattern was newly scheduled this call.
+    /// block pattern, and if so, schedules it to drop exactly 5 ticks from the step itself,
+    /// rather than dropping it immediately. Returns true if a pattern was newly scheduled this
+    /// call.
     ///
-    /// Falling floors run on a repeating 5-tick clock shared by every pattern (derived directly
-    /// from `world.tick_count`, so there's no separate clock state to keep in sync) - not an
-    /// individual "you stepped on it, wait N ticks from *now*" timer per player. Stepping on a
-    /// tile only tells you where in the CURRENT cycle you happened to land: `world.tick_count % 5`
-    /// counts 0,1,2,3,4 repeating, so `5 - (tick_count % 5)` is exactly how many ticks remain
-    /// until the next pulse - 1 tick if you stepped on right before it fires, up to the full 5 if
-    /// you stepped on right as a fresh cycle started. Once a pattern is scheduled, it commits -
-    /// it fires at the scheduled tick regardless of whether anyone is still standing on it by
-    /// then, same as a real trap you've already set off.
-    pub fn check_fallingblocks_collision(&mut self, world: &mut World, room_index: usize, player_pos: &BlockPos) -> bool {
+    /// Each pattern gets its own fixed 5-tick timer starting the instant it's stepped on - not a
+    /// clock shared across patterns. (An earlier version synced every pattern to a shared pulse
+    /// derived from `world.tick_count % 5`, so the actual wait could be as little as 1 tick
+    /// depending on when you happened to step on it - practically instant and not an actual
+    /// 5-tick delay.) Once a pattern is scheduled, it commits - it fires at the scheduled tick
+    /// regardless of whether anyone is still standing on it by then, same as a real trap you've
+    /// already set off.
+    pub fn check_fallingblocks_collision(&mut self, world: &mut World, room_index: usize, feet_block_pos: &BlockPos) -> bool {
         if self.fallingblock_patterns.is_empty() {
             return false;
         }
 
-        // Check if player is standing on any falling block
-        let player_feet_pos = BlockPos {
-            x: player_pos.x,
-            y: player_pos.y - 1, // Check block below player's feet
-            z: player_pos.z
-        };
+        // `feet_block_pos` is already resolved (by the caller, using an epsilon-adjusted floor
+        // rather than a bare truncation) to the block the player's feet are actually resting on -
+        // no "-1" here. A bare `position.y as i32` would be one cell too high for anything with a
+        // sub-full-block top surface (a bottom-half slab's walkable surface sits at `y + 0.5`,
+        // stairs/carpet similarly), since only an exact-integer feet height (a full block, or a
+        // top-half slab) means "the support is one whole cell below".
+        let player_feet_pos = *feet_block_pos;
 
         // Find the first pattern that has the block the player is standing on
         for (i, pattern) in self.fallingblock_patterns.iter().enumerate() {
@@ -772,8 +808,8 @@ impl Room {
 
             if is_standing_on {
                 // Inserted here and never removed, whether the schedule below has fired yet or
-                // not - this doubles as both "don't re-arm while waiting on the pulse" and (once
-                // it fires) "already dropped, never findable again", replacing what used to be an
+                // not - this doubles as both "don't re-arm while waiting to fall" and (once it
+                // fires) "already dropped, never findable again", replacing what used to be an
                 // actual `Vec::remove` at trigger time. That removal has to stay gone now that
                 // more than one pattern's trigger can be in flight at once (each waiting on its
                 // own scheduled tick): removing by index would shift every *other* still-pending
@@ -781,13 +817,13 @@ impl Room {
                 // scheduled closure captured.
                 self.pending_fallingblock_triggers.insert(i);
 
-                // The visual/collision cue starts right now, on the step itself - not deferred to
-                // the pulse. Only the moment the floor actually becomes passable (letting the
-                // player really fall through) waits for the shared cycle.
+                // The visual/collision cue starts right now, on the step itself - not deferred
+                // any further. Only the moment the floor actually becomes passable (letting the
+                // player really fall through) waits the fixed delay below.
                 self.begin_fallingblock_animation(world, i);
 
-                let ticks_until_pulse = 5 - (world.tick_count % 5);
-                world.server_mut().schedule(ticks_until_pulse as u32, move |server| {
+                const FALL_DELAY_TICKS: u32 = 5;
+                world.server_mut().schedule(FALL_DELAY_TICKS, move |server| {
                     let Some(room) = server.dungeon.rooms.get_mut(room_index) else { return };
                     let world = &mut server.world;
                     room.finalize_fallingblock_drop(world, i);
@@ -853,9 +889,9 @@ impl Room {
         }
     }
 
-    /// Runs at the shared cycle's pulse (scheduled by `check_fallingblocks_collision`, 1-5 ticks
-    /// after the step that armed it) - the moment the floor actually opens up and the player can
-    /// fall through. `begin_fallingblock_animation` already handled the visual/sound cue and the
+    /// Runs 5 ticks after the step that armed it (scheduled by `check_fallingblocks_collision`) -
+    /// the moment the floor actually opens up and the player can fall through.
+    /// `begin_fallingblock_animation` already handled the visual/sound cue and the
     /// solid-but-invisible `Barrier` swap back when the player first stepped on; this only needs
     /// to open the hole. Checks the block is still `Barrier` first (defensive - it should always
     /// be, since nothing else touches these positions in between) rather than blindly overwriting
@@ -1369,6 +1405,32 @@ impl Room {
             .add_z(corner.z)
     }
 
+    /// Inverse of `get_world_block_pos` - converts a world-space position back into this room's
+    /// own pre-rotation local coordinates. Useful for "has the player reached this specific
+    /// captured spot" checks (e.g. Quiz's entry-threshold gate) where the interesting comparison
+    /// is against a fixed local coordinate, not a world one that would need re-deriving per
+    /// rotation.
+    ///
+    /// `BlockPos::rotate`'s 4 cases are their own inverses except East/West, which undo each
+    /// other (rotating by East then West, in either order, is the identity) - North and South
+    /// each rotate 0°/180°, so applying either twice returns the original point, while East/West
+    /// are 90°/270° and only cancel against one another. So the inverse of "this room was placed
+    /// rotated by `self.rotation`" is just "rotate by that same value, except swap East<->West".
+    pub fn get_local_block_pos(&self, world_pos: &BlockPos) -> BlockPos {
+        let corner = self.get_corner_pos();
+        let offset = BlockPos {
+            x: world_pos.x - corner.x,
+            y: world_pos.y,
+            z: world_pos.z - corner.z,
+        };
+        let inverse_rotation = match self.rotation {
+            Direction::East => Direction::West,
+            Direction::West => Direction::East,
+            other => other,
+        };
+        offset.rotate(inverse_rotation)
+    }
+
     /// World-space AABB (inclusive) this room's blocks occupy - built from the same
     /// `get_world_block_pos` transform actually used to place blocks, rather than re-deriving
     /// the rotation/axis-swap logic by hand, so it can't disagree with it for East/West-rotated
@@ -1409,7 +1471,7 @@ impl Room {
     ) {
         if let Some(locked_chest_entries) = get_room_locked_chests(&self.room_data.name) {
             let corner = self.get_corner_pos();
-            let mut rng = rand::rng();
+            let mut rng = seeded_rng();
 
             for entry in locked_chest_entries {
                 // Convert relative chest position to world coordinates
@@ -1482,6 +1544,34 @@ impl Room {
                     .or_insert_with(Vec::new)
                     .push(chest_world_pos);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `get_local_block_pos` is untested directly here (it needs a real `Room`, which needs a
+    /// full `RoomData`/segment setup this file has no lightweight constructor for) - but its
+    /// entire correctness rests on one claim from its own doc comment: rotating by `self.rotation`
+    /// then by that same value with East/West swapped returns the original point, for all 4
+    /// rotations. This tests that claim directly against `BlockPos::rotate` itself.
+    #[test]
+    fn rotation_inverse_round_trips_for_every_direction() {
+        fn inverse(rotation: Direction) -> Direction {
+            match rotation {
+                Direction::East => Direction::West,
+                Direction::West => Direction::East,
+                other => other,
+            }
+        }
+
+        let point = BlockPos { x: 7, y: 3, z: -2 };
+        for rotation in [Direction::North, Direction::East, Direction::South, Direction::West] {
+            let rotated = point.rotate(rotation);
+            let back = rotated.rotate(inverse(rotation));
+            assert_eq!(back, point, "rotation {rotation:?} did not invert cleanly (rotated to {rotated:?})");
         }
     }
 }

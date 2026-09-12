@@ -427,6 +427,14 @@ impl Player {
     pub fn server_teleport(&mut self, pos: DVec3, yaw: f32, pitch: f32, flags: u8) {
         self.position = pos;
 
+        // `set_position` normally does this right after updating `position`, but a server
+        // teleport bypasses `set_position` entirely (see below). Without this, landing on a
+        // falling-floor tile via Etherwarp/teleport wouldn't arm it until the client's next
+        // `PlayerPositionLook` echo reconciles - which can be delayed indefinitely if the
+        // client's yaw/pitch haven't changed, since bare `Player Position` packets are rejected
+        // outright while a teleport is pending. That made the floor feel randomly solid.
+        self.check_fallingblocks_collision();
+
         let tick = self.world_mut().tick_count;
         self.pending_teleport = Some(PendingTeleport {
             expected_pos: pos,
@@ -564,18 +572,41 @@ impl Player {
         let server = self.server_mut();
         let world = &mut server.world;
         let dungeon = &mut server.dungeon;
-        
+
+        // `as i32` truncates toward zero, not toward negative infinity - fine for positive
+        // coordinates (where truncation and flooring agree) but wrong for the negative ones this
+        // dungeon actually uses: e.g. `(-161.7_f64) as i32 == -161`, even though the block cell
+        // that world position is actually inside of is `-162` (cells span `[-162.0, -161.0)`).
+        // Every continuous movement update has some nonzero fractional part, so on a negative
+        // coordinate this was shifting the computed cell one step toward zero almost every time.
+        // A pattern tile in the interior of a contiguous falling-floor pattern could still
+        // accidentally match (the wrongly-shifted cell often lands on another tile that's *also*
+        // in the same pattern), but a tile at the pattern's edge - e.g. the row against a wall,
+        // with no neighbouring pattern tile on the shifted-into side - had nothing to accidentally
+        // match, so the trigger silently never fired there. `.floor()` gives the true cell either
+        // way.
+        let feet_x = self.position.x.floor() as i32;
+        let feet_z = self.position.z.floor() as i32;
+
         // Find the room the player is in
-        if let Some(room_index) = dungeon.get_room_at(self.position.x as i32, self.position.z as i32) {
+        if let Some(room_index) = dungeon.get_room_at(feet_x, feet_z) {
             let room = dungeon.rooms.get_mut(room_index).unwrap();
-            let player_pos = crate::server::block::block_position::BlockPos {
-                x: self.position.x as i32,
-                y: self.position.y as i32,
-                z: self.position.z as i32,
+            // Resolve the block actually supporting the player's feet, not just "one cell below
+            // a truncated Y". A full block's top surface sits at an exact integer height, so
+            // flooring position.y and subtracting 1 works there - but a bottom-half slab's
+            // surface sits at `y + 0.5`, which floors down to `y` itself; subtracting 1 would
+            // then miss the slab and check the empty cell underneath it. Subtracting a tiny
+            // epsilon before flooring maps an exact-integer feet height down into the cell below
+            // (matching the full-block case) while still mapping a `y + 0.5` feet height onto
+            // its own cell (matching the slab case).
+            let feet_block_pos = crate::server::block::block_position::BlockPos {
+                x: feet_x,
+                y: (self.position.y - 1e-4).floor() as i32,
+                z: feet_z,
             };
-            
+
             // Check for falling blocks collision
-            room.check_fallingblocks_collision(world, room_index, &player_pos);
+            room.check_fallingblocks_collision(world, room_index, &feet_block_pos);
         }
     }
 

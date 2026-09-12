@@ -955,7 +955,14 @@ impl ProcessPacket for PlayerBlockPlacement {
                         0 | 3 => 3, // South or East => 3
                         _ => 2,     // North or West => 2
                     };
-                    let _ = player.server_mut().dungeon.superboom_at(pos, radius);
+                    // Center the explosion on the block the player actually targeted, not `pos`
+                    // (that's `self.position` shifted one cell by `placed_direction` to simulate
+                    // where a placed block would land - correct for the ghost-placement rollback
+                    // above, but it shifted the blast center itself by a full block depending on
+                    // which face was clicked, e.g. `pos.y += 1` for a top-face click. That made
+                    // the explosion's reach extend one block too far past the clicked block on
+                    // one side and fall one block short on the other.
+                    let _ = player.server_mut().dungeon.superboom_at(self.position, radius);
                 }
             }
 

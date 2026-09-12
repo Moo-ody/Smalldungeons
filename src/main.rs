@@ -42,7 +42,7 @@ use crate::server::utils::dvec3::{self, DVec3};
 use crate::server::utils::sized_string::SizedString;
 use crate::server::world::{self, VIEW_DISTANCE, World};
 use crate::utils::hasher::deterministic_hasher::DeterministicHashMap;
-use crate::utils::seeded_rng::SeededRng;
+use crate::utils::seeded_rng::{SeededRng, seeded_rng};
 use anyhow::Result;
 use chrono::Local;
 use chrono::format::Pad::Zero;
@@ -360,7 +360,7 @@ pub fn populate_dungeon_world(server: &mut Server) -> anyhow::Result<()> {
             }
         })
         .collect();
-    if let Some(&&mimic_pos) = mimic_eligible_chests.choose(&mut rand::rng()) {
+    if let Some(&&mimic_pos) = mimic_eligible_chests.choose(&mut seeded_rng()) {
         if let Some(state) = dungeon.locked_chests.remove(&mimic_pos) {
             dungeon.lever_to_chests.entry(state.lever_world_pos).and_modify(|chests| {
                 chests.retain(|&pos| pos != mimic_pos);
